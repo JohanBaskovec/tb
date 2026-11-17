@@ -1,7 +1,9 @@
 #include "game/game.h"
 
 #include "core/log.h"
+#include "game/combat.h"
 #include "game/crate.h"
+#include "game/loot.h"
 #include "game/pad.h"
 
 #include <string.h>
@@ -19,22 +21,41 @@ bool game_init(GameState *gs, u64 seed, Level *level) {
     for (i32 z = 0; z < level->drop_zone_count; z++) {
         gs->drop_timers[z] = (u32)level->drop_cfg[z].interval_s * TICK_HZ;
     }
+    for (i32 d = 0; d < level->dummy_count; d++) {
+        dummy_spawn(gs, level->dummies[d], 1);
+    }
     return true;
+}
+
+static u32 crate_actions(const GameState *gs) {
+    return gs->crate_stats.picked_up + gs->crate_stats.placed + gs->crate_stats.thrown;
+}
+
+static void respawn_player(GameState *gs) {
+    companion_init(&gs->player, gs->level->spawns[0]);
+    gs->respawns++;
+    events_push(&gs->events, EV_PLAYER_RESPAWNED, gs->player.body.pos, 0, 0);
 }
 
 void game_update(GameState *gs, const InputFrame *input) {
     events_clear(&gs->events);
+    const bool was_carrying = entity_id_valid(gs->player.carrying);
+    const u32 crate_actions_before = crate_actions(gs);
     companion_update(&gs->player, gs->level, input);
     crate_carry_update(gs, input);
+    // A key a crate action used is not also a shot or a weapon pickup.
+    combat_player_update(gs, input, was_carrying || crate_actions(gs) != crate_actions_before);
+    combat_update(gs);
     crates_update(gs);
     crate_carried_follow(gs);
-    products_update(gs);
+    loot_update(gs);
 
-    if (companion_in_hazard(&gs->player, gs->level)) {
-        crate_destroy(gs, gs->player.carrying); // the crate is lost with its carrier
-        companion_init(&gs->player, gs->level->spawns[0]);
-        gs->respawns++;
-        events_push(&gs->events, EV_PLAYER_RESPAWNED, gs->player.body.pos, 0, 0);
+    if (gs->player.hp <= 0) {
+        combat_player_died(gs); // drops the weapon and the crate where the soldier fell
+        respawn_player(gs);
+    } else if (companion_in_hazard(&gs->player, gs->level)) {
+        crate_destroy(gs, gs->player.carrying); // the crate is lost with its carrier (and so is the weapon)
+        respawn_player(gs);
     }
     pool_flush(&gs->entities);
     gs->tick++;
@@ -66,8 +87,20 @@ u64 game_hash(const GameState *gs) {
     h = fnv_mix(h, &c->drop_ticks, sizeof(c->drop_ticks));
     h = fnv_mix(h, &c->ladder_cooldown_ticks, sizeof(c->ladder_cooldown_ticks));
     h = fnv_mix(h, &c->carrying, sizeof(c->carrying));
+    h = fnv_mix(h, &c->aim_dir, sizeof(c->aim_dir));
+    h = fnv_mix(h, &c->hp, sizeof(c->hp));
+    h = fnv_mix(h, &c->weapon, sizeof(c->weapon));
+    h = fnv_mix(h, &c->ammo, sizeof(c->ammo));
+    h = fnv_mix(h, &c->fire_cooldown, sizeof(c->fire_cooldown));
+    h = fnv_mix(h, &c->hurt_ticks, sizeof(c->hurt_ticks));
+    h = fnv_mix(h, &c->punch_ticks, sizeof(c->punch_ticks));
     h = fnv_mix(h, gs->drop_timers, sizeof(gs->drop_timers));
     h = fnv_mix(h, &gs->products_built, sizeof(gs->products_built));
+    h = fnv_mix(h, &gs->combat_stats.shots, sizeof(u32));
+    h = fnv_mix(h, &gs->combat_stats.hits, sizeof(u32));
+    h = fnv_mix(h, &gs->combat_stats.explosions, sizeof(u32));
+    h = fnv_mix(h, &gs->combat_stats.kills, sizeof(u32));
+    h = fnv_mix(h, &gs->combat_stats.deaths, sizeof(u32));
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
         const Entity *e = &gs->entities.slots[i];
         if (e->type == ENT_NONE) {
@@ -87,6 +120,16 @@ u64 game_hash(const GameState *gs) {
         } else if (e->type == ENT_PRODUCT) {
             h = fnv_mix(h, &e->as.product.kind, sizeof(e->as.product.kind));
             h = fnv_mix(h, &e->as.product.team, sizeof(e->as.product.team));
+        } else if (e->type == ENT_WEAPON) {
+            h = fnv_mix(h, &e->as.weapon.kind, sizeof(e->as.weapon.kind));
+            h = fnv_mix(h, &e->as.weapon.ammo, sizeof(e->as.weapon.ammo));
+        } else if (e->type == ENT_PROJECTILE) {
+            h = fnv_mix(h, &e->as.projectile.weapon, sizeof(e->as.projectile.weapon));
+            h = fnv_mix(h, &e->as.projectile.team, sizeof(e->as.projectile.team));
+            h = fnv_mix(h, &e->as.projectile.ttl, sizeof(e->as.projectile.ttl));
+        } else if (e->type == ENT_DUMMY) {
+            h = fnv_mix(h, &e->as.dummy.hp, sizeof(e->as.dummy.hp));
+            h = fnv_mix(h, &e->as.dummy.hurt_ticks, sizeof(e->as.dummy.hurt_ticks));
         }
     }
     return h;

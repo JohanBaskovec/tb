@@ -44,6 +44,23 @@
 #define TUNING_CARRY_SPEED_MULT 0.75f
 #define TUNING_CARRY_JUMP_MULT 0.8f
 
+// Combat. Weapons themselves are a data table (game/weapon.c).
+#define TUNING_SOLDIER_HP 100         // the base soldier; the other variants arrive with the squad milestone
+#define TUNING_DUMMY_HP 100           // target dummies
+#define TUNING_DUMMY_W 14.0f
+#define TUNING_DUMMY_H 24.0f
+#define TUNING_HURT_FLASH_S 0.15f     // a hit soldier / dummy flashes for this long
+#define TUNING_PUNCH_ANIM_S 0.12f
+#define TUNING_AIM_MIN_DIST 4.0f      // closer than this to the shoulder, the cursor gives no direction
+#define TUNING_MUZZLE_HEIGHT 9.0f     // shots leave this far below the top of the body
+#define TUNING_EXPLOSION_MIN_FALLOFF 0.4f // damage at the edge of an explosion, as a fraction of the center's
+#define TUNING_EXPLOSION_LIFT 60.0f   // extra upward speed given by an explosion at point-blank
+#define TUNING_GRENADE_BOUNCE 0.35f   // fraction of the vertical speed kept when a grenade lands
+#define TUNING_GRENADE_WALL_BOUNCE 0.4f
+#define TUNING_GRENADE_FRICTION 0.7f  // horizontal speed multiplier at each ground contact
+#define TUNING_LOOT_W 12.0f           // pad products and weapons lying on the ground
+#define TUNING_LOOT_H 12.0f
+
 // Stacking pad menu: shown while the controlled soldier is within this distance of the pad (px,
 // measured from the soldier's center to the pad rectangle).
 #define TUNING_PAD_MENU_RANGE_X 56.0f

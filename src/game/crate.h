@@ -23,5 +23,8 @@ void crate_carry_update(GameState *gs, const InputFrame *input);
 // Puts the carried crate back above the player's head. Call after the player has moved.
 void crate_carried_follow(GameState *gs);
 
+// The carried crate (if any) is let go where it is: it falls (the soldier died).
+void crate_release_carried(GameState *gs);
+
 // Number of crates alive (not about to be destroyed).
 u32 crate_count(const GameState *gs);

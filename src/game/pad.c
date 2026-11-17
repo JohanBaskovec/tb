@@ -2,6 +2,7 @@
 
 #include "core/log.h"
 #include "game/crate.h"
+#include "game/loot.h"
 #include "game/tuning.h"
 
 #include <string.h>
@@ -253,7 +254,7 @@ void pad_world_options(const GameState *gs, i32 team, PadOptionList *out) {
 
 // ---- Building ----------------------------------------------------------------------------------
 
-#define PRODUCT_SIZE 12.0f
+#define PRODUCT_SIZE TUNING_LOOT_W
 
 // Where the product appears: the column just left of the pad (the menu is drawn on its right), else
 // just right of it, else above it.
@@ -296,15 +297,23 @@ bool pad_build(GameState *gs, i32 team, PadShape shape, bool blue) {
         return false;
     }
     // Create the product before consuming anything, so a full pool changes nothing.
-    EntityId pid = pool_create(&gs->entities, ENT_PRODUCT);
+    EntityId pid;
+    WeaponKind weapon;
+    if (weapon_from_product(chosen->product, &weapon)) {
+        pid = loot_spawn_weapon(gs, weapon, weapon_def(weapon)->max_ammo, where);
+    } else {
+        pid = pool_create(&gs->entities, ENT_PRODUCT);
+        Entity *pe = pool_get(&gs->entities, pid);
+        if (pe) {
+            pe->body.size = vec2(PRODUCT_SIZE, PRODUCT_SIZE);
+            pe->body.pos = where;
+            pe->prev_pos = where;
+            pe->as.product = (Product){.kind = chosen->product, .team = team};
+        }
+    }
     if (!entity_id_valid(pid)) {
         return false;
     }
-    Entity *pe = pool_get(&gs->entities, pid);
-    pe->body.size = vec2(PRODUCT_SIZE, PRODUCT_SIZE);
-    pe->body.pos = where;
-    pe->prev_pos = where;
-    pe->as.product = (Product){.kind = chosen->product, .team = team};
 
     for (u32 k = 0; k < chosen->count; k++) { // top first
         crate_consume(gs, ids[chosen->cells[k].row][chosen->cells[k].col]);
@@ -345,32 +354,4 @@ bool pad_debug_fill(GameState *gs, i32 team, const char *top, const char *bottom
         }
     }
     return true;
-}
-
-void products_update(GameState *gs) {
-    for (u16 i = 1; i <= MAX_ENTITIES; i++) {
-        Entity *e = &gs->entities.slots[i];
-        if (e->type != ENT_PRODUCT || e->pending_destroy) {
-            continue;
-        }
-        e->prev_pos = e->body.pos;
-        // A crate that settled on top of the product would bury it: lift it onto the top of the pile.
-        for (int lift = 0; lift < 4; lift++) {
-            const Vec2 c = body_center(&e->body);
-            if (!level_is_solid(gs->level, level_px_to_tile(c.x), level_px_to_tile(c.y))) {
-                break;
-            }
-            e->body.pos.y -= (f32)TILE_SIZE;
-            e->prev_pos = e->body.pos;
-            e->body.vel.y = 0.0f;
-        }
-        e->body.vel.y = MIN(e->body.vel.y + TUNING_GRAVITY * TICK_DT, TUNING_MAX_FALL_SPEED);
-        body_move(&e->body, gs->level, TICK_DT, false);
-        if (e->body.on_ground) {
-            e->body.vel.y = 0.0f;
-        }
-        if (body_overlaps_tile(&e->body, gs->level, TILE_HAZARD)) {
-            pool_mark_destroy(&gs->entities, (EntityId){i, e->generation});
-        }
-    }
 }

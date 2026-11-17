@@ -74,11 +74,19 @@ static u32 check_crate_invariants(const Sim *sim) {
         }
         alive++;
         CHECK(!e->pending_destroy); // everything flagged was flushed at the end of the tick
-        if (e->type == ENT_PRODUCT) { // made at the pad by the bot: a valid kind, inside the map, not in terrain
-            CHECK(e->as.product.kind >= 0 && e->as.product.kind < PRODUCT_COUNT);
+        if (e->type == ENT_PRODUCT || e->type == ENT_WEAPON) { // loot: a valid kind, inside the map, not in terrain
+            if (e->type == ENT_PRODUCT) {
+                CHECK(e->as.product.kind >= 0 && e->as.product.kind < PRODUCT_COUNT);
+            } else {
+                CHECK(e->as.weapon.kind > WEAPON_FISTS && e->as.weapon.kind < WEAPON_COUNT);
+                CHECK(e->as.weapon.ammo > 0 && e->as.weapon.ammo <= weapon_def(e->as.weapon.kind)->max_ammo);
+            }
             CHECK(e->body.pos.x >= 0.0f && e->body.pos.x < level_width_px(lv));
             CHECK(!level_is_solid(lv, level_px_to_tile(e->body.pos.x + e->body.size.x * 0.5f),
                                   level_px_to_tile(e->body.pos.y + e->body.size.y * 0.5f)));
+            continue;
+        }
+        if (e->type == ENT_PROJECTILE || e->type == ENT_DUMMY) { // checked by the combat invariants
             continue;
         }
         CHECK(e->type == ENT_CRATE);

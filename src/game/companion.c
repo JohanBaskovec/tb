@@ -16,6 +16,9 @@ void companion_init(Companion *c, Vec2 feet) {
     c->body.pos = vec2(feet.x - TUNING_COMPANION_W * 0.5f, feet.y - TUNING_COMPANION_H);
     c->prev_pos = c->body.pos;
     c->facing = 1;
+    c->aim_dir = vec2(1.0f, 0.0f);
+    c->hp = c->max_hp = TUNING_SOLDIER_HP;
+    c->weapon = WEAPON_FISTS;
 }
 
 bool companion_in_hazard(const Companion *c, const Level *lv) {

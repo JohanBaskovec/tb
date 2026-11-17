@@ -153,7 +153,8 @@ static void test_keyboard_select_and_confirm(void) {
     bool found = false;
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
         const Entity *p = &gs_of(&e)->entities.slots[i];
-        if (p->type == ENT_PRODUCT && p->as.product.kind == chosen.product) {
+        PadProduct k;
+        if (entity_as_product(p, &k) && k == chosen.product) {
             found = true;
         }
     }

@@ -5,6 +5,7 @@
 //
 //   .  empty          #  solid            =  one-way platform
 //   H  ladder         ~  hazard (water)   1-4 team spawn (empty tile)   D  crate drop zone (empty tile)
+//   T  target dummy: an immobile enemy standing on the floor (empty tile)
 //   P  stacking pad: the bottom-left cell of a 4x2 grid (4 columns, 2 rows going up; empty tile)
 //
 // Header keys: `name=...` and `drop.N=COLOR,INTERVAL_S,CAP[,BLUE_PERCENT]` configuring the N-th drop zone
@@ -65,6 +66,8 @@ typedef struct Level {
     DropZoneConfig drop_cfg[MAX_DROP_ZONES];
     bool drop_cfg_set[MAX_DROP_ZONES]; // parser bookkeeping
     i32 drop_zone_count;
+    Vec2 dummies[MAX_DUMMIES]; // bottom-center of the marker cell, in pixels
+    i32 dummy_count;
     PadSite pads[MAX_TEAMS]; // indexed by team
     i32 pad_owner[MAX_TEAMS]; // parser bookkeeping: team of the N-th pad marker (-1 = default)
     i32 pad_marker_count;     // parser bookkeeping

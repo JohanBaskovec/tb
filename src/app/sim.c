@@ -57,13 +57,40 @@ bool sim_script_running(const Sim *sim) {
     return sim->use_script && !script_finished(&sim->script);
 }
 
+void sim_set_mouse(Sim *sim, Vec2 logical, bool left_down) {
+    sim->mouse_active = true;
+    sim->mouse_logical = logical;
+    sim->mouse_left = left_down;
+    if (!left_down) {
+        sim->mouse_fire_blocked = false;
+    }
+}
+
+// Keyboard input as given, plus the mouse: aim at the pointer, fire while the left button is held.
+static void sim_apply_human(Sim *sim, const InputFrame *human) {
+    u32 down = human->down;
+    sim->input.aim_active = human->aim_active; // an aim given with the keys (tests), unless the mouse takes over
+    sim->input.aim = human->aim;
+    if (sim->mouse_active) {
+        const Vec2 world = sim_logical_to_world(sim, sim->mouse_logical);
+        const bool on_menu = pad_menu_hit_test(&sim->menu, world) >= 0;
+        sim->input.aim_active = true;
+        sim->input.aim = world;
+        if ((sim->mouse_left || sim->mouse_click_pending) && !sim->mouse_fire_blocked && !on_menu) {
+            down |= action_bit(ACT_FIRE);
+        }
+    }
+    sim->mouse_click_pending = false;
+    input_frame_update(&sim->input, down);
+}
+
 void sim_tick(Sim *sim, const InputFrame *human) {
     if (sim->use_script) {
         script_next(&sim->script, &sim->input);
     } else if (sim->use_bot) {
         bot_think(&sim->bot, &sim->input);
     } else if (human) {
-        sim->input = *human;
+        sim_apply_human(sim, human);
     } else {
         input_frame_update(&sim->input, 0);
     }
@@ -73,6 +100,8 @@ void sim_tick(Sim *sim, const InputFrame *human) {
     const u32 respawns_before = sim->gs.respawns;
     game_update(&sim->gs, &sim->input);
     pad_menu_refresh(&sim->menu, &sim->gs, 0);
+    fx_consume(&sim->fx, &sim->gs.events); // the queue holds one tick only: drain it every tick
+    fx_step(&sim->fx);
     const bool teleported = sim->gs.respawns != respawns_before;
     camera_follow(&sim->cam, follow_target(sim), sim->gs.player.facing, &sim->level, teleported);
 }
@@ -82,5 +111,11 @@ Vec2 sim_logical_to_world(const Sim *sim, Vec2 logical) {
 }
 
 bool sim_click(Sim *sim, Vec2 logical) {
-    return pad_menu_click(&sim->menu, &sim->gs, sim_logical_to_world(sim, logical));
+    const Vec2 world = sim_logical_to_world(sim, logical);
+    if (pad_menu_hit_test(&sim->menu, world) >= 0) {
+        sim->mouse_fire_blocked = true; // this press belongs to the menu, not to the weapon
+    } else {
+        sim->mouse_click_pending = true; // a click shorter than a frame still fires
+    }
+    return pad_menu_click(&sim->menu, &sim->gs, world);
 }

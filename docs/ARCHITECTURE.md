@@ -81,8 +81,9 @@ tb/
 │   │   ├── companion.h/.c  # Soldats : déplacement, portage, tir, santé, variantes
 │   │   ├── crate.h/.c      # Caisses : largage, parachute, physique, prise
 │   │   ├── pad.h/.c        # Grille d'empilement, détection de formes, transformation
-│   │   ├── weapon.h/.c     # Définitions d'armes, tir
-│   │   ├── projectile.h/.c # Balles, grenades, roquettes, explosions
+│   │   ├── weapon.h/.c     # Table des armes (data-driven)
+│   │   ├── loot.h/.c       # Armes au sol et produits du pad : physique, ramassables
+│   │   ├── combat.h/.c     # Tir, projectiles, explosions, dégâts, mannequins, mort du soldat
 │   │   ├── vehicle.h/.c    # Véhicules
 │   │   ├── team.h/.c       # Équipes, ordres, élimination
 │   │   ├── ai.h/.c         # FSM soldat + commandant d'équipe
@@ -130,8 +131,8 @@ scene_render(scene, alpha)              // interpolation positions précédentes
 ### Entités
 
 Un tableau de taille fixe d'`Entity` (`EntityPool`, 256 emplacements) avec un en-tête commun et une union par type.
-Simple, lisible en C, sans allocation dynamique. **État actuel (M2) : seules les caisses vivent dans le pool**,
-le joueur est encore un champ de `GameState` ; les compagnons y entrent avec le jalon « escouade » (M4).
+Simple, lisible en C, sans allocation dynamique. **État actuel (M3) : le pool contient les caisses, les produits du pad, les armes au sol,
+les projectiles et les mannequins** ; le joueur est encore un champ de `GameState` ; les compagnons y entrent avec le jalon « escouade » (M4).
 Le schéma ci-dessous est la cible.
 
 ```c
@@ -199,14 +200,16 @@ typedef struct GameState {
 
 La simulation ne joue pas de son et ne crée pas de particules. Elle pousse des
 événements dans `GameState.events` (`game/events.h` : `EV_CRATE_SPAWNED`, `EV_CRATE_SETTLED`, `EV_CRATE_PICKED_UP`,
-`EV_CRATE_PLACED`, `EV_CRATE_THROWN`, `EV_CRATE_DESTROYED`, `EV_CRATE_CONSUMED`, `EV_PAD_BUILT`, `EV_PLAYER_RESPAWNED` ;
-`EV_SHOT`, `EV_EXPLOSION`… viendront avec le combat), que `audio/`, `render/` (effets) et `ui/` lisent après l'update.
+`EV_CRATE_PLACED`, `EV_CRATE_THROWN`, `EV_CRATE_DESTROYED`, `EV_CRATE_CONSUMED`, `EV_PAD_BUILT`, `EV_PLAYER_RESPAWNED` ; combat : `EV_SHOT`, `EV_PUNCH`, `EV_PROJECTILE_HIT`, `EV_EXPLOSION`, `EV_DAMAGE`, `EV_DUMMY_DESTROYED`,
+`EV_PLAYER_DIED`, `EV_WEAPON_PICKED_UP`, `EV_WEAPON_DROPPED`, `EV_WEAPON_EMPTY`), que `audio/`, `render/` (effets) et `ui/` lisent après l'update.
 Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont le sens dépend du type.
 
 - La file est **vidée au début de chaque `game_update`** : elle contient les événements du dernier tick seulement.
   Une boucle qui exécute plusieurs ticks par image doit donc la vider après chaque tick.
 - Elle est de capacité fixe (`MAX_EVENTS`) ; en cas de débordement les événements en trop sont comptés (`dropped`), jamais fatals.
 - Elle n'est **pas dans le hash d'état** et la simulation ne la relit jamais : la présentation ne peut pas influencer le jeu.
+- Premier consommateur : `app/fx.h/.c` (sans SDL), qui en tire de courts effets visuels (explosions, étincelles, flash de bouche) tenus par
+  `Sim.fx` et dessinés par `draw_game`. `sim_tick` la vide à chaque tick.
 
 ## Physique
 
@@ -240,6 +243,28 @@ Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont l
   ajuster une recette ne touche pas au code.
 - Les types de caisses sont `CRATE_RED` et `CRATE_BLUE`, communs au pad, aux zones de largage et au rendu.
 
+## Combat
+
+- **Armes** : table `WeaponDef` dans `game/weapon.c` (type de tir, munitions, cadence, vitesse, dispersion, dégâts, rayon, recul, portée / mèche, taille du projectile).
+  Quatre types de tir : `SHOT_MELEE` (poings), `SHOT_BULLET` (droite, sans gravité), `SHOT_GRENADE` (gravité, rebonds, mèche), `SHOT_ROCKET`
+  (droite, explose). Ajouter une arme = ajouter une ligne. Les chiffres vivent dans cette table plutôt que dans `tuning.h` (D033).
+- **Soldat** : `Companion` porte `hp / max_hp`, `weapon`, `ammo`, `fire_cooldown`, `hurt_ticks`, `punch_ticks` (poings = « sans arme »).
+- **Cibles** : le soldat du joueur (équipe 0) et les mannequins (`ENT_DUMMY`, équipe 1, `T` dans le niveau). `combat.c` rassemble les cibles vivantes
+  puis les teste contre les projectiles, les coups et les explosions. Les PV ne baissent que dans `combat.c` ; un soldat à 0 PV meurt en fin de tick
+  (`combat_player_died` : lâche l'arme et la caisse, puis `game_update` le fait réapparaître).
+- **Projectiles** (`ENT_PROJECTILE`) : une balle avance de `vitesse × dt` par tick (moins d'une case, donc sans traversée) et s'arrête sur le terrain ou
+  sur une caisse empilée ; une roquette explose au dernier point libre ; une grenade utilise `body_move` (rebonds, frottement) et explose à la fin de sa mèche
+  ou au contact d'un ennemi. L'équipe du tireur évite le tir ami pour les balles et les coups, pas pour les explosions.
+- **Explosions** : `combat_explode(gs, centre, arme)` blesse toute cible dont le point le plus proche est dans le rayon **et visible** depuis le centre
+  (segment échantillonné tous les 2 px contre `level_is_solid`) ; dégâts de 100 % à 40 % du centre au bord ; impulsion d'éloignement avec un biais vers le haut.
+- **Visée** : `Companion.aim_dir` est le vecteur unitaire de l'arme (vers le curseur si on vise, sinon la direction du regard) ; en visant,
+  le soldat se tourne vers le curseur. Balles et roquettes partent dans cette direction (la dispersion de l'uzi est perpendiculaire) ; une grenade
+  est lancée en cloche pour **retomber sur le curseur** (temps de vol borné, vitesse bornée). Le tir part de l'épaule, un peu le long de la visée.
+- **Touches** : `combat_player_update` reçoit `crate_busy` (vrai si une action de caisse a utilisé la touche ce tick) : portage, prise, pose et lancer
+  sont prioritaires sur le tir, les coups et l'échange d'arme.
+- **Ramassage** (`loot.c`) : armes et produits non-armes tombent et reposent comme le produit du pad en M2 ; une caisse qui se pose dessus les remonte.
+- Ordre dans `game_update` : soldat → caisses du joueur → combat du joueur → projectiles / mannequins → caisses → caisse portée → objets au sol → mort / eau → `pool_flush`.
+
 ## IA et navigation
 
 - **Graphe de navigation** pré-calculé au chargement du niveau : nœuds = segments de sol marchables,
@@ -265,12 +290,18 @@ Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont l
   `platform_map_keyboard()` est pure et testée.
 - Jusqu'à 4 joueurs locaux ; attribution des manettes dans l'écran de configuration ; hotplug géré.
 - Souris : clic pour choisir une construction du pad ; au clavier / à la manette, sélection + validation.
+- **Visée à la souris** : `InputFrame` porte `aim_active` et `aim` (point visé, en pixels monde). La fenêtre lit la position et le bouton gauche
+  (`platform_read_mouse`) et les donne à `sim_set_mouse` ; `sim_tick` complète alors l'entrée humaine avec la visée et `ACT_FIRE` tant que le
+  bouton est tenu. Un clic plus court qu'une image tire quand même (`mouse_click_pending`). Un clic sur une entrée du menu du pad ne tire
+  pas, et le bouton ne tire plus tant qu'il n'a pas été relâché. La visée n'existe qu'après le premier mouvement de souris : au clavier seul,
+  le soldat tire dans la direction où il regarde. Les scripts visent avec `KEYS@X/Y:TICKS` ; le jeu ne connaît pas la souris, seulement `aim`.
 
 ## Données et formats
 
 - **Niveaux** : format texte ASCII (`.lvl`), un caractère par tuile + section d'en-tête clé=valeur
   (nom, taille, fréquence de largage…). Lisible, versionnable, éditable à la main.
   Légende : `#` sol, `=` plateforme fine, `H` échelle, `~` eau, `1`..`4` camps, `D` zone de largage,
+  `T` mannequin (cible immobile, debout sur la case),
   `P` pad d'empilement (case en bas à gauche de la zone 4×2 ; le N-ᵉ `P` dans l'ordre de lecture appartient à l'équipe N,
   sauf `pad.N=ÉQUIPE` dans l'en-tête).
   En-tête : `name=…` et `drop.N=rouge|bleu|mixte…` : voir `game/level.h` (couleur `red|blue|mixed`, intervalle en secondes,
@@ -294,7 +325,7 @@ RGBA 640×360 via le renderer logiciel de SDL. Aucun display n'est requis.
 | `--headless` | Simule puis quitte, sans fenêtre |
 | `--frames N` | Nombre de ticks à simuler (défaut 600, ou la longueur du script) |
 | `--bot` | Bot aléatoire (marche, saute, échelles, traverse les plateformes) |
-| `--script "R:60 RJ:12"` | Script d'entrées (syntaxe dans `game/script.h`) |
+| `--script "R:60 RJ:12"` | Script d'entrées (syntaxe dans `game/script.h`) ; `F@488/420:1` tire en visant le point (488, 420) du monde |
 | `--walk-to X` | Bot « marcheur » vers l'abscisse X (pixels) |
 | `--start X,Y` | Position de départ (pieds, pixels) à la place du spawn |
 | `--seed N` | Graine RNG |
@@ -302,11 +333,12 @@ RGBA 640×360 via le renderer logiciel de SDL. Aucun display n'est requis.
 | `--screenshot PATH` | PNG écrit après le dernier tick |
 | `--shot-every N` | Avec `--screenshot motif_%u.png` : un PNG tous les N ticks (films) |
 | `--shot-cam X,Y` | Coin haut-gauche de la caméra pour la capture (voir une autre partie du niveau) |
+| `--give ARME` | Équipe le soldat d'une arme neuve : `pistol`, `uzi`, `grenades`, `strong-grenades`, `rocket` |
 | `--fill-pad HAUT,BAS` | Pose des caisses dans le pad de l'équipe 1 (ex. `r...,rr.b` : r rouge, b bleue, `.` vide) |
 | `--debug-overlay` | Grille, hitboxes, vitesse, pastilles d'état, spawns et zones de largage |
 | `--trace N` | Affiche l'état du joueur tous les N ticks |
 
-La dernière ligne affichée (`ticks=… respawns=… products=… hash=…`) sert aux tests de déterminisme.
+La dernière ligne affichée (`ticks=… respawns=… products=… hp=… weapon=… ammo=… shots=… hits=… kills=… deaths=… hash=…`) sert aux tests de déterminisme.
 
 ### Boucle fenêtrée testée sans fenêtre
 
@@ -330,9 +362,12 @@ Les touches F1–F4 sont testées en injectant des événements (`SDL_PushEvent`
   `platform` (mapping clavier, événements dont le clic gauche), `pad` (recettes : toutes les formes, rouge/bleu, orientations du L,
   ordre de consommation, pad vide, « non vide ⇒ au moins un 1×1 », **toutes les 3⁸ grilles** comparées à un calcul indépendant ;
   monde : lecture des caisses, construction, produits, menu périmé, pool plein), `pad_menu` (visibilité, disposition, clavier, souris,
-  bot qui martèle Tab/Entrée), `events` (file, débordement, événements émis par les caisses, hash inchangé).
+  bot qui martèle Tab/Entrée), `events` (file, débordement, événements émis par les caisses, hash inchangé, effets visuels),
+  `combat` (table d'armes, chaque arme tire / s'épuise, portée, murs, dispersion de l'uzi, poings, décroissance et blocage des explosions, recul,
+  grenade : cloche / mèche / contact / rebond, roquette, mannequins, ramassage et échange, priorité des caisses, mort et réapparition,
+  produit du pad → arme utilisable, visée (direction, dispersion, grenade sur le curseur, souris, clic court, menu), et un bot armé sur 6000 ticks avec invariants et déterminisme).
 - Tests de fumée sur l'exécutable : headless (bot, script + overlay, film), déterminisme, arguments/niveau/script
-  invalides, boucle fenêtrée sous `dummy`, garde du pilote vidéo.
+  invalides, boucle fenêtrée sous `dummy`, garde du pilote vidéo, tirs (uzi tue un mannequin, explosion de roquette), bot armé.
 - Les invariants vérifiés à chaque tick sous bots : jamais dans une tuile solide, dans les bornes du niveau,
   vitesses bornées, `on_ground` ⇒ appui sous les pieds, caméra dans le niveau.
   Pour les caisses : grille et pool cohérents (une case solide par caisse au repos, alignement exact, appui sous chaque caisse),

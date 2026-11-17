@@ -178,3 +178,46 @@ sont comptés) et exclue de `game_hash` : la présentation lit, la simulation n'
 **Statut :** Provisoire
 `ENT_PRODUCT` (type + équipe) tombe et repose à côté du pad (à gauche ; le menu est à droite). Il sert à vérifier la chaîne caisses → recette →
 objet avant M3 (armes ramassables) et M4 (compagnons). Un produit enterré par une caisse qui se pose est remonté au sommet de la pile.
+
+### D033 — Les armes sont une table de données ; ses chiffres restent dans la table
+**Statut :** Acceptée
+`weapon.c` contient un tableau `WeaponDef[WEAPON_COUNT]` (type de tir, munitions, cadence, vitesse, dispersion, dégâts, rayon, recul, portée,
+taille). Ajouter une arme = ajouter une ligne, sans toucher à la logique de combat. Ces chiffres sont des valeurs de gameplay mais ne sont pas
+éclatés en macros de `tuning.h` : la table *est* le réglage (les autres constantes de combat — PV, clignotement, rebond des grenades — sont,
+elles, dans `tuning.h`). Les valeurs sont provisoires (GDD § 7).
+
+### D034 — Tir ami : balles et coups épargnent l'équipe du tireur, pas les explosions
+**Statut :** Provisoire
+Les balles et les coups ne blessent que les autres équipes ; les explosions blessent tout le monde, tireur compris, mais pas à travers les murs
+(segment échantillonné contre le terrain et les caisses empilées). Cela rend les grenades risquées à bout portant sans pénaliser le tir normal.
+À revoir si les tests de jeu montrent que c'est frustrant.
+
+### D035 — Ramassage : automatique à mains nues, échange sur la touche d'action
+**Statut :** Provisoire
+Un soldat sans arme ramasse automatiquement celle sur laquelle il se trouve ; armé, il l'échange avec la touche d'action (l'ancienne est lâchée
+avec ses munitions). Une action de caisse est prioritaire sur la même touche (portage, prise, pose, lancer) : le tir et l'échange sont
+ignorés ce tick. Une arme vide disparaît (retour aux poings) au lieu de rester au sol.
+
+### D036 — Mort du soldat : réapparition provisoire jusqu'à l'escouade
+**Statut :** Provisoire
+Le soldat tombé à 0 PV lâche son arme (avec ses munitions) et sa caisse sur place, puis réapparaît au point de départ en pleine santé : il n'y a qu'un
+soldat tant que M4 n'existe pas. Tomber à l'eau reste un respawn sans dégâts (l'arme est perdue, pas lâchée). Le comportement final
+(« une équipe sans soldat est éliminée ») viendra avec l'escouade.
+
+### D037 — Mannequins posés par le niveau (`T`), sans réapparition
+**Statut :** Acceptée
+Les cibles de test sont des entités `ENT_DUMMY` créées à `game_init` depuis les marqueurs `T` du niveau (équipe 1, 100 PV, immobiles, sans riposte).
+Un mannequin détruit ne revient pas : les tests comptent les éliminations.
+
+### D038 — Effets visuels côté application, nourris par les événements
+**Statut :** Acceptée
+`app/fx` convertit les événements d'un tick en effets de quelques ticks (explosion, étincelle, flash). La liste vit dans `Sim`, hors de `GameState` et
+du hash : le jeu ne la lit jamais. `sim_tick` la nourrit à chaque tick, donc plusieurs ticks par image ne perdent aucun événement.
+
+### D039 — Visée à la souris : le jeu ne connaît que `aim`, pas la souris
+**Statut :** Acceptée (demandée par l'utilisateur)
+La souris est traduite hors du jeu : `sim_tick` convertit la position (pixels logiques → monde, avec la caméra courante) en `InputFrame.aim` et ajoute
+`ACT_FIRE` tant que le bouton gauche est tenu. Le jeu ne dépend donc ni de SDL ni de la caméra, et un script ou une IA vise de la même façon
+(`KEYS@X/Y:TICKS`). Le bouton gauche sert aussi au menu du pad : un clic sur une entrée construit et ne tire pas, et le bouton reste muet jusqu'à son
+relâchement. La visée s'active au premier mouvement de souris (un joueur au clavier seul n'est pas gêné) ; le soldat se tourne alors vers le curseur.
+La direction visée fait partie de l'état (`Companion.aim_dir`, hachée). Grenade : lancer balistique vers le curseur plutôt qu'un jet fixe.

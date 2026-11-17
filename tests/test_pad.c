@@ -397,15 +397,27 @@ static EntityId put(Env *e, int col, int row, CrateKind kind) {
 static u32 products(Env *e) {
     u32 n = 0;
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
-        n += e->sim.gs.entities.slots[i].type == ENT_PRODUCT ? 1u : 0u;
+        PadProduct k;
+        n += entity_as_product(&e->sim.gs.entities.slots[i], &k) ? 1u : 0u;
     }
     return n;
 }
 
-static const Product *first_product(Env *e) {
+static PadProduct built_kind(Env *e) {
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
-        if (e->sim.gs.entities.slots[i].type == ENT_PRODUCT) {
-            return &e->sim.gs.entities.slots[i].as.product;
+        PadProduct k;
+        if (entity_as_product(&e->sim.gs.entities.slots[i], &k)) {
+            return k;
+        }
+    }
+    return PRODUCT_COUNT;
+}
+
+static const Entity *first_loot(Env *e) {
+    for (u16 i = 1; i <= MAX_ENTITIES; i++) {
+        PadProduct k;
+        if (entity_as_product(&e->sim.gs.entities.slots[i], &k)) {
+            return &e->sim.gs.entities.slots[i];
         }
     }
     return NULL;
@@ -457,7 +469,8 @@ static void test_build_consumes_from_the_top_and_makes_a_product(void) {
     CHECK_EQ_U64(gs->crate_stats.destroyed, 0);
     CHECK_EQ_U64(gs->products_built, 1);
     CHECK_EQ_U64(products(&e), 1);
-    CHECK(first_product(&e)->kind == PRODUCT_PISTOL && first_product(&e)->team == 0);
+    CHECK(built_kind(&e) == PRODUCT_PISTOL);
+    CHECK(first_loot(&e)->type == ENT_WEAPON && first_loot(&e)->as.weapon.ammo == weapon_def(WEAPON_PISTOL)->max_ammo);
     CHECK_EQ_U64(events_count_of(&gs->events, EV_PAD_BUILT), 1);
     CHECK_EQ_U64(events_count_of(&gs->events, EV_CRATE_CONSUMED), 1);
     tick_n(&e, 1); // flush
@@ -479,7 +492,7 @@ static void test_build_blue_version_and_stale_menu(void) {
     GameState *gs = &e.sim.gs;
     CHECK(!pad_build(gs, 0, SHAPE_2X1_H, false)); // the pair has a blue crate: only the blue version
     CHECK(pad_build(gs, 0, SHAPE_2X1_H, true));
-    CHECK(first_product(&e)->kind == PRODUCT_STRONG_GRENADES);
+    CHECK(built_kind(&e) == PRODUCT_STRONG_GRENADES);
     CHECK_EQ_U64(gs->crate_stats.consumed, 2);
     sim_free(&e.sim);
 }
@@ -516,7 +529,7 @@ static void test_build_every_product_in_the_world(void) {
             }
         }
         CHECK(pad_build(&e.sim.gs, 0, cases[i].shape, cases[i].blue));
-        CHECK(first_product(&e)->kind == cases[i].expect);
+        CHECK(built_kind(&e) == cases[i].expect);
         CHECK_EQ_U64(e.sim.gs.crate_stats.consumed, n);
         tick_n(&e, 1);
         CHECK_EQ_U64(crate_count(&e.sim.gs), 0);
@@ -570,7 +583,8 @@ static void test_product_goes_to_the_other_side_when_blocked(void) {
     pad_debug_fill(&sim.gs, 0, "....", "r...");
     CHECK(pad_build(&sim.gs, 0, SHAPE_1X1, false));
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
-        if (sim.gs.entities.slots[i].type == ENT_PRODUCT) {
+        PadProduct k;
+        if (entity_as_product(&sim.gs.entities.slots[i], &k)) {
             CHECK(sim.gs.entities.slots[i].body.pos.x >= 10 * 16);
         }
     }
@@ -601,7 +615,8 @@ static void test_product_falls_and_rests_beside_the_pad(void) {
     tick_n(&e, 90);
     const Entity *p = NULL;
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
-        if (e.sim.gs.entities.slots[i].type == ENT_PRODUCT) {
+        PadProduct k;
+        if (entity_as_product(&e.sim.gs.entities.slots[i], &k)) {
             p = &e.sim.gs.entities.slots[i];
         }
     }
@@ -623,7 +638,8 @@ static void test_product_is_not_buried_by_a_crate(void) {
     tick_n(&e, 90);
     const Entity *p = NULL;
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
-        if (e.sim.gs.entities.slots[i].type == ENT_PRODUCT) {
+        PadProduct k;
+        if (entity_as_product(&e.sim.gs.entities.slots[i], &k)) {
             p = &e.sim.gs.entities.slots[i];
         }
     }

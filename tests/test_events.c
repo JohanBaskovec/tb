@@ -2,6 +2,7 @@
 #include "test.h"
 
 #include "app/sim.h"
+#include "game/combat.h"
 #include "game/crate.h"
 #include "test_helpers.h"
 
@@ -152,6 +153,65 @@ static void test_events_do_not_change_the_hash(void) {
     CHECK(h[0] == h[1]);
 }
 
+static void test_fx_follow_the_events(void) {
+    EventQueue q = {0};
+    FxList fx = {0};
+    events_push(&q, EV_EXPLOSION, vec2(10, 20), 40, WEAPON_GRENADES);
+    events_push(&q, EV_SHOT, vec2(1, 2), WEAPON_PISTOL, 1);
+    events_push(&q, EV_DAMAGE, vec2(3, 4), 12, 0);
+    events_push(&q, EV_CRATE_SPAWNED, vec2(0, 0), 0, 0); // no effect for this one
+    fx_consume(&fx, &q);
+    CHECK_EQ_U64(fx.count, 3);
+    CHECK(fx.items[0].kind == FX_EXPLOSION && fx.items[0].radius == 40.0f);
+    CHECK(fx.items[1].kind == FX_MUZZLE && fx.items[2].kind == FX_SPARK);
+    // The muzzle flash is the shortest: it goes first, the explosion lasts longest.
+    for (int i = 0; i < 3; i++) {
+        fx_step(&fx);
+    }
+    CHECK_EQ_U64(fx.count, 2);
+    for (int i = 0; i < 5; i++) {
+        fx_step(&fx);
+    }
+    CHECK_EQ_U64(fx.count, 1);
+    CHECK(fx.items[0].kind == FX_EXPLOSION && fx_progress(&fx.items[0]) > 0.0f && fx_progress(&fx.items[0]) < 1.0f);
+    for (int i = 0; i < 30; i++) {
+        fx_step(&fx);
+    }
+    CHECK_EQ_U64(fx.count, 0);
+    // A full list drops new effects instead of overflowing.
+    for (u32 i = 0; i < MAX_FX + 10; i++) {
+        events_push(&q, EV_EXPLOSION, vec2(0, 0), 8, 0);
+        q.count = 1;
+        fx_consume(&fx, &q);
+    }
+    CHECK_EQ_U64(fx.count, MAX_FX);
+}
+
+static void test_sim_drains_events_into_fx_every_tick(void) {
+    TestMap m;
+    map_init(&m, 20, 12);
+    map_rect(&m, 0, 10, 19, 11, '#');
+    map_put(&m, 1, 9, '1');
+    char text[4096];
+    map_text(&m, text, sizeof(text));
+    Sim sim;
+    SimConfig cfg = {.level_text = text, .seed = 1};
+    char err[128];
+    CHECK(sim_init(&sim, &cfg, err, sizeof(err)));
+    InputFrame in = {0};
+    input_frame_update(&in, 0);
+    sim_tick(&sim, &in);
+    combat_explode(&sim.gs, vec2(100, 100), WEAPON_GRENADES);
+    sim_tick(&sim, &in); // the tick clears the queue first: the explosion raised before it is not seen
+    CHECK_EQ_U64(sim.fx.count, 0);
+    // An explosion raised during a tick (a grenade's fuse) shows up in the effects of that tick.
+    combat_give_weapon(&sim.gs, WEAPON_GRENADES);
+    input_frame_update(&in, action_bit(ACT_FIRE));
+    sim_tick(&sim, &in);
+    CHECK(sim.fx.count >= 1); // the muzzle flash of the throw
+    sim_free(&sim);
+}
+
 int main(void) {
     RUN_TEST(test_queue_basics);
     RUN_TEST(test_queue_overflow_is_counted_not_fatal);
@@ -160,5 +220,7 @@ int main(void) {
     RUN_TEST(test_carry_events_and_payload);
     RUN_TEST(test_destroyed_in_water_and_respawn_events);
     RUN_TEST(test_events_do_not_change_the_hash);
+    RUN_TEST(test_fx_follow_the_events);
+    RUN_TEST(test_sim_drains_events_into_fx_every_tick);
     TEST_MAIN_END();
 }

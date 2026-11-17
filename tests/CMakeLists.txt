@@ -24,6 +24,7 @@ cs_test(crate cs_app)
 cs_test(pad cs_app)
 cs_test(pad_menu cs_app)
 cs_test(events cs_app)
+cs_test(combat cs_app)
 cs_test(scenarios cs_app)
 cs_test(platform cs_platform cs_game)
 
@@ -52,12 +53,36 @@ add_test(NAME smoke_pad_no_confirm
     COMMAND cratesquad --headless --fill-pad "r...,rr.b" --script ".:5 S:1 .:60")
 set_tests_properties(smoke_pad_no_confirm PROPERTIES PASS_REGULAR_EXPRESSION "products=0")
 
+# Combat: an uzi burst empties a dummy of the arena (100 HP / 6 per bullet); a rocket explodes in the picture.
+add_test(NAME smoke_uzi_kills_a_dummy
+    COMMAND cratesquad --headless --give uzi --start 440,432 --script "R:3 F:90 .:30"
+            --screenshot ${SHOTS}/smoke_uzi.png --shot-cam 350,330)
+set_tests_properties(smoke_uzi_kills_a_dummy PROPERTIES PASS_REGULAR_EXPRESSION "kills=1 ")
+add_test(NAME smoke_rocket_explosion
+    COMMAND cratesquad --headless --give rocket --start 400,432 --script "R:3 .:5 F:1 .:27"
+            --screenshot ${SHOTS}/smoke_rocket.png --shot-cam 350,330)
+set_tests_properties(smoke_rocket_explosion PROPERTIES PASS_REGULAR_EXPRESSION "shots=1 hits=1 ")
+# Aiming: a pistol aimed (script aim, like the mouse) at the dummy's chest hits it; aimed at the sky it does not.
+add_test(NAME smoke_aimed_shot_hits
+    COMMAND cratesquad --headless --give pistol --start 400,432 --script ".:3 F@488/420:1 .:60"
+            --screenshot ${SHOTS}/smoke_aim.png --shot-cam 350,330)
+set_tests_properties(smoke_aimed_shot_hits PROPERTIES PASS_REGULAR_EXPRESSION "shots=1 hits=1 ")
+add_test(NAME smoke_aimed_shot_misses
+    COMMAND cratesquad --headless --give pistol --start 400,432 --script ".:3 F@488/300:1 .:60")
+set_tests_properties(smoke_aimed_shot_misses PROPERTIES PASS_REGULAR_EXPRESSION "shots=1 hits=0 ")
+add_test(NAME smoke_armed_bot
+    COMMAND cratesquad --headless --bot --give uzi --frames 3000 --seed 4)
+
 # Bad input must fail cleanly (non-zero exit), never crash.
-foreach(case bad_args bad_level bad_script bad_fill_pad)
+foreach(case bad_args bad_level bad_script bad_fill_pad bad_give bad_aim)
     if(case STREQUAL "bad_args")
         set(args --nonsense)
     elseif(case STREQUAL "bad_level")
         set(args --headless --level ${CMAKE_SOURCE_DIR}/assets/levels/nope.lvl)
+    elseif(case STREQUAL "bad_aim")
+        set(args --headless --script "F@12:1")
+    elseif(case STREQUAL "bad_give")
+        set(args --headless --give bazooka)
     elseif(case STREQUAL "bad_fill_pad")
         set(args --headless --fill-pad "rrr,rrr")
     else()

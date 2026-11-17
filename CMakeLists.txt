@@ -33,6 +33,9 @@ add_library(cs_game STATIC
     src/game/entity.c
     src/game/crate.c
     src/game/pad.c
+    src/game/loot.c
+    src/game/weapon.c
+    src/game/combat.c
     src/game/level.c
     src/game/physics.c
     src/game/companion.c
@@ -50,6 +53,7 @@ add_library(cs_app STATIC
     src/render/camera.c
     src/app/sim.c
     src/app/pad_menu.c
+    src/app/fx.c
 )
 target_link_libraries(cs_app PUBLIC cs_game)
 

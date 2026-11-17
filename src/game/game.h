@@ -13,6 +13,11 @@ typedef struct CrateStats {
     u32 spawned, settled, picked_up, placed, thrown, destroyed, consumed;
 } CrateStats;
 
+// Counters of what happened in fights since the start (tests, future HUD and stats screen).
+typedef struct CombatStats {
+    u32 shots, hits, explosions, kills, deaths;
+} CombatStats;
+
 typedef struct GameState {
     u64 tick;
     Rng rng;
@@ -23,6 +28,7 @@ typedef struct GameState {
     u32 drop_timers[MAX_DROP_ZONES]; // ticks until the next drop of each zone
     CrateStats crate_stats;
     u32 products_built;
+    CombatStats combat_stats;
     EventQueue events; // what happened during the last tick (presentation only, not hashed)
 } GameState;
 

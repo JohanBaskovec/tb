@@ -12,8 +12,8 @@ les ramènent à leur base et les empilent pour obtenir des armes, des recrues e
 
 ## État du projet
 
-Phase de conception : documentation seulement, pas encore de code.
-Avancement détaillé : [docs/ROADMAP.md](docs/ROADMAP.md).
+Jalons M0 à M3 faits : socle technique, niveau et déplacement, caisses et pad de construction, combat (armes, projectiles,
+explosions, santé, mannequins). Les compagnons et l'IA arrivent ensuite. Avancement détaillé : [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Prérequis
 
@@ -35,7 +35,7 @@ Avancement détaillé : [docs/ROADMAP.md](docs/ROADMAP.md).
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j
-./build/cratesquad                      # jeu interactif (fenêtre) : niveau de test, mouvement et échelles
+./build/cratesquad                      # jeu interactif (fenêtre) : niveau de test, caisses, pad, armes, mannequins
 ```
 
 Sans écran (CI, captures, bots) :
@@ -70,8 +70,9 @@ cmake --build build -j && ctest --test-dir build --output-on-failure
 | Se déplacer         | ← → ou **ZQSD** (Q / D) | Stick G / croix |
 | Monter / descendre (échelles) | ↑ ↓ ou **ZQSD** (Z / S) | Stick G / croix |
 | Sauter              | Espace        | A / Croix        |
-| Tirer / frapper     | X             | X / Carré        |
-| Prendre / poser une caisse | C | B / Rond       |
+| Viser | Souris (dès qu'elle bouge) | — |
+| Tirer / frapper     | X, ou **bouton gauche** (maintenu pour l'uzi) | X / Carré |
+| Prendre / poser une caisse ; échanger d'arme | C | B / Rond |
 | Lancer la caisse portée | X       | X / Carré        |
 | Changer de soldat   | Tab           | RB / R1          |
 | Menu du pad : entrée suivante / valider | Tab / Entrée (ou clic gauche sur l'entrée) | — |

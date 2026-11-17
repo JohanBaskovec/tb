@@ -45,6 +45,22 @@ static const Color PRODUCT_COLORS[PRODUCT_COUNT] = {
     [PRODUCT_HEAVY_TANK] = {50, 90, 60, 255},
 };
 
+static const Color WEAPON_COLORS[WEAPON_COUNT] = {
+    [WEAPON_FISTS] = {240, 200, 170, 255},
+    [WEAPON_PISTOL] = {190, 190, 200, 255},
+    [WEAPON_UZI] = {120, 120, 140, 255},
+    [WEAPON_GRENADES] = {110, 170, 70, 255},
+    [WEAPON_STRONG_GRENADES] = {190, 230, 60, 255},
+    [WEAPON_ROCKET_LAUNCHER] = {230, 90, 40, 255},
+};
+static const Color COL_HP_BACK = {40, 20, 24, 255};
+static const Color COL_HP = {90, 220, 100, 255};
+static const Color COL_HP_LOW = {230, 70, 60, 255};
+static const Color COL_FLASH = {255, 255, 255, 255};
+static const Color COL_DUMMY = {196, 160, 104, 255};
+static const Color COL_DUMMY_DARK = {132, 104, 64, 255};
+static const Color COL_BULLET = {255, 236, 120, 255};
+
 static Rect rect_at(i32 ox, i32 oy, f32 x, f32 y, f32 w, f32 h) {
     return (Rect){x - (f32)ox, y - (f32)oy, w, h};
 }
@@ -118,10 +134,37 @@ static void draw_player(Render *r, const Companion *c, f32 alpha, i32 ox, i32 oy
     const f32 x = roundf(lerpf(c->prev_pos.x, c->body.pos.x, alpha));
     const f32 y = roundf(lerpf(c->prev_pos.y, c->body.pos.y, alpha));
     const f32 w = c->body.size.x, h = c->body.size.y;
-    render_fill_rect(r, rect_at(ox, oy, x, y, w, h), COL_PLAYER);
-    render_fill_rect(r, rect_at(ox, oy, x, y + h - 4.0f, w, 4.0f), COL_PLAYER_DARK);
+    const bool flash = c->hurt_ticks > 0 && (c->hurt_ticks / 2) % 2 == 0;
+    render_fill_rect(r, rect_at(ox, oy, x, y, w, h), flash ? COL_FLASH : COL_PLAYER);
+    render_fill_rect(r, rect_at(ox, oy, x, y + h - 4.0f, w, 4.0f), flash ? COL_FLASH : COL_PLAYER_DARK);
     const f32 eye_x = c->facing > 0 ? x + w - 5.0f : x + 3.0f;
     render_fill_rect(r, rect_at(ox, oy, eye_x, y + 4.0f, 2.0f, 3.0f), COL_EYE);
+    // The weapon in hand (a colored barrel), or the fist while punching.
+    const f32 hand_y = y + TUNING_MUZZLE_HEIGHT - 1.0f;
+    if (c->weapon != WEAPON_FISTS) {
+        // A two-pixel barrel from the shoulder along the aim direction.
+        const Vec2 from = vec2(x + w * 0.5f - (f32)ox, y + TUNING_MUZZLE_HEIGHT - (f32)oy);
+        const Vec2 to = vec2_add(from, vec2_scale(c->aim_dir, 10.0f));
+        const Vec2 side = vec2_scale(vec2(-c->aim_dir.y, c->aim_dir.x), 1.0f);
+        render_line(r, from, to, WEAPON_COLORS[c->weapon]);
+        render_line(r, vec2_add(from, side), vec2_add(to, side), WEAPON_COLORS[c->weapon]);
+    } else if (c->punch_ticks > 0) {
+        const f32 fx = c->facing > 0 ? x + w : x - 6.0f;
+        render_fill_rect(r, rect_at(ox, oy, fx, hand_y - 1.0f, 6.0f, 5.0f), WEAPON_COLORS[WEAPON_FISTS]);
+    }
+}
+
+static void fill_circle(Render *r, Vec2 c, f32 radius, Color color) {
+    for (f32 dy = -radius; dy <= radius; dy += 1.0f) {
+        const f32 half = sqrtf(MAX(radius * radius - dy * dy, 0.0f));
+        render_fill_rect(r, (Rect){c.x - half, c.y + dy, half * 2.0f, 1.0f}, color);
+    }
+}
+
+static void draw_hp_bar(Render *r, Rect box, f32 fraction) {
+    render_fill_rect(r, box, COL_HP_BACK);
+    render_fill_rect(r, (Rect){box.x, box.y, box.w * clampf(fraction, 0.0f, 1.0f), box.h},
+                     fraction > 0.3f ? COL_HP : COL_HP_LOW);
 }
 
 // A wooden frame with crossed planks; the colored panel tells red from blue (and from team colors).
@@ -197,6 +240,121 @@ static void draw_products(Render *r, const GameState *gs, f32 alpha, i32 ox, i32
         const Color c = PRODUCT_COLORS[e->as.product.kind];
         render_fill_rect(r, rect_at(ox, oy, x, y, e->body.size.x, e->body.size.y), COL_WOOD_DARK);
         render_fill_rect(r, rect_at(ox, oy, x + 1.0f, y + 1.0f, e->body.size.x - 2.0f, e->body.size.y - 2.0f), c);
+    }
+}
+
+static void draw_loot_weapons(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 oy) {
+    for (u16 i = 1; i <= MAX_ENTITIES; i++) {
+        const Entity *e = &gs->entities.slots[i];
+        if (e->type != ENT_WEAPON) {
+            continue;
+        }
+        const f32 x = roundf(lerpf(e->prev_pos.x, e->body.pos.x, alpha));
+        const f32 y = roundf(lerpf(e->prev_pos.y, e->body.pos.y, alpha));
+        const Color c = WEAPON_COLORS[e->as.weapon.kind];
+        const f32 w = e->body.size.x, h = e->body.size.y;
+        render_fill_rect(r, rect_at(ox, oy, x, y + h - 7.0f, w, 7.0f), COL_WOOD_DARK); // a small case
+        render_fill_rect(r, rect_at(ox, oy, x + 1.0f, y + h - 6.0f, w - 2.0f, 5.0f), c);
+        render_fill_rect(r, rect_at(ox, oy, x + 2.0f, y + h - 9.0f, w - 4.0f, 2.0f), c); // the weapon's top
+    }
+}
+
+static void draw_dummies(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 oy) {
+    for (u16 i = 1; i <= MAX_ENTITIES; i++) {
+        const Entity *e = &gs->entities.slots[i];
+        if (e->type != ENT_DUMMY) {
+            continue;
+        }
+        const Dummy *d = &e->as.dummy;
+        const f32 x = roundf(lerpf(e->prev_pos.x, e->body.pos.x, alpha));
+        const f32 y = roundf(lerpf(e->prev_pos.y, e->body.pos.y, alpha));
+        const f32 w = e->body.size.x, h = e->body.size.y;
+        const bool flash = d->hurt_ticks > 0 && (d->hurt_ticks / 2) % 2 == 0;
+        render_fill_rect(r, rect_at(ox, oy, x + w * 0.5f - 1.0f, y + h - 4.0f, 2.0f, 4.0f), COL_WOOD_DARK); // post
+        render_fill_rect(r, rect_at(ox, oy, x, y + 6.0f, w, h - 12.0f), flash ? COL_FLASH : COL_DUMMY);
+        render_fill_rect(r, rect_at(ox, oy, x + 3.0f, y, w - 6.0f, 7.0f), flash ? COL_FLASH : COL_DUMMY_DARK);
+        render_outline_rect(r, rect_at(ox, oy, x + 4.0f, y + 9.0f, w - 8.0f, 5.0f), COL_DUMMY_DARK); // target ring
+        if (d->hp < d->max_hp) {
+            draw_hp_bar(r, rect_at(ox, oy, x, y - 5.0f, w, 3.0f), (f32)d->hp / (f32)d->max_hp);
+        }
+    }
+}
+
+static void draw_projectiles(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 oy) {
+    for (u16 i = 1; i <= MAX_ENTITIES; i++) {
+        const Entity *e = &gs->entities.slots[i];
+        if (e->type != ENT_PROJECTILE) {
+            continue;
+        }
+        const f32 x = roundf(lerpf(e->prev_pos.x, e->body.pos.x, alpha));
+        const f32 y = roundf(lerpf(e->prev_pos.y, e->body.pos.y, alpha));
+        const f32 w = e->body.size.x, h = e->body.size.y;
+        const WeaponKind wk = e->as.projectile.weapon;
+        switch (weapon_def(wk)->shot) {
+        case SHOT_GRENADE:
+            fill_circle(r, vec2(x + w * 0.5f - (f32)ox, y + h * 0.5f - (f32)oy), w * 0.5f, WEAPON_COLORS[wk]);
+            break;
+        case SHOT_ROCKET: {
+            const Vec2 c = vec2(x + w * 0.5f - (f32)ox, y + h * 0.5f - (f32)oy);
+            const f32 sp = sqrtf(e->body.vel.x * e->body.vel.x + e->body.vel.y * e->body.vel.y);
+            const Vec2 back = sp > 0.0f ? vec2_scale(e->body.vel, -7.0f / sp) : vec2(0.0f, 0.0f); // exhaust behind
+            render_fill_rect(r, rect_at(ox, oy, x, y, w, h), WEAPON_COLORS[wk]);
+            render_line(r, c, vec2_add(c, back), COL_BULLET);
+            break;
+        }
+        default:
+            render_fill_rect(r, rect_at(ox, oy, x, y, w, h), COL_BULLET);
+            break;
+        }
+    }
+}
+
+static void draw_fx(Render *r, const FxList *fx, i32 ox, i32 oy) {
+    if (!fx) {
+        return;
+    }
+    for (u32 i = 0; i < fx->count; i++) {
+        const Fx *f = &fx->items[i];
+        const f32 t = fx_progress(f);
+        const Vec2 c = vec2(f->pos.x - (f32)ox, f->pos.y - (f32)oy);
+        switch (f->kind) {
+        case FX_EXPLOSION:
+            fill_circle(r, c, f->radius * (0.35f + 0.65f * t), (Color){255, (u8)lerpf(120.0f, 40.0f, t), 30, 255});
+            fill_circle(r, c, f->radius * (0.2f + 0.45f * t), (Color){255, 240, (u8)lerpf(160.0f, 60.0f, t), 255});
+            break;
+        case FX_SPARK:
+            render_fill_rect(r, (Rect){c.x - f->radius * (1.0f - t), c.y - 1.0f, f->radius * 2.0f * (1.0f - t), 2.0f}, COL_BULLET);
+            render_fill_rect(r, (Rect){c.x - 1.0f, c.y - f->radius * (1.0f - t), 2.0f, f->radius * 2.0f * (1.0f - t)}, COL_BULLET);
+            break;
+        case FX_MUZZLE:
+            fill_circle(r, c, f->radius, COL_FLASH);
+            break;
+        }
+    }
+}
+
+static void draw_crosshair(Render *r, const Vec2 *at) {
+    if (!at) {
+        return;
+    }
+    const Color black = {0, 0, 0, 255};
+    const f32 x = roundf(at->x), y = roundf(at->y);
+    render_line(r, vec2(x - 5.0f, y + 1.0f), vec2(x + 5.0f, y + 1.0f), black); // drop shadow
+    render_line(r, vec2(x + 1.0f, y - 5.0f), vec2(x + 1.0f, y + 5.0f), black);
+    render_line(r, vec2(x - 5.0f, y), vec2(x - 2.0f, y), COL_FLASH);
+    render_line(r, vec2(x + 2.0f, y), vec2(x + 5.0f, y), COL_FLASH);
+    render_line(r, vec2(x, y - 5.0f), vec2(x, y - 2.0f), COL_FLASH);
+    render_line(r, vec2(x, y + 2.0f), vec2(x, y + 5.0f), COL_FLASH);
+}
+
+// Hit points and ammunition of the controlled soldier, as bars (there is no text rendering yet).
+static void draw_hud(Render *r, const Companion *c) {
+    draw_hp_bar(r, (Rect){4.0f, 14.0f, 64.0f, 6.0f}, (f32)c->hp / (f32)c->max_hp);
+    if (c->weapon != WEAPON_FISTS) {
+        const WeaponDef *def = weapon_def(c->weapon);
+        const f32 f = (f32)c->ammo / (f32)def->max_ammo;
+        render_fill_rect(r, (Rect){4.0f, 22.0f, 64.0f, 4.0f}, COL_HP_BACK);
+        render_fill_rect(r, (Rect){4.0f, 22.0f, 64.0f * clampf(f, 0.0f, 1.0f), 4.0f}, WEAPON_COLORS[c->weapon]);
     }
 }
 
@@ -290,7 +448,8 @@ static void draw_debug(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 oy
     draw_flag(r, 5, c->is_jumping, (Color){255, 150, 40, 255});
 }
 
-void draw_game(Render *r, const GameState *gs, const Camera *cam, const PadMenu *menu, f32 alpha, u32 flags) {
+void draw_game(Render *r, const GameState *gs, const Camera *cam, const PadMenu *menu, const FxList *fx,
+               const Vec2 *crosshair, f32 alpha, u32 flags) {
     const Vec2 cp = camera_interpolated(cam, alpha);
     const i32 ox = (i32)roundf(cp.x);
     const i32 oy = (i32)roundf(cp.y);
@@ -301,8 +460,14 @@ void draw_game(Render *r, const GameState *gs, const Camera *cam, const PadMenu 
     draw_pads(r, gs, ox, oy);
     draw_crates(r, gs, alpha, ox, oy, flags);
     draw_products(r, gs, alpha, ox, oy);
+    draw_loot_weapons(r, gs, alpha, ox, oy);
+    draw_dummies(r, gs, alpha, ox, oy);
     draw_player(r, &gs->player, alpha, ox, oy);
+    draw_projectiles(r, gs, alpha, ox, oy);
+    draw_fx(r, fx, ox, oy);
     draw_pad_menu(r, menu, ox, oy);
+    draw_hud(r, &gs->player);
+    draw_crosshair(r, crosshair);
     if (flags & DRAW_DEBUG) {
         draw_debug(r, gs, alpha, ox, oy);
     }

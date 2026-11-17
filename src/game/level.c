@@ -209,6 +209,14 @@ static bool fill_cell(Level *lv, i32 x, i32 y, char c, int line_no, char *err, u
         *cell = TILE_EMPTY;
         return true;
     }
+    case 'T':
+        if (lv->dummy_count >= MAX_DUMMIES) {
+            set_err(err, err_len, "line %d: too many target dummies (max %d)", line_no, MAX_DUMMIES);
+            return false;
+        }
+        lv->dummies[lv->dummy_count++] = vec2(((f32)x + 0.5f) * (f32)TILE_SIZE, (f32)(y + 1) * (f32)TILE_SIZE);
+        *cell = TILE_EMPTY;
+        return true;
     case 'D':
         if (lv->drop_zone_count >= MAX_DROP_ZONES) {
             set_err(err, err_len, "line %d: too many drop zones (max %d)", line_no,

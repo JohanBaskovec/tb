@@ -381,3 +381,13 @@ void crate_carry_update(GameState *gs, const InputFrame *in) {
         try_pick_up(gs);
     }
 }
+
+void crate_release_carried(GameState *gs) {
+    Companion *p = &gs->player;
+    Entity *e = pool_get(&gs->entities, p->carrying);
+    p->carrying = ENTITY_NONE;
+    if (e && !e->pending_destroy && e->as.crate.state == CRATE_CARRIED) {
+        e->as.crate.state = CRATE_FALLING;
+        e->body.vel = vec2(0.0f, 0.0f);
+    }
+}

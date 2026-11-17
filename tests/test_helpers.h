@@ -11,6 +11,37 @@
 
 #define KEY(a) action_bit(a)
 
+// What a pad built, as a product kind: a weapon lies on the ground as a weapon pickup, the rest as a
+// generic product. Returns false for any other entity.
+static inline bool entity_as_product(const Entity *e, PadProduct *out) {
+    if (e->type == ENT_PRODUCT) {
+        *out = e->as.product.kind;
+        return true;
+    }
+    if (e->type != ENT_WEAPON) {
+        return false;
+    }
+    switch (e->as.weapon.kind) {
+    case WEAPON_PISTOL:
+        *out = PRODUCT_PISTOL;
+        return true;
+    case WEAPON_UZI:
+        *out = PRODUCT_UZI;
+        return true;
+    case WEAPON_GRENADES:
+        *out = PRODUCT_GRENADES;
+        return true;
+    case WEAPON_STRONG_GRENADES:
+        *out = PRODUCT_STRONG_GRENADES;
+        return true;
+    case WEAPON_ROCKET_LAUNCHER:
+        *out = PRODUCT_ROCKET_LAUNCHER;
+        return true;
+    default:
+        return false;
+    }
+}
+
 typedef struct TestMap {
     int w, h;
     char c[MAX_LEVEL_W * MAX_LEVEL_H];

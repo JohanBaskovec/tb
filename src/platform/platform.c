@@ -27,7 +27,10 @@ void platform_pump_events(PlatformEvents *out) {
     while (SDL_PollEvent(&e)) {
         if (e.type == SDL_EVENT_QUIT) {
             out->quit = true;
+        } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
+            out->mouse_moved = true;
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            out->mouse_moved = true;
             out->click = true;
             out->click_x = e.button.x;
             out->click_y = e.button.y;
@@ -87,6 +90,11 @@ void platform_read_input(InputFrame *frame) {
     int count = 0;
     const bool *keys = SDL_GetKeyboardState(&count);
     input_frame_update(frame, platform_map_keyboard(keys, count));
+}
+
+void platform_read_mouse(f32 *x, f32 *y, bool *left_down) {
+    const SDL_MouseButtonFlags buttons = SDL_GetMouseState(x, y);
+    *left_down = (buttons & SDL_BUTTON_LMASK) != 0;
 }
 
 f64 platform_time_s(void) {

@@ -2,6 +2,7 @@
 // (keyboard/gamepad) or by bots/AI; consumed by the simulation.
 #pragma once
 
+#include "core/geom.h"
 #include "core/types.h"
 
 typedef enum Action {
@@ -23,6 +24,10 @@ typedef struct InputFrame {
     u32 down;     // bit per Action currently held
     u32 pressed;  // went down this tick
     u32 released; // went up this tick
+    // Mouse aiming: when active, `aim` is the point the soldier aims at, in world pixels. The sources
+    // of input (mouse in the window loop, script) set it; input_frame_update never touches it.
+    bool aim_active;
+    Vec2 aim;
 } InputFrame;
 
 static inline u32 action_bit(Action a) {

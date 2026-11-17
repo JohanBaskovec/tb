@@ -4,6 +4,8 @@
 //   KEYS: any of L R U D J F G S O P C (left right up down jump fire grab switch order pause confirm),
 //         or a single '.' for "no keys".
 //   Example: "R:60 RJ:12 .:30 U:90"  = run right 1s, run+jump 0.2s, idle 0.5s, up 1.5s.
+// A step may aim at a world point (pixels), like the mouse does: `KEYS@X/Y:TICKS`, e.g. "F@300/120:1"
+// or ".@300/120:5". Steps without `@` have no aim (the soldier shoots the way it faces).
 #pragma once
 
 #include "core/input_frame.h"
@@ -13,6 +15,8 @@
 typedef struct Script {
     u32 masks[SCRIPT_MAX_STEPS];
     u32 ticks[SCRIPT_MAX_STEPS];
+    bool has_aim[SCRIPT_MAX_STEPS];
+    Vec2 aim[SCRIPT_MAX_STEPS];
     u32 count;
     u32 step;  // current step
     u32 left;  // ticks left in the current step

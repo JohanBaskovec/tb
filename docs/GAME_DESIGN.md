@@ -87,13 +87,16 @@ les escouades adverses (ou selon l'objectif de la mission).
     la case est prise, pour construire des piles). Si rien n'est possible (mur devant), on garde la caisse.
   - 🟡 **Touche de tir** (X) en portant : **lance** la caisse en cloche (≈ 5 tuiles). Refusé sous un plafond trop bas.
   - 🟡 On ne peut prendre que la caisse du **dessus** d'une pile, et jamais celle sur laquelle on se tient.
-- Prendre un coup en portant une caisse la fait tomber (avec les dégâts, jalon M3).
+- Prendre un coup en portant une caisse la fait tomber (✅ M3).
 - Tomber à l'eau avec une caisse : la caisse est perdue. 🟡
 
 ### Santé et mort 🟡
-- ✅ **100 points de vie** pour le compagnon de base ; 150 / 200 pour les variantes plus fortes (§ 4). 🟡 Recul quand on est touché.
-- Un soldat mort lâche son arme et sa caisse. Pas de réapparition : l'équipe
+- ✅ **100 points de vie** pour le compagnon de base ; 150 / 200 pour les variantes plus fortes (§ 4). 🟡 Recul quand on est touché
+  (clignotement du soldat, pas de temps d'invulnérabilité).
+- Un soldat mort lâche son arme (avec ses munitions restantes) et sa caisse sur place. Pas de réapparition : l'équipe
   grossit uniquement via le pad.
+- 🟡 **Provisoire (M3)** : tant qu'il n'y a qu'un soldat, le joueur **réapparaît au point de départ**, en pleine santé et à mains nues
+  (compteur `deaths`). Cela disparaît avec l'escouade (M4). Tomber à l'eau n'est pas une mort par dégâts : l'arme est perdue avec le soldat.
 - Une équipe sans soldat vivant est éliminée.
 
 ### Contrôle de l'escouade
@@ -166,8 +169,9 @@ Les formes peuvent se situer n'importe où sur les 4 colonnes 🟡.
   un véhicule attend un pilote.
 - 🟡 Pour la même forme, la version rouge (que des caisses rouges) et la version bleue (au moins une bleue) sont deux entrées du menu
   quand les deux existent ; à chaque entrée, les caisses consommées sont les plus hautes, puis les plus à gauche.
-- 🟡 En M2 l'objet produit est un **placeholder** (une petite boîte colorée qui tombe et repose au sol, à gauche du pad ; le menu est à droite).
-  Il devient une vraie arme en M3, un compagnon en M4. Un objet enterré par une caisse qui se pose est remonté au sommet de la pile.
+- 🟡 L'objet produit tombe et repose au sol, à gauche du pad (le menu est à droite). Depuis M3, les **armes sont de vraies armes ramassables** ;
+  les compagnons et les véhicules sont encore une petite boîte colorée (**placeholder**) jusqu'à M4 / M6.
+  Un objet enterré par une caisse qui se pose est remonté au sommet de la pile.
 - 🟡 Les caisses d'un pad peuvent être **reprises par n'importe qui**, y compris un ennemi (vol).
 - L'IA construit via la même fonction que le menu (aucune triche, mêmes recettes).
 
@@ -178,18 +182,29 @@ Les formes peuvent se situer n'importe où sur les 4 colonnes 🟡.
 
 ## 7. Armes ✅
 
-✅ **Chaque arme a un nombre de munitions limité** (valeurs 🟡 provisoires, dans `tuning.h` le moment venu).
-🟡 Un soldat porte une arme à la fois ; une arme vide disparaît.
+✅ **Chaque arme a un nombre de munitions limité** (valeurs 🟡 provisoires, table `src/game/weapon.c`).
+🟡 Un soldat porte une arme à la fois ; une arme vide disparaît (retour aux poings).
 
-| Arme | Obtenue avec | Tir | Munitions 🟡 | Notes |
-|------|--------------|-----|:------------:|-------|
-| Pistolet | 1×1 rouge | Balle droite | 24 | |
-| Uzi | 1×1 bleue, L rouge | Rafale | 60 | |
-| Grenades | 2×1 horizontal rouge | Lancer en cloche, explosion | 6 | Dégâts de zone |
-| Grenades puissantes | 2×1 horizontal avec bleue | Idem | 4 | Explosion plus grande |
-| Lance-roquettes | L avec bleue ; équipement des compagnons lourds | Roquette droite, explosion | 5 | Dégâts de zone |
+| Arme | Obtenue avec | Tir | Munitions 🟡 | Dégâts 🟡 | Notes |
+|------|--------------|-----|:------------:|:---------:|-------|
+| Poings | — | Coup à courte portée (14 px), 0,4 s entre deux coups | infinies | 8 | Arme de repli ; impossible en portant une caisse |
+| Pistolet | 1×1 rouge | Balle droite, un tir par appui, 0,3 s entre deux tirs | 24 | 12 | Portée ≈ 320 px |
+| Uzi | 1×1 bleue, L rouge | Rafale tant que la touche est tenue (12 tirs/s), légère dispersion verticale (« gerbe ») | 60 | 6 | |
+| Grenades | 2×1 horizontal rouge | Lancer en cloche, rebondit, explose au bout de 1,5 s **ou au contact d'un ennemi** | 6 | 60 au centre | Rayon 40 px |
+| Grenades puissantes | 2×1 horizontal avec bleue | Idem | 4 | 100 au centre | Rayon 64 px |
+| Lance-roquettes | L avec bleue ; équipement des compagnons lourds | Roquette droite, explose à l'impact (ou à 2 s) | 5 | 90 au centre | Rayon 48 px |
 
-🟡 Corps à corps à mains nues (infini, faible) comme arme de repli.
+- 🟡 **Explosions** : dégâts maximaux au centre, décroissants jusqu'à 40 % au bord du rayon ; elles **repoussent** (et soulèvent) ce qu'elles touchent,
+  ne traversent **pas** les murs, et blessent **tout le monde, tireur compris**. Elles ne détruisent pas les caisses.
+- 🟡 **Balles et coups** ne blessent que les équipes adverses (pas de tir ami) ; une balle s'arrête sur le terrain et sur les caisses empilées.
+- 🟡 **Ramassage** : un soldat à mains nues ramasse automatiquement l'arme sur laquelle il marche ; armé, il l'**échange** avec la touche d'action
+  (l'ancienne arme est lâchée avec ses munitions). Une action sur une caisse (prendre, poser, lancer) est prioritaire : la même touche ne tire pas
+  et n'échange pas.
+- 🟡 **Visée à la souris** : dès que la souris bouge, le soldat se tourne vers le curseur et son arme le pointe (à 360°) ; **le bouton gauche tire**
+  (maintenu : rafale pour l'uzi). Une grenade est lancée pour retomber sur le curseur. Un clic sur une entrée du menu du pad construit, il ne tire pas.
+  Sans souris (clavier seul, manette), on tire horizontalement dans la direction où le soldat regarde ; la visée à la manette (second stick) n'est pas planifiée.
+- 🟡 **Mannequins** (marqueur `T` du niveau) : cibles immobiles de 100 PV, équipe ennemie, qui ne ripostent pas et ne réapparaissent pas.
+  Ils servent aux tests ; les vrais ennemis sont les soldats adverses (M4/M5).
 
 Idées non confirmées, **non planifiées** : fusil à pompe, mitraillette, mine, lance-flammes, mortier, tourelle, frappe aérienne.
 

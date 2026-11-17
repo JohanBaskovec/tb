@@ -46,6 +46,15 @@ static bool key_bit(char c, u32 *bit) {
     }
 }
 
+// Copy of a token for an error message (static buffer: errors are reported one at a time).
+static const char *tok_copy(const char *tok, usize len) {
+    static char copy[64];
+    usize n = len < sizeof(copy) - 1 ? len : sizeof(copy) - 1;
+    memcpy(copy, tok, n);
+    copy[n] = '\0';
+    return copy;
+}
+
 static void fail(char *err, usize err_len, const char *fmt, const char *token) {
     if (err && err_len > 0) {
         snprintf(err, err_len, fmt, token);
@@ -81,6 +90,24 @@ bool script_parse(Script *s, const char *text, char *err, usize err_len) {
             return false;
         }
         *colon = '\0';
+        bool has_aim = false;
+        Vec2 aim = vec2(0.0f, 0.0f);
+        char *at = strchr(buf, '@');
+        if (at) {
+            float ax, ay;
+            char extra;
+            if (sscanf(at + 1, "%f/%f%c", &ax, &ay, &extra) != 2) {
+                fail(err, err_len, "bad aim in '%s' (expected KEYS@X/Y:TICKS)", tok_copy(tok, tlen));
+                return false;
+            }
+            has_aim = true;
+            aim = vec2(ax, ay);
+            *at = '\0';
+        }
+        if (buf[0] == '\0') {
+            fail(err, err_len, "bad step '%s' (no keys before '@')", tok_copy(tok, tlen));
+            return false;
+        }
         char *end = NULL;
         unsigned long ticks = strtoul(colon + 1, &end, 10);
         if (*end != '\0' || ticks == 0 || ticks > 1000000ul) {
@@ -103,6 +130,8 @@ bool script_parse(Script *s, const char *text, char *err, usize err_len) {
             fail(err, err_len, "too many steps (%s)", "max 256");
             return false;
         }
+        s->has_aim[s->count] = has_aim;
+        s->aim[s->count] = aim;
         s->masks[s->count] = mask;
         s->ticks[s->count] = (u32)ticks;
         s->count++;
@@ -120,9 +149,12 @@ bool script_finished(const Script *s) {
 bool script_next(Script *s, InputFrame *frame) {
     if (script_finished(s)) {
         input_frame_update(frame, 0);
+        frame->aim_active = false;
         return false;
     }
     input_frame_update(frame, s->masks[s->step]);
+    frame->aim_active = s->has_aim[s->step];
+    frame->aim = s->aim[s->step];
     s->left--;
     if (s->left == 0) {
         s->step++;

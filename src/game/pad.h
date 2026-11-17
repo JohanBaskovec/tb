@@ -85,7 +85,3 @@ bool pad_build(GameState *gs, i32 team, PadShape shape, bool blue);
 // '.' empty, 'r' red, 'b' blue. Returns false if the team has no pad, a row is malformed, or a cell
 // is not free. (A crate with nothing under it falls on the next tick.)
 bool pad_debug_fill(GameState *gs, i32 team, const char *top, const char *bottom);
-
-// Products lie next to the pad until a later milestone turns them into real weapons / soldiers /
-// vehicles. They fall and rest on the terrain.
-void products_update(GameState *gs);

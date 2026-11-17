@@ -3,11 +3,13 @@
 // An EntityId stays valid only as long as its entity lives: once the slot is freed (and possibly
 // reused) the old id resolves to NULL. Never keep a raw Entity pointer across ticks, keep the id.
 // Destruction is deferred: pool_mark_destroy flags the entity, pool_flush (end of tick) frees it.
-// Companions join the pool with the squad milestone; for now crates and pad products live here.
+// Companions join the pool with the squad milestone; for now crates, pad products, weapon pickups,
+// projectiles and target dummies live here.
 #pragma once
 
 #include "core/config.h"
 #include "game/physics.h"
+#include "game/weapon.h"
 
 typedef struct EntityId {
     u16 index;      // 0 = none; slots are 1..MAX_ENTITIES
@@ -27,7 +29,10 @@ static inline bool entity_id_eq(EntityId a, EntityId b) {
 typedef enum EntityType {
     ENT_NONE = 0, // free slot
     ENT_CRATE,
-    ENT_PRODUCT, // result of a pad construction (placeholder until weapons / soldiers exist)
+    ENT_PRODUCT, // result of a pad construction that is not a weapon yet (soldiers, vehicles: placeholder)
+    ENT_WEAPON,     // a weapon lying on the ground, to be picked up
+    ENT_PROJECTILE, // bullet, grenade or rocket in flight
+    ENT_DUMMY,      // immobile target with hit points
     ENT_TYPE_COUNT
 } EntityType;
 
@@ -70,6 +75,23 @@ typedef struct Product {
     i32 team; // team whose pad made it
 } Product;
 
+typedef struct WeaponItem {
+    WeaponKind kind;
+    i32 ammo;
+} WeaponItem;
+
+typedef struct Projectile {
+    WeaponKind weapon; // which weapon fired it (its definition says how it flies and explodes)
+    i32 team;          // shooter's team: bullets do not hurt it
+    u32 ttl;           // ticks left: range of a bullet, fuse of a grenade
+} Projectile;
+
+typedef struct Dummy {
+    i32 hp, max_hp;
+    i32 team;
+    u32 hurt_ticks; // > 0: flashing after a hit (presentation, but part of the state)
+} Dummy;
+
 typedef struct Entity {
     EntityType type;
     u16 generation;
@@ -79,6 +101,9 @@ typedef struct Entity {
     union {
         Crate crate;
         Product product;
+        WeaponItem weapon;
+        Projectile projectile;
+        Dummy dummy;
     } as;
 } Entity;
 

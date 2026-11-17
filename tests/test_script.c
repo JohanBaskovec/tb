@@ -94,10 +94,45 @@ static void test_parse_errors(void) {
     CHECK(!script_parse(&s, "R", NULL, 0)); // no error buffer: must not crash
 }
 
+static void test_aim_steps(void) {
+    Script s;
+    char err[96] = "";
+    CHECK(script_parse(&s, "F@300/120.5:2 .@10/20:1 R:1", err, sizeof(err)));
+    CHECK_EQ_U64(s.count, 3);
+    CHECK(s.has_aim[0] && s.has_aim[1] && !s.has_aim[2]);
+    CHECK_EQ_U64(s.masks[0], action_bit(ACT_FIRE));
+    CHECK_EQ_U64(s.masks[1], 0);
+    CHECK_NEAR(s.aim[0].x, 300.0, 0.0);
+    CHECK_NEAR(s.aim[0].y, 120.5, 0.0);
+    CHECK_NEAR(s.aim[1].x, 10.0, 0.0);
+
+    // Playback: the frame carries the aim of its step, and loses it with the next step / at the end.
+    InputFrame f = {0};
+    CHECK(script_next(&s, &f));
+    CHECK(f.aim_active && f.aim.x == 300.0f);
+    CHECK(script_next(&s, &f));
+    CHECK(f.aim_active);
+    CHECK(script_next(&s, &f));
+    CHECK(f.aim_active && f.aim.x == 10.0f);
+    CHECK(script_next(&s, &f));
+    CHECK(!f.aim_active && input_down(&f, ACT_RIGHT));
+    CHECK(!script_next(&s, &f));
+    CHECK(!f.aim_active);
+
+    // A zero coordinate is fine (it is not a hexadecimal prefix).
+    CHECK(script_parse(&s, "F@0/0:1", err, sizeof(err)) && s.has_aim[0] && s.aim[0].x == 0.0f);
+    CHECK(!script_parse(&s, "F@12:1", err, sizeof(err)));
+    CHECK(!script_parse(&s, "F@a/b:1", err, sizeof(err)));
+    CHECK(!script_parse(&s, "F@1/2/3:1", err, sizeof(err)));
+    CHECK(!script_parse(&s, "@1/2:1", err, sizeof(err)));
+    CHECK(strstr(err, "aim") != NULL || strstr(err, "keys") != NULL);
+}
+
 int main(void) {
     RUN_TEST(test_parse_ok);
     RUN_TEST(test_every_key);
     RUN_TEST(test_playback_and_edges);
     RUN_TEST(test_parse_errors);
+    RUN_TEST(test_aim_steps);
     TEST_MAIN_END();
 }

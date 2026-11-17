@@ -1,6 +1,7 @@
 #include "app/sim.h"
 #include "core/config.h"
 #include "core/log.h"
+#include "game/combat.h"
 #include "game/crate.h"
 #include "game/pad.h"
 #include "game/walker.h"
@@ -40,6 +41,8 @@ typedef struct Options {
     Vec2 crate_pos[16];
     CrateKind crate_kind[16];
     bool has_fill_pad;
+    bool has_give;
+    WeaponKind give;
     char fill_top[8], fill_bottom[8];
     u32 trace_every;
     const char *expect_driver;
@@ -63,6 +66,7 @@ static void print_usage(const char *prog) {
             "  --walk-to X             drive the player with a bot that walks to x=X and hops obstacles\n"
             "  --crate X,Y,KIND        add a falling crate (top-left X,Y in pixels; KIND red or blue); repeatable\n"
             "  --fill-pad TOP,BOTTOM   put crates in the team-1 pad, e.g. rb..,rrr. (r red, b blue, . empty)\n"
+            "  --give WEAPON           start with a full weapon: pistol, uzi, grenades, strong-grenades, rocket\n"
             "  --debug-overlay         draw hitboxes, grid and state flags\n"
             "  --trace N               print the player state every N ticks\n"
             "  --expect-video-driver D abort unless SDL picked video driver D (e.g. dummy)\n",
@@ -134,6 +138,23 @@ static bool parse_args(int argc, char **argv, Options *o) {
                 return false;
             }
             o->has_fill_pad = true;
+        } else if (strcmp(a, "--give") == 0 && has_val) {
+            const char *w = argv[++i];
+            o->has_give = true;
+            if (strcmp(w, "pistol") == 0) {
+                o->give = WEAPON_PISTOL;
+            } else if (strcmp(w, "uzi") == 0) {
+                o->give = WEAPON_UZI;
+            } else if (strcmp(w, "grenades") == 0) {
+                o->give = WEAPON_GRENADES;
+            } else if (strcmp(w, "strong-grenades") == 0) {
+                o->give = WEAPON_STRONG_GRENADES;
+            } else if (strcmp(w, "rocket") == 0) {
+                o->give = WEAPON_ROCKET_LAUNCHER;
+            } else {
+                LOG_ERROR("--give expects pistol, uzi, grenades, strong-grenades or rocket");
+                return false;
+            }
         } else if (strcmp(a, "--walk-to") == 0 && has_val) {
             o->has_walk_to = true;
             o->walk_to = strtof(argv[++i], NULL);
@@ -165,13 +186,15 @@ static void print_trace(const Sim *sim) {
 
 static void print_summary(const Sim *sim) {
     const Companion *c = &sim->gs.player;
-    printf("ticks=%" PRIu64 " pos=(%.2f, %.2f) respawns=%u products=%u hash=%016" PRIx64 "\n",
-           sim->gs.tick, (f64)c->body.pos.x, (f64)c->body.pos.y, sim->gs.respawns,
-           sim->gs.products_built, game_hash(&sim->gs));
+    printf("ticks=%" PRIu64 " pos=(%.2f, %.2f) respawns=%u products=%u hp=%d weapon=%s ammo=%d shots=%u hits=%u "
+           "kills=%u deaths=%u hash=%016" PRIx64 "\n",
+           sim->gs.tick, (f64)c->body.pos.x, (f64)c->body.pos.y, sim->gs.respawns, sim->gs.products_built,
+           c->hp, weapon_name(c->weapon), c->ammo, sim->gs.combat_stats.shots, sim->gs.combat_stats.hits,
+           sim->gs.combat_stats.kills, sim->gs.combat_stats.deaths, game_hash(&sim->gs));
 }
 
 static bool write_shot(Render *render, const Sim *sim, u32 flags, const char *path) {
-    draw_game(render, &sim->gs, &sim->cam, &sim->menu, 1.0f, flags);
+    draw_game(render, &sim->gs, &sim->cam, &sim->menu, &sim->fx, sim->mouse_active ? &sim->mouse_logical : NULL, 1.0f, flags);
     return render_screenshot(render, path);
 }
 
@@ -257,6 +280,12 @@ static int run_windowed(const Options *o, Sim *sim) {
         if (ev.click) {
             sim_click(sim, render_window_to_logical(render, ev.click_x, ev.click_y));
         }
+        if (ev.mouse_moved || sim->mouse_active) { // once the mouse was used it keeps aiming and firing
+            f32 mx, my;
+            bool left;
+            platform_read_mouse(&mx, &my, &left);
+            sim_set_mouse(sim, render_window_to_logical(render, mx, my), left);
+        }
 
         const f64 now = platform_time_s();
         f64 frame_dt = now - prev;
@@ -286,7 +315,7 @@ static int run_windowed(const Options *o, Sim *sim) {
 
         const bool last = o->max_ticks > 0 && sim->gs.tick >= o->max_ticks;
         const f32 alpha = paused ? 1.0f : (f32)(acc / (f64)TICK_DT);
-        draw_game(render, &sim->gs, &sim->cam, &sim->menu, alpha, flags);
+        draw_game(render, &sim->gs, &sim->cam, &sim->menu, &sim->fx, sim->mouse_active ? &sim->mouse_logical : NULL, alpha, flags);
         if (last && o->shot && !render_screenshot(render, o->shot)) {
             rc = 1;
         }
@@ -358,6 +387,9 @@ int main(int argc, char **argv) {
         sim_free(&sim);
         platform_shutdown();
         return 1;
+    }
+    if (o.has_give) {
+        combat_give_weapon(&sim.gs, o.give);
     }
     pad_menu_refresh(&sim.menu, &sim.gs, 0);
 

@@ -48,13 +48,13 @@ Pas encore de police de caractères : l'overlay de debug utilise des pastilles d
 **Fin :** on remplit son pad et on obtient des objets selon la forme construite.
 
 ## M3 — Combat
-- [ ] Armes data-driven : pistolet, uzi, grenades (+ puissantes), lance-roquettes ; ramassage, munitions limitées par arme
-- [ ] Projectiles : droits, gerbe, en cloche, explosions (dégâts de zone)
-- [ ] Santé (100 / 150 / 200 / 300 PV selon la variante), recul, mort (lâcher arme et caisse)
-- [ ] Poings
-- [ ] Mannequins ennemis immobiles pour tester
+- [x] Armes data-driven : pistolet, uzi, grenades (+ puissantes), lance-roquettes ; ramassage, munitions limitées par arme
+- [x] Projectiles : droits, gerbe (dispersion de l'uzi), en cloche, explosions (dégâts de zone)
+- [x] Santé (100 PV pour le soldat de base ; 150 / 200 / 300 arrivent avec les variantes de compagnon en M4), recul, mort (lâcher arme et caisse)
+- [x] Poings
+- [x] Mannequins ennemis immobiles pour tester (marqueur `T`)
 
-**Fin :** le pad donne de vraies armes et on peut détruire des cibles.
+**Fin :** le pad donne de vraies armes et on peut détruire des cibles. ✅
 
 ## M4 — Escouade
 - [ ] Équipes (couleur, pad, membres)
