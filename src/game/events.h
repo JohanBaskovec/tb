@@ -17,14 +17,18 @@ typedef enum EventType {
     EV_CRATE_DESTROYED, // pos, a = CrateKind (lost in the water, crushed...)
     EV_CRATE_CONSUMED,  // pos, a = CrateKind (used by a pad construction)
     EV_PAD_BUILT,       // pos = pad center, a = PadProduct, b = team
-    EV_PLAYER_RESPAWNED,
+    EV_PLAYER_RESPAWNED, // a soldier fell in the water and is back at its spawn: a = index, b = team
+    EV_SOLDIER_SPAWNED,  // pos, a = SoldierVariant, b = team
+    EV_SOLDIER_DIED,     // pos, a = team, b = soldier index
+    EV_CONTROL_CHANGED,  // pos of the soldier now controlled, a = its index
+    EV_ORDER_CHANGED,    // pos, a = Order, b = team
+    EV_TEAM_ELIMINATED,  // pos of the last soldier, a = team
     EV_SHOT,             // pos = muzzle, a = WeaponKind, b = facing (-1 / +1)
     EV_PUNCH,            // pos = fist, a = number of targets hit
     EV_PROJECTILE_HIT,   // a bullet ended (impact or end of range); pos, a = WeaponKind
     EV_EXPLOSION,        // pos = center, a = radius (px), b = WeaponKind
     EV_DAMAGE,           // pos = target center, a = amount, b = 1 if the target is a soldier, 0 for a dummy
     EV_DUMMY_DESTROYED,  // pos
-    EV_PLAYER_DIED,      // pos
     EV_WEAPON_PICKED_UP, // pos, a = WeaponKind
     EV_WEAPON_DROPPED,   // pos, a = WeaponKind (swapped for another, or dropped on death)
     EV_WEAPON_EMPTY,     // pos: the last shot was fired, the soldier is back to fists

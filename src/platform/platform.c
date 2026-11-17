@@ -48,6 +48,9 @@ void platform_pump_events(PlatformEvents *out) {
             case SDL_SCANCODE_F4:
                 out->toggle_slow = true;
                 break;
+            case SDL_SCANCODE_F5:
+                out->restart = true;
+                break;
             default:
                 break;
             }

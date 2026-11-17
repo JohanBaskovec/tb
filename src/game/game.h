@@ -7,6 +7,7 @@
 #include "game/entity.h"
 #include "game/events.h"
 #include "game/level.h"
+#include "game/soldier.h"
 
 // Counters of what happened to crates since the start (tests, future HUD and stats screen).
 typedef struct CrateStats {
@@ -22,8 +23,11 @@ typedef struct GameState {
     u64 tick;
     Rng rng;
     Level *level; // not owned; mutable because resting crates are written into its solid overlay
-    Companion player;
-    u32 respawns; // times the player fell in a hazard (M1: placeholder for real death)
+    Soldier soldiers[MAX_SOLDIERS];
+    Team teams[MAX_TEAMS];
+    i32 controlled;  // index of the soldier the human controls, -1 if none (the team is gone)
+    Companion ghost; // stands in for the controlled soldier once none is left: dead, where the last one fell
+    u32 respawns; // times a soldier fell in a hazard and came back at its team's spawn
     EntityPool entities;
     u32 drop_timers[MAX_DROP_ZONES]; // ticks until the next drop of each zone
     CrateStats crate_stats;
@@ -31,6 +35,12 @@ typedef struct GameState {
     CombatStats combat_stats;
     EventQueue events; // what happened during the last tick (presentation only, not hashed)
 } GameState;
+
+// The soldier the human controls (a dead "ghost" when its whole team is gone, never NULL).
+Companion *game_player(GameState *gs);
+const Companion *game_player_const(const GameState *gs);
+// Number of living soldiers of a team.
+u32 team_soldier_count(const GameState *gs, i32 team);
 
 // Returns false if the level has no spawn for team 0.
 bool game_init(GameState *gs, u64 seed, Level *level);

@@ -199,7 +199,7 @@ avec ses munitions). Une action de caisse est prioritaire sur la même touche (p
 ignorés ce tick. Une arme vide disparaît (retour aux poings) au lieu de rester au sol.
 
 ### D036 — Mort du soldat : réapparition provisoire jusqu'à l'escouade
-**Statut :** Provisoire
+**Statut :** Remplacée par D043
 Le soldat tombé à 0 PV lâche son arme (avec ses munitions) et sa caisse sur place, puis réapparaît au point de départ en pleine santé : il n'y a qu'un
 soldat tant que M4 n'existe pas. Tomber à l'eau reste un respawn sans dégâts (l'arme est perdue, pas lâchée). Le comportement final
 (« une équipe sans soldat est éliminée ») viendra avec l'escouade.
@@ -221,3 +221,30 @@ La souris est traduite hors du jeu : `sim_tick` convertit la position (pixels lo
 (`KEYS@X/Y:TICKS`). Le bouton gauche sert aussi au menu du pad : un clic sur une entrée construit et ne tire pas, et le bouton reste muet jusqu'à son
 relâchement. La visée s'active au premier mouvement de souris (un joueur au clavier seul n'est pas gêné) ; le soldat se tourne alors vers le curseur.
 La direction visée fait partie de l'état (`Companion.aim_dir`, hachée). Grenade : lancer balistique vers le curseur plutôt qu'un jet fixe.
+
+### D040 — Les soldats vivent dans un tableau à part, pas dans le pool d'entités
+**Statut :** Acceptée
+`GameState.soldiers[32]` (indice = identité) plutôt que des `ENT_SOLDIER` : un soldat est gros (corps, arme, portage, mémoire d'IA), a un cycle de vie
+propre (contrôle, élimination d'équipe) et sert de cible, d'équipier et de porteur ; les références croisées se font par indice, pas par `EntityId`.
+`game_player()` renvoie toujours un `Companion` (un fantôme sans PV quand l'équipe est éliminée) pour que la caméra, le HUD et les tests n'aient jamais de `NULL`.
+
+### D041 — L'IA ne produit qu'une `InputFrame`
+**Statut :** Acceptée
+Un soldat non contrôlé est piloté par `ai_think()` qui remplit une `InputFrame` (déplacement via `Walker`, visée, tir, touche d'action). La mise à jour d'un soldat est la même
+pour un humain et pour l'IA : l'IA ne peut ni tricher ni diverger des règles. Aucun pathfinding en M4 : une cible hors du sol du soldat est ignorée (M5).
+
+### D042 — Un seul ordre par équipe, appliqué aux soldats non contrôlés
+**Statut :** Provisoire
+La portée des ordres était à décider (GDD) : l'ordre est celui de l'**équipe** et s'applique à tous ses soldats que le joueur ne contrôle pas ; la touche d'ordre le fait
+défiler (suivre → garder → ramasser → attaquer). Choisir un ordre par soldat ou par soldat visé reste possible plus tard, sans changer l'IA.
+
+### D043 — Mort définitive, eau = retour à la base
+**Statut :** Provisoire (remplace D036)
+Un soldat à 0 PV meurt pour de bon (arme et caisse lâchées, contrôle au plus proche allié, équipe éliminée avec le dernier). Tomber à l'eau n'est pas une mort :
+retour au point de départ de l'équipe, en pleine santé, avec l'équipement de la variante (conserve la règle de M1 et les tests de franchissement du bassin).
+Le joueur sans soldat voit l'écran s'assombrir ; F5 (débogage) recommence la partie.
+
+### D044 — Tab : menu du pad d'abord, sinon changer de soldat
+**Statut :** Acceptée
+Une seule touche pour deux usages : tant que le menu du pad est ouvert (soldat contrôlé près de son pad, avec des options), Tab déplace la sélection du menu et le jeu ne le voit
+pas (`Sim` le retire de l'entrée) ; ailleurs, Tab passe au soldat suivant. Si cela gêne en jeu, une touche dédiée est facile à ajouter (`platform_map_keyboard`).

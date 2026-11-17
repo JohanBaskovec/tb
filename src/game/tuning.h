@@ -45,7 +45,11 @@
 #define TUNING_CARRY_JUMP_MULT 0.8f
 
 // Combat. Weapons themselves are a data table (game/weapon.c).
-#define TUNING_SOLDIER_HP 100         // the base soldier; the other variants arrive with the squad milestone
+#define TUNING_HP_NORMAL 100          // soldier variants (GAME_DESIGN § 4)
+#define TUNING_HP_STRONG 150
+#define TUNING_HP_HEAVY 200
+#define TUNING_HP_HEAVY_ARMORED 300   // provisional: "even more than the heavy one"
+#define TUNING_SOLDIER_HP TUNING_HP_NORMAL
 #define TUNING_DUMMY_HP 100           // target dummies
 #define TUNING_DUMMY_W 14.0f
 #define TUNING_DUMMY_H 24.0f
@@ -60,6 +64,16 @@
 #define TUNING_GRENADE_FRICTION 0.7f  // horizontal speed multiplier at each ground contact
 #define TUNING_LOOT_W 12.0f           // pad products and weapons lying on the ground
 #define TUNING_LOOT_H 12.0f
+
+// AI soldiers (no pathfinding: they react to what is in front of them).
+#define TUNING_AI_RANGE 200.0f        // sees and shoots enemies this close
+#define TUNING_AI_RANGE_Y 90.0f       // ... and no more than this far above / below
+#define TUNING_AI_CHASE_RANGE 120.0f  // an unarmed soldier runs at an enemy this close
+#define TUNING_AI_WEAPON_RANGE 140.0f // an unarmed soldier walks to a weapon this close
+#define TUNING_AI_FOLLOW_BAND 40.0f   // follows the leader but stops within this distance
+#define TUNING_AI_GUARD_BAND 40.0f    // stays within this distance of its post
+#define TUNING_AI_BAN_S 20.0f         // a crate that could not be fetched is ignored for this long
+#define TUNING_AI_GIVE_UP_S 10.0f     // longest a fetch / delivery may take
 
 // Stacking pad menu: shown while the controlled soldier is within this distance of the pad (px,
 // measured from the soldier's center to the pad rectangle).

@@ -3,6 +3,7 @@
 #include "core/log.h"
 #include "game/crate.h"
 #include "game/loot.h"
+#include "game/squad.h"
 #include "game/tuning.h"
 
 #include <string.h>
@@ -296,22 +297,26 @@ bool pad_build(GameState *gs, i32 team, PadShape shape, bool blue) {
     if (!product_spawn_pos(gs, site, &where)) {
         return false;
     }
-    // Create the product before consuming anything, so a full pool changes nothing.
-    EntityId pid;
+    // Create the product before consuming anything, so a failure (no room, full table) changes nothing.
+    bool made = false;
     WeaponKind weapon;
+    SoldierVariant variant;
     if (weapon_from_product(chosen->product, &weapon)) {
-        pid = loot_spawn_weapon(gs, weapon, weapon_def(weapon)->max_ammo, where);
+        made = entity_id_valid(loot_spawn_weapon(gs, weapon, weapon_def(weapon)->max_ammo, where));
+    } else if (soldier_from_product(chosen->product, &variant)) {
+        made = soldier_spawn(gs, team, variant, vec2(where.x + PRODUCT_SIZE * 0.5f, where.y + PRODUCT_SIZE)) >= 0;
     } else {
-        pid = pool_create(&gs->entities, ENT_PRODUCT);
+        EntityId pid = pool_create(&gs->entities, ENT_PRODUCT); // vehicles: placeholder until M6
         Entity *pe = pool_get(&gs->entities, pid);
         if (pe) {
             pe->body.size = vec2(PRODUCT_SIZE, PRODUCT_SIZE);
             pe->body.pos = where;
             pe->prev_pos = where;
             pe->as.product = (Product){.kind = chosen->product, .team = team};
+            made = true;
         }
     }
-    if (!entity_id_valid(pid)) {
+    if (!made) {
         return false;
     }
 

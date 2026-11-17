@@ -95,26 +95,36 @@ les escouades adverses (ou selon l'objectif de la mission).
   (clignotement du soldat, pas de temps d'invulnérabilité).
 - Un soldat mort lâche son arme (avec ses munitions restantes) et sa caisse sur place. Pas de réapparition : l'équipe
   grossit uniquement via le pad.
-- 🟡 **Provisoire (M3)** : tant qu'il n'y a qu'un soldat, le joueur **réapparaît au point de départ**, en pleine santé et à mains nues
-  (compteur `deaths`). Cela disparaît avec l'escouade (M4). Tomber à l'eau n'est pas une mort par dégâts : l'arme est perdue avec le soldat.
-- Une équipe sans soldat vivant est éliminée.
+- 🟡 **Eau** : un soldat qui tombe à l'eau n'est pas mort : il **retourne au point de départ de son équipe**, en pleine santé, avec l'équipement
+  de départ de sa variante ; son arme et sa caisse sont perdues.
+- ✅ Une équipe sans soldat vivant est **éliminée** (la partie continue pour les autres ; l'écran du joueur s'assombrit, F5 recommence).
+  🟡 Si un pad lui permet encore de produire un soldat, l'équipe revient dans la partie.
 
 ### Contrôle de l'escouade
-- 🟡 Le joueur contrôle un soldat ; touche « changer » pour passer au suivant (cycle), avec un indicateur au-dessus du soldat actif.
-- 🟡 Si le soldat contrôlé meurt, le contrôle passe automatiquement au plus proche.
-- ✅ Ordres (liste confirmée ; portée — tous les soldats ou le soldat visé — encore à décider 🟡) :
-  - **Suivre** : rester près du soldat contrôlé et tirer sur les ennemis à portée.
-  - **Garder la base** : défendre le pad.
-  - **Ramasser** : aller chercher les caisses et les rapporter.
-  - **Attaquer** : aller vers la base adverse la plus proche.
+- 🟡 Le joueur contrôle **un** soldat (flèche jaune au-dessus de la tête) ; **Tab** passe au suivant de l'équipe (cycle). Quand le menu du pad est
+  ouvert, Tab sert au menu (changer l'entrée choisie) et ne change pas de soldat.
+- ✅ Si le soldat contrôlé meurt, le contrôle passe automatiquement au **plus proche** soldat vivant de l'équipe.
+- ✅ **Ordres** : la touche d'ordre (position de Q, étiquetée A en AZERTY) passe à l'ordre suivant : suivre → garder → ramasser → attaquer.
+  🟡 L'ordre vaut pour **tous les soldats de l'équipe que le joueur ne contrôle pas** (portée « tous » retenue) et s'affiche en haut à gauche
+  (quatre pastilles, l'ordre actif allumé ; en dessous, une pastille par soldat vivant).
+  - **Suivre** : rester près du soldat contrôlé (à ± 40 px) et tirer sur les ennemis à portée.
+  - **Garder la base** : rester près du pad de l'équipe et tirer sur les ennemis à portée.
+  - **Ramasser** : aller chercher les caisses **posées sur le même sol** (pas de navigation avant M5), les rapporter au pad et les poser en
+    colonnes de deux, en commençant par la colonne la plus éloignée du côté d'où l'on arrive ; s'arrêter quand le pad est plein ; renoncer à
+    une caisse qu'on n'atteint pas (ignorée 20 s).
+  - **Attaquer** : aller vers le pad adverse le plus proche (la base, tant qu'elle n'a pas de PV propres) et tirer sur ce qui est en chemin.
+- 🟡 Comportements communs : un soldat voit les ennemis à 200 px et jusqu'à 90 px au-dessus / au-dessous, **sans obstacle** entre eux ;
+  il ne tire pas en portant une caisse (le tir la lancerait) ; à mains nues il ramasse une arme à moins de 140 px et fonce au corps à corps
+  sur un ennemi à moins de 120 px ; il n'utilise un explosif que si la cible est hors du rayon de l'explosion.
+- 🟡 Les soldats IA n'ont accès qu'à ce qu'un joueur a : ils produisent une entrée (`InputFrame`) comme un clavier.
 
 ### Variantes de compagnon ✅ (stats 🟡)
 | Variante | Obtenu avec | Particularité |
 |----------|-------------|---------------|
 | Compagnon | 2×1 vertical, rouge | **100 PV** ✅. Soldat de base, arme de départ : poings 🟡 |
-| Compagnon fort | 2×1 vertical, avec bleue | **150 PV** ✅ |
-| Compagnon lourd | 2×2, rouge | **200 PV** ✅. Apparaît **avec un lance-roquettes** |
-| Compagnon lourd blindé | 2×2, avec bleue | **Armure lourde, encore plus de PV** ✅ : 300 provisoire 🟡. Lance-roquettes 🟡 |
+| Compagnon fort | 2×1 vertical, avec bleue | **150 PV** ✅. 🟡 Bande blanche sur la poitrine |
+| Compagnon lourd | 2×2, rouge | **200 PV** ✅. Apparaît **avec un lance-roquettes** (munitions pleines). 🟡 Épaulières |
+| Compagnon lourd blindé | 2×2, avec bleue | **Armure lourde, encore plus de PV** ✅ : 300 provisoire 🟡. Lance-roquettes 🟡 (comme le lourd). 🟡 Épaulières et plaque d'acier |
 
 ## 5. Les caisses ✅
 
@@ -169,8 +179,9 @@ Les formes peuvent se situer n'importe où sur les 4 colonnes 🟡.
   un véhicule attend un pilote.
 - 🟡 Pour la même forme, la version rouge (que des caisses rouges) et la version bleue (au moins une bleue) sont deux entrées du menu
   quand les deux existent ; à chaque entrée, les caisses consommées sont les plus hautes, puis les plus à gauche.
-- 🟡 L'objet produit tombe et repose au sol, à gauche du pad (le menu est à droite). Depuis M3, les **armes sont de vraies armes ramassables** ;
-  les compagnons et les véhicules sont encore une petite boîte colorée (**placeholder**) jusqu'à M4 / M6.
+- 🟡 L'objet produit apparaît à gauche du pad (le menu est à droite). Depuis M3, les **armes sont de vraies armes ramassables** ; depuis M4, un
+  **compagnon** est un vrai soldat de l'équipe du pad (il tombe sur ses pieds et rejoint l'escouade). Les véhicules sont encore une petite boîte
+  colorée (**placeholder**) jusqu'à M6. Pas de place pour le produit (ou plus de place dans l'escouade, 32 soldats) : la construction est refusée.
   Un objet enterré par une caisse qui se pose est remonté au sommet de la pile.
 - 🟡 Les caisses d'un pad peuvent être **reprises par n'importe qui**, y compris un ennemi (vol).
 - L'IA construit via la même fonction que le menu (aucune triche, mêmes recettes).

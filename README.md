@@ -12,8 +12,8 @@ les ramènent à leur base et les empilent pour obtenir des armes, des recrues e
 
 ## État du projet
 
-Jalons M0 à M3 faits : socle technique, niveau et déplacement, caisses et pad de construction, combat (armes, projectiles,
-explosions, santé, mannequins). Les compagnons et l'IA arrivent ensuite. Avancement détaillé : [docs/ROADMAP.md](docs/ROADMAP.md).
+Jalons M0 à M4 faits : socle technique, niveau et déplacement, caisses et pad de construction, combat (armes, projectiles,
+explosions, santé, mannequins), escouade (compagnons, équipes, ordres). La navigation et l'IA d'équipe arrivent ensuite. Avancement détaillé : [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Prérequis
 
@@ -74,12 +74,13 @@ cmake --build build -j && ctest --test-dir build --output-on-failure
 | Tirer / frapper     | X, ou **bouton gauche** (maintenu pour l'uzi) | X / Carré |
 | Prendre / poser une caisse ; échanger d'arme | C | B / Rond |
 | Lancer la caisse portée | X       | X / Carré        |
-| Changer de soldat   | Tab           | RB / R1          |
+| Changer de soldat (sans menu de pad ouvert) | Tab | RB / R1 |
 | Menu du pad : entrée suivante / valider | Tab / Entrée (ou clic gauche sur l'entrée) | — |
-| Menu d'ordres       | touche à la position de Q (étiquetée A en AZERTY) | LB / L1 |
+| Ordre de l'équipe suivant (suivre → garder → ramasser → attaquer) | touche à la position de Q (étiquetée A en AZERTY) | LB / L1 |
 | Pause               | Échap         | Start            |
 | Debug overlay       | F1            | —                |
 | Pause / pas-à-pas / ralenti ×0,25 (debug) | F2 / F3 / F4 | — |
+| Recommencer la partie (debug) | F5 | — |
 
 **Les touches sont repérées par leur position physique** (scancodes SDL), pas par la lettre imprimée dessus :
 les touches de déplacement sont celles de la position WASD, qui se lisent **ZQSD sur un clavier AZERTY** et WASD sur un

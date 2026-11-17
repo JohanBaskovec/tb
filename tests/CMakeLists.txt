@@ -25,6 +25,7 @@ cs_test(pad cs_app)
 cs_test(pad_menu cs_app)
 cs_test(events cs_app)
 cs_test(combat cs_app)
+cs_test(squad cs_app)
 cs_test(scenarios cs_app)
 cs_test(platform cs_platform cs_game)
 
@@ -70,15 +71,26 @@ set_tests_properties(smoke_aimed_shot_hits PROPERTIES PASS_REGULAR_EXPRESSION "s
 add_test(NAME smoke_aimed_shot_misses
     COMMAND cratesquad --headless --give pistol --start 400,432 --script ".:3 F@488/300:1 .:60")
 set_tests_properties(smoke_aimed_shot_misses PROPERTIES PASS_REGULAR_EXPRESSION "shots=1 hits=0 ")
+# Squads: followers keep up with the leader; the screenshot shows the variants; an AI-heavy bot game stays sane.
+add_test(NAME smoke_squad_follows
+    COMMAND cratesquad --headless --soldier 1,strong,70 --soldier 1,heavy,90 --frames 600
+            --screenshot ${SHOTS}/smoke_squad.png --shot-cam 0,330)
+set_tests_properties(smoke_squad_follows PROPERTIES PASS_REGULAR_EXPRESSION "soldiers=3/0 order=follow ")
+add_test(NAME smoke_squad_bot_vs_ai
+    COMMAND cratesquad --headless --bot --soldier 1,heavy,100 --soldier 2,heavy,600 --soldier 2,strong,640 --frames 4000 --seed 9)
 add_test(NAME smoke_armed_bot
     COMMAND cratesquad --headless --bot --give uzi --frames 3000 --seed 4)
 
 # Bad input must fail cleanly (non-zero exit), never crash.
-foreach(case bad_args bad_level bad_script bad_fill_pad bad_give bad_aim)
+foreach(case bad_args bad_level bad_script bad_fill_pad bad_give bad_aim bad_soldier bad_order)
     if(case STREQUAL "bad_args")
         set(args --nonsense)
     elseif(case STREQUAL "bad_level")
         set(args --headless --level ${CMAKE_SOURCE_DIR}/assets/levels/nope.lvl)
+    elseif(case STREQUAL "bad_soldier")
+        set(args --headless --soldier 1,tank,100)
+    elseif(case STREQUAL "bad_order")
+        set(args --headless --order dance)
     elseif(case STREQUAL "bad_aim")
         set(args --headless --script "F@12:1")
     elseif(case STREQUAL "bad_give")

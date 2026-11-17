@@ -5,6 +5,7 @@
 #include "game/crate.h"
 #include "game/loot.h"
 #include "game/pad.h"
+#include "game/squad.h"
 
 #include <string.h>
 
@@ -16,47 +17,39 @@ bool game_init(GameState *gs, u64 seed, Level *level) {
     }
     rng_seed(&gs->rng, seed, 1);
     gs->level = level;
+    gs->controlled = -1;
     pool_init(&gs->entities);
-    companion_init(&gs->player, level->spawns[0]);
+    for (i32 t = 0; t < MAX_TEAMS; t++) {
+        gs->teams[t].active = level->has_spawn[t];
+        gs->teams[t].spawn = level->spawns[t];
+        gs->teams[t].order = t == PLAYER_TEAM ? ORDER_FOLLOW : ORDER_GUARD;
+    }
     for (i32 z = 0; z < level->drop_zone_count; z++) {
         gs->drop_timers[z] = (u32)level->drop_cfg[z].interval_s * TICK_HZ;
     }
     for (i32 d = 0; d < level->dummy_count; d++) {
-        dummy_spawn(gs, level->dummies[d], 1);
+        dummy_spawn(gs, level->dummies[d], TEAM_NONE);
     }
+    // The human starts with one soldier. Other teams get soldiers from their pads.
+    soldier_spawn_at_start(gs, PLAYER_TEAM, SOLDIER_NORMAL, level->spawns[PLAYER_TEAM]);
+    events_clear(&gs->events);
     return true;
-}
-
-static u32 crate_actions(const GameState *gs) {
-    return gs->crate_stats.picked_up + gs->crate_stats.placed + gs->crate_stats.thrown;
-}
-
-static void respawn_player(GameState *gs) {
-    companion_init(&gs->player, gs->level->spawns[0]);
-    gs->respawns++;
-    events_push(&gs->events, EV_PLAYER_RESPAWNED, gs->player.body.pos, 0, 0);
 }
 
 void game_update(GameState *gs, const InputFrame *input) {
     events_clear(&gs->events);
-    const bool was_carrying = entity_id_valid(gs->player.carrying);
-    const u32 crate_actions_before = crate_actions(gs);
-    companion_update(&gs->player, gs->level, input);
-    crate_carry_update(gs, input);
-    // A key a crate action used is not also a shot or a weapon pickup.
-    combat_player_update(gs, input, was_carrying || crate_actions(gs) != crate_actions_before);
+    if (input_pressed(input, ACT_SWITCH)) {
+        squad_cycle_control(gs);
+    }
+    if (input_pressed(input, ACT_ORDER)) {
+        squad_cycle_order(gs);
+    }
+    squad_update(gs, input);
     combat_update(gs);
     crates_update(gs);
     crate_carried_follow(gs);
     loot_update(gs);
-
-    if (gs->player.hp <= 0) {
-        combat_player_died(gs); // drops the weapon and the crate where the soldier fell
-        respawn_player(gs);
-    } else if (companion_in_hazard(&gs->player, gs->level)) {
-        crate_destroy(gs, gs->player.carrying); // the crate is lost with its carrier (and so is the weapon)
-        respawn_player(gs);
-    }
+    squad_resolve(gs);
     pool_flush(&gs->entities);
     gs->tick++;
 }
@@ -70,13 +63,7 @@ static u64 fnv_mix(u64 h, const void *data, usize len) {
     return h;
 }
 
-u64 game_hash(const GameState *gs) {
-    // Field by field: struct padding bytes are indeterminate.
-    const Companion *c = &gs->player;
-    u64 h = 14695981039346656037ULL;
-    h = fnv_mix(h, &gs->tick, sizeof(gs->tick));
-    h = fnv_mix(h, &gs->rng.state, sizeof(gs->rng.state));
-    h = fnv_mix(h, &gs->respawns, sizeof(gs->respawns));
+static u64 hash_companion(u64 h, const Companion *c) {
     h = fnv_mix(h, &c->body.pos, sizeof(c->body.pos));
     h = fnv_mix(h, &c->body.vel, sizeof(c->body.vel));
     h = fnv_mix(h, &c->facing, sizeof(c->facing));
@@ -94,6 +81,41 @@ u64 game_hash(const GameState *gs) {
     h = fnv_mix(h, &c->fire_cooldown, sizeof(c->fire_cooldown));
     h = fnv_mix(h, &c->hurt_ticks, sizeof(c->hurt_ticks));
     h = fnv_mix(h, &c->punch_ticks, sizeof(c->punch_ticks));
+    return h;
+}
+
+u64 game_hash(const GameState *gs) {
+    // Field by field: struct padding bytes are indeterminate.
+    u64 h = 14695981039346656037ULL;
+    h = fnv_mix(h, &gs->tick, sizeof(gs->tick));
+    h = fnv_mix(h, &gs->rng.state, sizeof(gs->rng.state));
+    h = fnv_mix(h, &gs->respawns, sizeof(gs->respawns));
+    h = fnv_mix(h, &gs->controlled, sizeof(gs->controlled));
+    h = hash_companion(h, game_player_const(gs));
+    for (i32 t = 0; t < MAX_TEAMS; t++) {
+        const u32 flags = (u32)gs->teams[t].eliminated | ((u32)gs->teams[t].order << 1);
+        h = fnv_mix(h, &flags, sizeof(flags));
+    }
+    for (i32 i = 0; i < MAX_SOLDIERS; i++) {
+        const Soldier *s = &gs->soldiers[i];
+        if (!s->alive) {
+            continue;
+        }
+        h = fnv_mix(h, &i, sizeof(i));
+        h = fnv_mix(h, &s->team, sizeof(s->team));
+        h = fnv_mix(h, &s->variant, sizeof(s->variant));
+        h = hash_companion(h, &s->c);
+        h = fnv_mix(h, &s->ai.walker.target_x, sizeof(s->ai.walker.target_x));
+        h = fnv_mix(h, &s->ai.walker.jump_hold, sizeof(s->ai.walker.jump_hold));
+        h = fnv_mix(h, &s->ai.walker.blocked_ticks, sizeof(s->ai.walker.blocked_ticks));
+        h = fnv_mix(h, &s->ai.clock, sizeof(s->ai.clock));
+        h = fnv_mix(h, &s->ai.collect, sizeof(s->ai.collect));
+        h = fnv_mix(h, &s->ai.deliver_dir, sizeof(s->ai.deliver_dir));
+        h = fnv_mix(h, &s->ai.crate, sizeof(s->ai.crate));
+        h = fnv_mix(h, &s->ai.state_ticks, sizeof(s->ai.state_ticks));
+        h = fnv_mix(h, &s->ai.banned, sizeof(s->ai.banned));
+        h = fnv_mix(h, &s->ai.banned_ticks, sizeof(s->ai.banned_ticks));
+    }
     h = fnv_mix(h, gs->drop_timers, sizeof(gs->drop_timers));
     h = fnv_mix(h, &gs->products_built, sizeof(gs->products_built));
     h = fnv_mix(h, &gs->combat_stats.shots, sizeof(u32));

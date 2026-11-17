@@ -7,7 +7,7 @@
 #include <string.h>
 
 static Vec2 follow_target(const Sim *sim) {
-    return body_center(&sim->gs.player.body);
+    return body_center(&game_player_const(&sim->gs)->body);
 }
 
 bool sim_init(Sim *sim, const SimConfig *cfg, char *err, usize err_len) {
@@ -39,14 +39,29 @@ bool sim_init(Sim *sim, const SimConfig *cfg, char *err, usize err_len) {
         sim->use_script = true;
     }
     if (cfg->has_start) {
-        companion_init(&sim->gs.player, cfg->start_feet);
+        companion_init(game_player(&sim->gs), cfg->start_feet);
     }
+    sim->seed = cfg->seed;
+    sim->has_start = cfg->has_start;
+    sim->start_feet = cfg->start_feet;
     sim->use_bot = cfg->use_bot;
     bot_init(&sim->bot, cfg->seed);
     pad_menu_refresh(&sim->menu, &sim->gs, 0);
     camera_init(&sim->cam, (f32)LOGICAL_W, (f32)LOGICAL_H);
-    camera_follow(&sim->cam, follow_target(sim), sim->gs.player.facing, &sim->level, true);
+    camera_follow(&sim->cam, follow_target(sim), game_player_const(&sim->gs)->facing, &sim->level, true);
     return true;
+}
+
+void sim_restart(Sim *sim) {
+    level_clear_dynamic(&sim->level);
+    game_init(&sim->gs, sim->seed, &sim->level); // cannot fail: it worked once with this level
+    if (sim->has_start) {
+        companion_init(game_player(&sim->gs), sim->start_feet);
+    }
+    sim->menu = (PadMenu){0};
+    sim->fx = (FxList){0};
+    pad_menu_refresh(&sim->menu, &sim->gs, 0);
+    camera_follow(&sim->cam, follow_target(sim), game_player_const(&sim->gs)->facing, &sim->level, true);
 }
 
 void sim_free(Sim *sim) {
@@ -95,15 +110,24 @@ void sim_tick(Sim *sim, const InputFrame *human) {
         input_frame_update(&sim->input, 0);
     }
 
+    // While the pad menu is up, Tab moves its selection: the game does not see it (it would also switch soldier).
+    InputFrame game_input = sim->input;
+    if (sim->menu.visible) {
+        const u32 tab = action_bit(ACT_SWITCH);
+        game_input.down &= ~tab;
+        game_input.pressed &= ~tab;
+        game_input.released &= ~tab;
+    }
     pad_menu_handle_input(&sim->menu, &sim->gs, &sim->input);
-
     const u32 respawns_before = sim->gs.respawns;
-    game_update(&sim->gs, &sim->input);
+    const i32 controlled_before = sim->gs.controlled;
+    game_update(&sim->gs, &game_input);
     pad_menu_refresh(&sim->menu, &sim->gs, 0);
     fx_consume(&sim->fx, &sim->gs.events); // the queue holds one tick only: drain it every tick
     fx_step(&sim->fx);
-    const bool teleported = sim->gs.respawns != respawns_before;
-    camera_follow(&sim->cam, follow_target(sim), sim->gs.player.facing, &sim->level, teleported);
+    // A respawn is a jump; a change of controlled soldier is a smooth pan.
+    const bool teleported = sim->gs.respawns != respawns_before && sim->gs.controlled == controlled_before;
+    camera_follow(&sim->cam, follow_target(sim), game_player_const(&sim->gs)->facing, &sim->level, teleported);
 }
 
 Vec2 sim_logical_to_world(const Sim *sim, Vec2 logical) {

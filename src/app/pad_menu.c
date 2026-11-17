@@ -4,7 +4,7 @@
 
 static bool soldier_near_pad(const GameState *gs, i32 team) {
     const Rect pad = pad_rect(gs, team);
-    const Vec2 c = body_center(&gs->player.body);
+    const Vec2 c = body_center(&game_player_const(gs)->body);
     return c.x >= pad.x - TUNING_PAD_MENU_RANGE_X && c.x <= pad.x + pad.w + TUNING_PAD_MENU_RANGE_X &&
            c.y >= pad.y - TUNING_PAD_MENU_RANGE_Y && c.y <= pad.y + pad.h + TUNING_PAD_MENU_RANGE_Y;
 }

@@ -158,6 +158,12 @@ static void test_keyboard_select_and_confirm(void) {
             found = true;
         }
     }
+    for (i32 i = 0; i < MAX_SOLDIERS; i++) { // soldiers are made too
+        const Soldier *s = &gs_of(&e)->soldiers[i];
+        if (i > 0 && s->alive && product_of_variant(s->variant) == chosen.product) {
+            found = true;
+        }
+    }
     CHECK(found);
     sim_free(&e.sim);
 }

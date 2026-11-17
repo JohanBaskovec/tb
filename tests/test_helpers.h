@@ -5,11 +5,26 @@
 #include "core/input_frame.h"
 #include "game/companion.h"
 #include "game/level.h"
+#include "game/soldier.h"
 
 #include <stdio.h>
 #include <string.h>
 
 #define KEY(a) action_bit(a)
+
+// Soldier variant -> the pad product that made it.
+static inline PadProduct product_of_variant(SoldierVariant v) {
+    switch (v) {
+    case SOLDIER_NORMAL:
+        return PRODUCT_COMPANION;
+    case SOLDIER_STRONG:
+        return PRODUCT_STRONG_COMPANION;
+    case SOLDIER_HEAVY:
+        return PRODUCT_HEAVY_COMPANION;
+    default:
+        return PRODUCT_HEAVY_ARMORED_COMPANION;
+    }
+}
 
 // What a pad built, as a product kind: a weapon lies on the ground as a weapon pickup, the rest as a
 // generic product. Returns false for any other entity.

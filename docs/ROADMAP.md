@@ -57,13 +57,13 @@ Pas encore de police de caractères : l'overlay de debug utilise des pastilles d
 **Fin :** le pad donne de vraies armes et on peut détruire des cibles. ✅
 
 ## M4 — Escouade
-- [ ] Équipes (couleur, pad, membres)
-- [ ] Le pad crée des compagnons : 2×1 vertical (fort si bleue), 2×2 (lourd, avec lance-roquettes)
-- [ ] Changer de soldat contrôlé, transfert auto à la mort
-- [ ] Ordres : suivre, garder la base, ramasser, attaquer (comportements simples sans pathfinding)
-- [ ] Variantes de compagnon (normal 100 PV, fort 150, lourd 200 avec lance-roquettes, lourd blindé 300 provisoire) : PV et équipement dans `tuning.h`
+- [x] Équipes (couleur, pad, membres)
+- [x] Le pad crée des compagnons : 2×1 vertical (fort si bleue), 2×2 (lourd, avec lance-roquettes)
+- [x] Changer de soldat contrôlé, transfert auto à la mort
+- [x] Ordres : suivre, garder la base, ramasser, attaquer (comportements simples sans pathfinding)
+- [x] Variantes de compagnon (normal 100 PV, fort 150, lourd 200 avec lance-roquettes, lourd blindé 300 provisoire) : PV et équipement dans `tuning.h`
 
-**Fin :** on gère une petite escouade qui grossit grâce au pad.
+**Fin :** on gère une petite escouade qui grossit grâce au pad. ✅
 
 ## M5 — IA et navigation
 - [ ] Graphe de navigation (marcher, sauter, tomber, échelle) + affichage debug

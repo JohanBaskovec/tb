@@ -18,13 +18,13 @@ void crate_consume(GameState *gs, EntityId id);
 
 // One tick of drop zones and crate physics. Call after the companions have moved.
 void crates_update(GameState *gs);
-// Handles the grab key (pick up / put down) and the fire key (throw) of the player.
-void crate_carry_update(GameState *gs, const InputFrame *input);
-// Puts the carried crate back above the player's head. Call after the player has moved.
+// Handles the grab key (pick up / put down) and the fire key (throw) of one soldier.
+void crate_carry_update(GameState *gs, Companion *soldier, const InputFrame *input);
+// Puts every carried crate back above its carrier's head. Call after the soldiers have moved.
 void crate_carried_follow(GameState *gs);
 
-// The carried crate (if any) is let go where it is: it falls (the soldier died).
-void crate_release_carried(GameState *gs);
+// The crate carried by this soldier (if any) is let go where it is: it falls (the soldier died or was hit).
+void crate_release_carried(GameState *gs, Companion *soldier);
 
 // Number of crates alive (not about to be destroyed).
 u32 crate_count(const GameState *gs);

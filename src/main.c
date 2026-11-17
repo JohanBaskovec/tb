@@ -4,6 +4,7 @@
 #include "game/combat.h"
 #include "game/crate.h"
 #include "game/pad.h"
+#include "game/squad.h"
 #include "game/walker.h"
 #include "platform/platform.h"
 #include "render/draw_game.h"
@@ -41,6 +42,12 @@ typedef struct Options {
     Vec2 crate_pos[16];
     CrateKind crate_kind[16];
     bool has_fill_pad;
+    bool has_order;
+    Order order;
+    u32 soldier_count;
+    i32 soldier_team[16];
+    SoldierVariant soldier_variant[16];
+    f32 soldier_x[16];
     bool has_give;
     WeaponKind give;
     char fill_top[8], fill_bottom[8];
@@ -66,6 +73,9 @@ static void print_usage(const char *prog) {
             "  --walk-to X             drive the player with a bot that walks to x=X and hops obstacles\n"
             "  --crate X,Y,KIND        add a falling crate (top-left X,Y in pixels; KIND red or blue); repeatable\n"
             "  --fill-pad TOP,BOTTOM   put crates in the team-1 pad, e.g. rb..,rrr. (r red, b blue, . empty)\n"
+            "  --soldier TEAM,VARIANT,X add a soldier (TEAM 1-4; VARIANT normal|strong|heavy|armored; feet x in pixels, at the\n"
+            "                          height of the team-1 spawn); repeatable\n"
+            "  --order ORDER           order of team 1: follow, guard, collect or attack\n"
             "  --give WEAPON           start with a full weapon: pistol, uzi, grenades, strong-grenades, rocket\n"
             "  --debug-overlay         draw hitboxes, grid and state flags\n"
             "  --trace N               print the player state every N ticks\n"
@@ -138,6 +148,47 @@ static bool parse_args(int argc, char **argv, Options *o) {
                 return false;
             }
             o->has_fill_pad = true;
+        } else if (strcmp(a, "--soldier") == 0 && has_val) {
+            int team;
+            float x;
+            char variant[16];
+            const char *spec = argv[++i];
+            if (o->soldier_count >= 16 || sscanf(spec, "%d,%15[a-z],%f", &team, variant, &x) != 3 || team < 1 ||
+                team > MAX_TEAMS) {
+                LOG_ERROR("--soldier expects TEAM,VARIANT,X (at most 16)");
+                return false;
+            }
+            SoldierVariant v;
+            if (strcmp(variant, "normal") == 0) {
+                v = SOLDIER_NORMAL;
+            } else if (strcmp(variant, "strong") == 0) {
+                v = SOLDIER_STRONG;
+            } else if (strcmp(variant, "heavy") == 0) {
+                v = SOLDIER_HEAVY;
+            } else if (strcmp(variant, "armored") == 0) {
+                v = SOLDIER_HEAVY_ARMORED;
+            } else {
+                LOG_ERROR("--soldier: unknown variant '%s'", variant);
+                return false;
+            }
+            o->soldier_team[o->soldier_count] = team - 1;
+            o->soldier_variant[o->soldier_count] = v;
+            o->soldier_x[o->soldier_count] = x;
+            o->soldier_count++;
+        } else if (strcmp(a, "--order") == 0 && has_val) {
+            const char *w = argv[++i];
+            o->has_order = true;
+            Order found = ORDER_COUNT;
+            for (int k = 0; k < ORDER_COUNT; k++) {
+                if (strcmp(w, order_name((Order)k)) == 0) {
+                    found = (Order)k;
+                }
+            }
+            if (found == ORDER_COUNT) {
+                LOG_ERROR("--order expects follow, guard, collect or attack");
+                return false;
+            }
+            o->order = found;
         } else if (strcmp(a, "--give") == 0 && has_val) {
             const char *w = argv[++i];
             o->has_give = true;
@@ -178,18 +229,18 @@ static bool parse_args(int argc, char **argv, Options *o) {
 }
 
 static void print_trace(const Sim *sim) {
-    const Companion *c = &sim->gs.player;
+    const Companion *c = game_player_const(&sim->gs);
     printf("t=%" PRIu64 " pos=(%.2f,%.2f) vel=(%.1f,%.1f) ground=%d ladder=%d\n", sim->gs.tick,
            (f64)c->body.pos.x, (f64)c->body.pos.y, (f64)c->body.vel.x, (f64)c->body.vel.y,
            (int)c->body.on_ground, (int)c->on_ladder);
 }
 
 static void print_summary(const Sim *sim) {
-    const Companion *c = &sim->gs.player;
-    printf("ticks=%" PRIu64 " pos=(%.2f, %.2f) respawns=%u products=%u hp=%d weapon=%s ammo=%d shots=%u hits=%u "
+    const Companion *c = game_player_const(&sim->gs);
+    printf("ticks=%" PRIu64 " pos=(%.2f, %.2f) respawns=%u products=%u soldiers=%u/%u order=%s hp=%d weapon=%s ammo=%d shots=%u hits=%u "
            "kills=%u deaths=%u hash=%016" PRIx64 "\n",
            sim->gs.tick, (f64)c->body.pos.x, (f64)c->body.pos.y, sim->gs.respawns, sim->gs.products_built,
-           c->hp, weapon_name(c->weapon), c->ammo, sim->gs.combat_stats.shots, sim->gs.combat_stats.hits,
+           team_soldier_count(&sim->gs, 0), team_soldier_count(&sim->gs, 1), order_name(sim->gs.teams[0].order), c->hp, weapon_name(c->weapon), c->ammo, sim->gs.combat_stats.shots, sim->gs.combat_stats.hits,
            sim->gs.combat_stats.kills, sim->gs.combat_stats.deaths, game_hash(&sim->gs));
 }
 
@@ -216,7 +267,7 @@ static int run_headless(const Options *o, Sim *sim) {
     int rc = 0;
     for (u32 i = 0; i < frames && rc == 0; i++) {
         if (o->has_walk_to) {
-            walker_think(&walker, &sim->level, &sim->gs.player, &walk_input);
+            walker_think(&walker, &sim->level, game_player(&sim->gs), &walk_input);
         }
         sim_tick(sim, o->has_walk_to ? &walk_input : NULL);
         if (o->trace_every > 0 && sim->gs.tick % o->trace_every == 0) {
@@ -273,6 +324,9 @@ static int run_windowed(const Options *o, Sim *sim) {
         }
         if (ev.toggle_pause) {
             paused = !paused;
+        }
+        if (ev.restart) {
+            sim_restart(sim);
         }
         if (ev.toggle_slow) {
             slow = !slow;
@@ -387,6 +441,18 @@ int main(int argc, char **argv) {
         sim_free(&sim);
         platform_shutdown();
         return 1;
+    }
+    for (u32 i = 0; i < o.soldier_count; i++) {
+        const Vec2 feet = vec2(o.soldier_x[i], sim.level.spawns[0].y);
+        if (soldier_spawn(&sim.gs, o.soldier_team[i], o.soldier_variant[i], feet) < 0) {
+            LOG_ERROR("--soldier: no room for a soldier at x=%.0f", (f64)o.soldier_x[i]);
+            sim_free(&sim);
+            platform_shutdown();
+            return 1;
+        }
+    }
+    if (o.has_order) {
+        sim.gs.teams[PLAYER_TEAM].order = o.order;
     }
     if (o.has_give) {
         combat_give_weapon(&sim.gs, o.give);

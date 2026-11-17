@@ -78,15 +78,16 @@ tb/
 │   │   ├── level.h/.c      # Chargement niveau ASCII, tilemap, requêtes de tuiles
 │   │   ├── physics.h/.c    # AABB vs tuiles, gravité, plateformes fines, échelles
 │   │   ├── entity.h/.c     # Pool d'entités, création/destruction différée
-│   │   ├── companion.h/.c  # Soldats : déplacement, portage, tir, santé, variantes
+│   │   ├── companion.h/.c  # Corps du soldat : déplacement, saut, échelles, portage, arme en main
+│   │   ├── soldier.h       # Soldier (équipe, variante, mémoire IA), Team, Order
+│   │   ├── squad.h/.c      # Variantes, apparition, contrôle, ordres, mort / eau, mise à jour de tous les soldats
 │   │   ├── crate.h/.c      # Caisses : largage, parachute, physique, prise
 │   │   ├── pad.h/.c        # Grille d'empilement, détection de formes, transformation
 │   │   ├── weapon.h/.c     # Table des armes (data-driven)
 │   │   ├── loot.h/.c       # Armes au sol et produits du pad : physique, ramassables
 │   │   ├── combat.h/.c     # Tir, projectiles, explosions, dégâts, mannequins, mort du soldat
 │   │   ├── vehicle.h/.c    # Véhicules
-│   │   ├── team.h/.c       # Équipes, ordres, élimination
-│   │   ├── ai.h/.c         # FSM soldat + commandant d'équipe
+│   │   ├── ai.h/.c         # IA de soldat : un comportement par ordre (M4) ; commandant d'équipe et navigation en M5
 │   │   ├── nav.h/.c        # Graphe de navigation plateformes + A*
 │   │   ├── rules.h/.c      # Modes de jeu, conditions de victoire
 │   │   └── events.h        # File d'événements (son, particules, HUD)
@@ -131,8 +132,8 @@ scene_render(scene, alpha)              // interpolation positions précédentes
 ### Entités
 
 Un tableau de taille fixe d'`Entity` (`EntityPool`, 256 emplacements) avec un en-tête commun et une union par type.
-Simple, lisible en C, sans allocation dynamique. **État actuel (M3) : le pool contient les caisses, les produits du pad, les armes au sol,
-les projectiles et les mannequins** ; le joueur est encore un champ de `GameState` ; les compagnons y entrent avec le jalon « escouade » (M4).
+Simple, lisible en C, sans allocation dynamique. **État actuel (M4) : le pool contient les caisses, les produits du pad (véhicules, placeholder), les armes au sol,
+les projectiles et les mannequins** ; les soldats vivent dans un tableau à part (`GameState.soldiers[MAX_SOLDIERS]`, voir « Escouades ») ; les compagnons y entrent avec le jalon « escouade » (M4).
 Le schéma ci-dessous est la cible.
 
 ```c
@@ -200,8 +201,8 @@ typedef struct GameState {
 
 La simulation ne joue pas de son et ne crée pas de particules. Elle pousse des
 événements dans `GameState.events` (`game/events.h` : `EV_CRATE_SPAWNED`, `EV_CRATE_SETTLED`, `EV_CRATE_PICKED_UP`,
-`EV_CRATE_PLACED`, `EV_CRATE_THROWN`, `EV_CRATE_DESTROYED`, `EV_CRATE_CONSUMED`, `EV_PAD_BUILT`, `EV_PLAYER_RESPAWNED` ; combat : `EV_SHOT`, `EV_PUNCH`, `EV_PROJECTILE_HIT`, `EV_EXPLOSION`, `EV_DAMAGE`, `EV_DUMMY_DESTROYED`,
-`EV_PLAYER_DIED`, `EV_WEAPON_PICKED_UP`, `EV_WEAPON_DROPPED`, `EV_WEAPON_EMPTY`), que `audio/`, `render/` (effets) et `ui/` lisent après l'update.
+`EV_CRATE_PLACED`, `EV_CRATE_THROWN`, `EV_CRATE_DESTROYED`, `EV_CRATE_CONSUMED`, `EV_PAD_BUILT`, `EV_PLAYER_RESPAWNED` (un soldat est tombé à l'eau) ; escouade : `EV_SOLDIER_SPAWNED`, `EV_SOLDIER_DIED`, `EV_CONTROL_CHANGED`, `EV_ORDER_CHANGED`, `EV_TEAM_ELIMINATED` ; combat : `EV_SHOT`, `EV_PUNCH`, `EV_PROJECTILE_HIT`, `EV_EXPLOSION`, `EV_DAMAGE`, `EV_DUMMY_DESTROYED`,
+`EV_WEAPON_PICKED_UP`, `EV_WEAPON_DROPPED`, `EV_WEAPON_EMPTY`), que `audio/`, `render/` (effets) et `ui/` lisent après l'update.
 Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont le sens dépend du type.
 
 - La file est **vidée au début de chaque `game_update`** : elle contient les événements du dernier tick seulement.
@@ -263,7 +264,28 @@ Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont l
 - **Touches** : `combat_player_update` reçoit `crate_busy` (vrai si une action de caisse a utilisé la touche ce tick) : portage, prise, pose et lancer
   sont prioritaires sur le tir, les coups et l'échange d'arme.
 - **Ramassage** (`loot.c`) : armes et produits non-armes tombent et reposent comme le produit du pad en M2 ; une caisse qui se pose dessus les remonte.
-- Ordre dans `game_update` : soldat → caisses du joueur → combat du joueur → projectiles / mannequins → caisses → caisse portée → objets au sol → mort / eau → `pool_flush`.
+- Ordre dans `game_update` : changer de soldat / d'ordre → tous les soldats (entrée → déplacement → caisses → combat) → projectiles / mannequins → caisses → caisses portées → objets au sol → mort / eau → `pool_flush`.
+
+## Escouades
+
+- **`Soldier`** = `Companion` (corps, saut, échelles, portage, arme, PV) + équipe + variante + mémoire d'IA (`SoldierAi`) + dernière `InputFrame`.
+  Le tableau `GameState.soldiers[32]` contient tous les soldats de toutes les équipes, le soldat du joueur compris ; l'indice est son identité
+  (la place libre la plus basse est réutilisée, donc déterministe). `GameState.controlled` est l'indice du soldat que le joueur contrôle, `-1` si
+  son équipe n'en a plus ; `game_player()` renvoie alors un **fantôme** (`GameState.ghost`, PV 0, là où le dernier est tombé) : la caméra, le HUD
+  et les tests ne reçoivent jamais `NULL`.
+- **`Team`** : `active` (a un point de départ dans le niveau), `eliminated`, `order`, `spawn`. Au départ, seule l'équipe 1 a un soldat ; les autres
+  équipes en reçoivent par leur pad (`pad_build` → `soldier_spawn`, refusé sans consommer de caisse s'il n'y a pas la place).
+- **Variantes** (`SoldierDef`, table dans `squad.c` ; PV dans `tuning.h`) : normal 100, fort 150, lourd 200 + lance-roquettes, lourd blindé 300 + lance-roquettes.
+- **Une mise à jour pour tous** (`squad_update`) : pour chaque soldat vivant (par indice), une `InputFrame` — celle du joueur pour le soldat contrôlé, celle de
+  `ai_think()` pour les autres —, puis `companion_update`, `crate_carry_update`, `combat_soldier_update`. L'IA ne peut donc rien faire qu'un joueur ne puisse pas.
+- **Contrôle et ordres** (`game_update`) : `ACT_SWITCH` → `squad_cycle_control` (soldats vivants de l'équipe, en cycle) ; `ACT_ORDER` → `squad_cycle_order` (ordre de
+  l'équipe du soldat contrôlé). `Sim` retire `ACT_SWITCH` de l'entrée du jeu tant que le menu du pad est ouvert : Tab appartient alors au menu.
+- **Mort** (`squad_resolve`, fin de tick) : PV ≤ 0 → `soldier_kill` (arme lâchée avec ses munitions, caisse lâchée, contrôle au plus proche allié, équipe éliminée si c'était
+  le dernier : `EV_TEAM_ELIMINATED` une seule fois). Eau → `soldier_respawn` (retour au point de départ de l'équipe, équipement de la variante, caisse et arme perdues).
+- **IA** (`ai.c`) : perception (ennemi le plus proche à 200 px, visible : `combat_line_clear`), un `Walker` pour marcher et sauter les petits obstacles, et un comportement
+  par ordre. *Ramasser* est une petite machine à états (`COLLECT_SEEK / FETCH / DELIVER`) avec délais d'abandon et liste d'exclusion ; la livraison utilise la règle de
+  placement des caisses (première colonne entièrement devant le corps) pour viser une colonne du pad. Aucun pathfinding : une cible sur un autre sol est ignorée (M5).
+- `Sim.restart` (F5) refait la partie sur le même niveau et la même graine.
 
 ## IA et navigation
 
@@ -333,6 +355,8 @@ RGBA 640×360 via le renderer logiciel de SDL. Aucun display n'est requis.
 | `--screenshot PATH` | PNG écrit après le dernier tick |
 | `--shot-every N` | Avec `--screenshot motif_%u.png` : un PNG tous les N ticks (films) |
 | `--shot-cam X,Y` | Coin haut-gauche de la caméra pour la capture (voir une autre partie du niveau) |
+| `--soldier ÉQUIPE,VARIANTE,X` | Ajoute un soldat (variante : `normal`, `strong`, `heavy`, `armored` ; X : pieds, pixels, à la hauteur du départ de l'équipe 1) ; répétable |
+| `--order ORDRE` | Ordre de l'équipe 1 : `follow`, `guard`, `collect`, `attack` |
 | `--give ARME` | Équipe le soldat d'une arme neuve : `pistol`, `uzi`, `grenades`, `strong-grenades`, `rocket` |
 | `--fill-pad HAUT,BAS` | Pose des caisses dans le pad de l'équipe 1 (ex. `r...,rr.b` : r rouge, b bleue, `.` vide) |
 | `--debug-overlay` | Grille, hitboxes, vitesse, pastilles d'état, spawns et zones de largage |
@@ -365,7 +389,9 @@ Les touches F1–F4 sont testées en injectant des événements (`SDL_PushEvent`
   bot qui martèle Tab/Entrée), `events` (file, débordement, événements émis par les caisses, hash inchangé, effets visuels),
   `combat` (table d'armes, chaque arme tire / s'épuise, portée, murs, dispersion de l'uzi, poings, décroissance et blocage des explosions, recul,
   grenade : cloche / mèche / contact / rebond, roquette, mannequins, ramassage et échange, priorité des caisses, mort et réapparition,
-  produit du pad → arme utilisable, visée (direction, dispersion, grenade sur le curseur, souris, clic court, menu), et un bot armé sur 6000 ticks avec invariants et déterminisme).
+  produit du pad → arme utilisable, visée (direction, dispersion, grenade sur le curseur, souris, clic court, menu), et un bot armé sur 6000 ticks avec invariants et déterminisme), `squad` (variantes et PV, le pad fabrique chaque variante, apparition, changement de
+  soldat, Tab / menu, transfert à la mort, élimination, eau, ordres, suivre / garder / attaquer, tir de l'IA et ses limites (murs, portée, caisse portée, tir ami),
+  poings, ramassage d'armes, ramassage de caisses depuis la gauche et la droite, pad plein, caisse inatteignable, bots sur 5000 ticks avec invariants et déterminisme, hash, F5).
 - Tests de fumée sur l'exécutable : headless (bot, script + overlay, film), déterminisme, arguments/niveau/script
   invalides, boucle fenêtrée sous `dummy`, garde du pilote vidéo, tirs (uzi tue un mannequin, explosion de roquette), bot armé.
 - Les invariants vérifiés à chaque tick sous bots : jamais dans une tuile solide, dans les bornes du niveau,

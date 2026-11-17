@@ -17,7 +17,7 @@ void fx_consume(FxList *list, const EventQueue *events) {
         case EV_DUMMY_DESTROYED:
             add(list, FX_EXPLOSION, e->pos, 14.0f, 14);
             break;
-        case EV_PLAYER_DIED:
+        case EV_SOLDIER_DIED:
             add(list, FX_EXPLOSION, e->pos, 18.0f, 16);
             break;
         case EV_PROJECTILE_HIT:

@@ -110,7 +110,14 @@ static u32 check_crate_invariants(const Sim *sim) {
             }
         } else if (c->state == CRATE_CARRIED) {
             carried++;
-            CHECK(entity_id_eq(gs->player.carrying, (EntityId){i, e->generation}));
+            u32 carriers = 0; // exactly one living soldier holds it
+            for (i32 s = 0; s < MAX_SOLDIERS; s++) {
+                carriers += (gs->soldiers[s].alive &&
+                             entity_id_eq(gs->soldiers[s].c.carrying, (EntityId){i, e->generation}))
+                                ? 1u
+                                : 0u;
+            }
+            CHECK_EQ_U64(carriers, 1);
         } else {
             // In flight: inside the map horizontally, and not embedded in a resting crate.
             CHECK(e->body.pos.x >= 0.0f && e->body.pos.x + e->body.size.x <= level_width_px(lv));
@@ -118,11 +125,14 @@ static u32 check_crate_invariants(const Sim *sim) {
                                    level_px_to_tile(e->body.pos.y + 8.0f)));
         }
     }
-    CHECK(carried <= 1);
-    CHECK_EQ_U64(carried, entity_id_valid(gs->player.carrying) ? 1 : 0);
-    if (entity_id_valid(gs->player.carrying)) {
-        CHECK(pool_get_const(&gs->entities, gs->player.carrying) != NULL);
+    u32 holding = 0;
+    for (i32 s = 0; s < MAX_SOLDIERS; s++) {
+        if (gs->soldiers[s].alive && entity_id_valid(gs->soldiers[s].c.carrying)) {
+            holding++;
+            CHECK(pool_get_const(&gs->entities, gs->soldiers[s].c.carrying) != NULL);
+        }
     }
+    CHECK_EQ_U64(carried, holding);
     CHECK_EQ_U64(gs->entities.live_count, alive);
     // The solid overlay holds exactly the resting crates (no ghost cells, none missing).
     // A full scan of the map is the costly part of this check, so it runs every 16 ticks.
@@ -144,7 +154,7 @@ static u32 check_crate_invariants(const Sim *sim) {
 static void check_invariants(const Sim *sim, Coverage *cov) {
     cov->max_resting = MAX(cov->max_resting, check_crate_invariants(sim));
     const GameState *gs = &sim->gs;
-    const Companion *c = &gs->player;
+    const Companion *c = game_player_const(gs);
     const Body *b = &c->body;
     const Level *lv = &sim->level;
 
@@ -263,7 +273,7 @@ static void test_player_settles_on_spawn(void) {
     for (int i = 0; i < 10; i++) {
         sim_tick(&sim, NULL);
     }
-    const Body *b = &sim.gs.player.body;
+    const Body *b = &game_player(&sim.gs)->body;
     CHECK(b->on_ground);
     CHECK_NEAR(b->pos.x + b->size.x * 0.5f, sim.level.spawns[0].x, 1e-3);
     CHECK_NEAR(b->pos.y + b->size.y, sim.level.spawns[0].y, 1e-3);
@@ -290,7 +300,7 @@ static void test_water_respawns_at_spawn(void) {
         respawned = sim.gs.respawns == 1;
     }
     CHECK(respawned);
-    const Body *b = &sim.gs.player.body;
+    const Body *b = &game_player(&sim.gs)->body;
     CHECK_NEAR(b->pos.x + b->size.x * 0.5f, sim.level.spawns[0].x, 1e-3);
     CHECK_NEAR(b->pos.y + b->size.y, sim.level.spawns[0].y, 1e-3);
     CHECK_NEAR(b->vel.x, 0.0, 0.0);

@@ -81,6 +81,8 @@ bool level_load_file(Level *lv, Arena *arena, const char *path, char *err, usize
 TileType level_tile(const Level *lv, i32 tx, i32 ty);
 // Solid terrain or a resting crate.
 bool level_is_solid(const Level *lv, i32 tx, i32 ty);
+// Forgets every resting crate (new match on the same level).
+void level_clear_dynamic(Level *lv);
 void level_set_dyn_solid(Level *lv, i32 tx, i32 ty, bool solid);
 bool level_dyn_solid(const Level *lv, i32 tx, i32 ty);
 // Thin platform, or the top cell of a ladder: solid only when landing on it from above.

@@ -8,6 +8,7 @@
 #include "game/loot.h"
 #include "game/tuning.h"
 #include "game/pad.h"
+#include "game/squad.h"
 #include "test_helpers.h"
 
 // ---- Environment ---------------------------------------------------------------------------------
@@ -48,7 +49,7 @@ static GameState *gs_of(Env *e) {
 }
 
 static Companion *player(Env *e) {
-    return &e->sim.gs.player;
+    return game_player(&e->sim.gs);
 }
 
 static void place_player(Env *e, f32 feet_x) {
@@ -619,7 +620,7 @@ static void test_no_punching_while_carrying(void) {
 
 // ---- Death ---------------------------------------------------------------------------------------
 
-static void test_death_drops_weapon_and_crate_then_respawns(void) {
+static void test_death_drops_weapon_and_crate_and_eliminates_the_last_soldier(void) {
     Env e;
     CHECK(env_init(&e, false, false));
     place_player(&e, 200.0f);
@@ -636,14 +637,16 @@ static void test_death_drops_weapon_and_crate_then_respawns(void) {
     tick(&e, 0);
 
     CHECK_EQ_U64(gs_of(&e)->combat_stats.deaths, 1);
-    CHECK_EQ_U64(gs_of(&e)->respawns, 1);
-    CHECK_EQ_U64(events_count_of(&gs_of(&e)->events, EV_PLAYER_DIED), 1);
-    CHECK_EQ_U64(events_count_of(&gs_of(&e)->events, EV_PLAYER_RESPAWNED), 1);
-    // Back at the spawn, healthy, with fists and empty hands.
-    CHECK_EQ_U64(player(&e)->hp, TUNING_SOLDIER_HP);
-    CHECK(player(&e)->weapon == WEAPON_FISTS);
-    CHECK(!entity_id_valid(player(&e)->carrying));
-    CHECK_NEAR(player(&e)->body.pos.x + player(&e)->body.size.x * 0.5f, 1 * 16 + 8, 0.01);
+    CHECK_EQ_U64(gs_of(&e)->respawns, 0); // no coming back: only the pad makes soldiers
+    CHECK_EQ_U64(events_count_of(&gs_of(&e)->events, EV_SOLDIER_DIED), 1);
+    CHECK_EQ_U64(events_count_of(&gs_of(&e)->events, EV_TEAM_ELIMINATED), 1);
+    CHECK(gs_of(&e)->teams[PLAYER_TEAM].eliminated);
+    CHECK_EQ_U64(team_soldier_count(gs_of(&e), PLAYER_TEAM), 0);
+    CHECK(gs_of(&e)->controlled == -1);
+    // The "player" is now a dead ghost where the soldier fell; nothing crashes when asking for it.
+    CHECK(player(&e)->hp <= 0);
+    CHECK(player(&e)->body.pos.x > 150.0f);
+    tick_n(&e, 30); // the world keeps running without a controlled soldier
     // Its weapon (with the remaining ammo) and its crate stayed where it fell.
     CHECK_EQ_U64(count_type(&e, ENT_WEAPON), 1);
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
@@ -702,7 +705,7 @@ static void test_falling_in_the_water_loses_the_weapon(void) {
     char err[128];
     CHECK(sim_init(&sim, &cfg, err, sizeof(err)));
     combat_give_weapon(&sim.gs, WEAPON_PISTOL);
-    companion_init(&sim.gs.player, vec2(10 * 16.0f, 150.0f));
+    companion_init(game_player(&sim.gs), vec2(10 * 16.0f, 150.0f));
     InputFrame in = {0};
     for (int i = 0; i < 60; i++) {
         input_frame_update(&in, 0);
@@ -710,7 +713,7 @@ static void test_falling_in_the_water_loses_the_weapon(void) {
     }
     CHECK_EQ_U64(sim.gs.respawns, 1);
     CHECK_EQ_U64(sim.gs.combat_stats.deaths, 0); // a hazard is not a death by damage
-    CHECK(sim.gs.player.weapon == WEAPON_FISTS);
+    CHECK(game_player(&sim.gs)->weapon == WEAPON_FISTS);
     u32 weapons = 0;
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
         weapons += sim.gs.entities.slots[i].type == ENT_WEAPON ? 1u : 0u;
@@ -744,14 +747,24 @@ static void test_a_pad_builds_a_real_weapon_that_can_be_used(void) {
     sim_free(&e.sim);
 }
 
-static void test_soldier_and_vehicle_products_stay_placeholders(void) {
+static void test_a_pad_builds_soldiers_for_its_team_and_vehicles_stay_placeholders(void) {
     Env e;
     CHECK(env_init(&e, false, true));
-    CHECK(pad_debug_fill(gs_of(&e), 0, "r...", "r..."));
-    CHECK(pad_build(gs_of(&e), 0, SHAPE_2X1_V, false)); // a companion: milestone 4
+    CHECK_EQ_U64(team_soldier_count(gs_of(&e), 0), 1);
+    CHECK(pad_debug_fill(gs_of(&e), 0, "r...", "r...")); // 2x1 vertical: a companion
+    CHECK(pad_build(gs_of(&e), 0, SHAPE_2X1_V, false));
+    tick_n(&e, 5);
+    CHECK_EQ_U64(team_soldier_count(gs_of(&e), 0), 2);
+    CHECK_EQ_U64(count_type(&e, ENT_PRODUCT), 0);
+    CHECK_EQ_U64(count_type(&e, ENT_WEAPON), 0);
+    CHECK(gs_of(&e)->soldiers[1].variant == SOLDIER_NORMAL && gs_of(&e)->soldiers[1].team == 0);
+    CHECK(gs_of(&e)->controlled == 0); // the player keeps control of the one they had
+
+    CHECK(pad_debug_fill(gs_of(&e), 0, "rrrr", "rrrr")); // 4x2: a tank, milestone 6
+    CHECK(pad_build(gs_of(&e), 0, SHAPE_4X2, false));
     tick_n(&e, 5);
     CHECK_EQ_U64(count_type(&e, ENT_PRODUCT), 1);
-    CHECK_EQ_U64(count_type(&e, ENT_WEAPON), 0);
+    CHECK_EQ_U64(team_soldier_count(gs_of(&e), 0), 2);
     sim_free(&e.sim);
 }
 
@@ -980,8 +993,8 @@ static void test_clicking_the_pad_menu_does_not_fire(void) {
 
 static void check_combat_invariants(const Sim *sim) {
     const GameState *gs = &sim->gs;
-    const Companion *p = &gs->player;
-    CHECK(p->hp > 0 && p->hp <= p->max_hp); // a dead soldier is respawned within the same tick
+    const Companion *p = game_player_const(gs);
+    CHECK(p->hp > 0 && p->hp <= p->max_hp); // (the bot loop spawns a new soldier when the team is eliminated)
     CHECK(p->weapon >= WEAPON_FISTS && p->weapon < WEAPON_COUNT);
     if (p->weapon == WEAPON_FISTS) {
         CHECK_EQ_U64(p->ammo, 0);
@@ -1025,11 +1038,16 @@ static u64 run_bot_with_weapons(u64 seed, u32 ticks, u32 *shots, u32 *hits) {
             combat_give_weapon(&sim.gs, (WeaponKind)(1 + (t / 240) % (WEAPON_COUNT - 1)));
         }
         if (t % 480 == 0) {
-            companion_init(&sim.gs.player, vec2(430.0f + (f32)(t % 3) * 60.0f, 432.0f));
+            companion_init(game_player(&sim.gs), vec2(430.0f + (f32)(t % 3) * 60.0f, 432.0f));
             combat_give_weapon(&sim.gs, (WeaponKind)(1 + (t / 480) % (WEAPON_COUNT - 1)));
         }
+        if (sim.gs.controlled < 0) { // eliminated: a new soldier takes over (as a pad would provide one)
+            CHECK(soldier_spawn(&sim.gs, 0, SOLDIER_NORMAL, sim.gs.teams[0].spawn) >= 0);
+        }
         sim_tick(&sim, NULL);
-        check_combat_invariants(&sim);
+        if (sim.gs.controlled >= 0) {
+            check_combat_invariants(&sim);
+        }
     }
     const u64 hash = game_hash(&sim.gs);
     *shots = sim.gs.combat_stats.shots;
@@ -1079,12 +1097,12 @@ int main(void) {
     RUN_TEST(test_armed_soldier_swaps_on_the_grab_key_only);
     RUN_TEST(test_a_crate_action_is_not_also_a_shot_or_a_swap);
     RUN_TEST(test_no_punching_while_carrying);
-    RUN_TEST(test_death_drops_weapon_and_crate_then_respawns);
+    RUN_TEST(test_death_drops_weapon_and_crate_and_eliminates_the_last_soldier);
     RUN_TEST(test_a_hit_makes_the_soldier_drop_the_crate);
     RUN_TEST(test_dying_with_fists_drops_nothing);
     RUN_TEST(test_falling_in_the_water_loses_the_weapon);
     RUN_TEST(test_a_pad_builds_a_real_weapon_that_can_be_used);
-    RUN_TEST(test_soldier_and_vehicle_products_stay_placeholders);
+    RUN_TEST(test_a_pad_builds_soldiers_for_its_team_and_vehicles_stay_placeholders);
     RUN_TEST(test_without_aim_the_weapon_points_along_the_facing);
     RUN_TEST(test_aim_gives_the_direction_and_turns_the_soldier);
     RUN_TEST(test_bullets_fly_toward_the_cursor);

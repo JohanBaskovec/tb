@@ -10,6 +10,7 @@ typedef struct PlatformEvents {
     bool toggle_pause; // F2
     bool step;         // F3: advance one tick while paused
     bool toggle_slow;  // F4: quarter speed
+    bool restart;      // F5: start the match over
     bool mouse_moved;  // the mouse moved or clicked: from then on the soldier aims with it
     bool click;        // left mouse button pressed
     f32 click_x, click_y; // where, in window pixels (convert with render_window_to_logical)

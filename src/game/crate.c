@@ -78,8 +78,12 @@ static void crate_remove(GameState *gs, EntityId id, bool consumed) {
     if (c->state == CRATE_RESTING) {
         level_set_dyn_solid(gs->level, c->cell_x, c->cell_y, false);
     }
-    if (c->state == CRATE_CARRIED && entity_id_eq(gs->player.carrying, id)) {
-        gs->player.carrying = ENTITY_NONE;
+    if (c->state == CRATE_CARRIED) {
+        for (i32 i = 0; i < MAX_SOLDIERS; i++) {
+            if (gs->soldiers[i].alive && entity_id_eq(gs->soldiers[i].c.carrying, id)) {
+                gs->soldiers[i].c.carrying = ENTITY_NONE;
+            }
+        }
     }
     pool_mark_destroy(&gs->entities, id);
     if (consumed) {
@@ -141,7 +145,7 @@ static void spawn_from_zones(GameState *gs) {
 // ---- Falling and settling --------------------------------------------------------------------
 
 // A landed crate snaps to a grid cell: the column it overlaps most (and that is supported), on the
-// row it landed on. It waits while the player stands in that cell.
+// row it landed on. It waits while a soldier stands in that cell.
 static void try_settle(GameState *gs, EntityId id, Entity *e) {
     Level *lv = gs->level;
     const Body *b = &e->body;
@@ -170,9 +174,11 @@ static void try_settle(GameState *gs, EntityId id, Entity *e) {
         return;
     }
     const Rect cell = {(f32)(col * TILE_SIZE), (f32)(r * TILE_SIZE), CRATE_SIZE, CRATE_SIZE};
-    if (rect_overlap(cell, body_rect(&gs->player.body))) {
-        e->body.vel = vec2(0.0f, 0.0f); // wait for the player to move away
-        return;
+    for (i32 i = 0; i < MAX_SOLDIERS; i++) {
+        if (gs->soldiers[i].alive && rect_overlap(cell, body_rect(&gs->soldiers[i].c.body))) {
+            e->body.vel = vec2(0.0f, 0.0f); // wait for the soldier to move away
+            return;
+        }
     }
     Crate *c = &e->as.crate;
     e->body.pos = vec2(cell.x, cell.y);
@@ -255,21 +261,22 @@ static void carry_set_position(const Companion *p, Entity *e) {
 }
 
 void crate_carried_follow(GameState *gs) {
-    Companion *p = &gs->player;
-    if (!entity_id_valid(p->carrying)) {
-        return;
+    for (i32 i = 0; i < MAX_SOLDIERS; i++) {
+        Companion *p = &gs->soldiers[i].c;
+        if (!gs->soldiers[i].alive || !entity_id_valid(p->carrying)) {
+            continue;
+        }
+        Entity *e = pool_get(&gs->entities, p->carrying);
+        if (!e || e->pending_destroy) {
+            p->carrying = ENTITY_NONE;
+            continue;
+        }
+        carry_set_position(p, e);
     }
-    Entity *e = pool_get(&gs->entities, p->carrying);
-    if (!e || e->pending_destroy) {
-        p->carrying = ENTITY_NONE;
-        return;
-    }
-    carry_set_position(p, e);
 }
 
-// The reachable resting crate closest to the player that has nothing on top of it.
-static EntityId find_pickup(const GameState *gs) {
-    const Companion *p = &gs->player;
+// The reachable resting crate closest to the soldier that has nothing on top of it.
+static EntityId find_pickup(const GameState *gs, const Companion *p) {
     const Body *b = &p->body;
     const f32 reach = TUNING_PICKUP_REACH;
     const Rect zone = p->facing > 0
@@ -299,8 +306,8 @@ static EntityId find_pickup(const GameState *gs) {
     return best;
 }
 
-static void try_pick_up(GameState *gs) {
-    EntityId id = find_pickup(gs);
+static void try_pick_up(GameState *gs, Companion *p) {
+    EntityId id = find_pickup(gs, p);
     if (!entity_id_valid(id)) {
         return;
     }
@@ -310,15 +317,14 @@ static void try_pick_up(GameState *gs) {
     c->state = CRATE_CARRIED;
     e->body.vel = vec2(0.0f, 0.0f);
     e->prev_pos = e->body.pos;
-    gs->player.carrying = id;
+    p->carrying = id;
     gs->crate_stats.picked_up++;
     events_push(&gs->events, EV_CRATE_PICKED_UP, e->body.pos, (i32)c->kind, 0);
 }
 
 // Puts the crate in the first column entirely in front of the body, on the feet row, or up to
 // TUNING_PLACE_MAX_RAISE rows higher when that cell is taken (to build stacks).
-static bool try_place(GameState *gs) {
-    Companion *p = &gs->player;
+static bool try_place(GameState *gs, Companion *p) {
     const Body *b = &p->body;
     const i32 col = p->facing > 0 ? (i32)ceilf((b->pos.x + b->size.x) / (f32)TILE_SIZE)
                                   : level_px_to_tile(b->pos.x) - 1;
@@ -342,8 +348,7 @@ static bool try_place(GameState *gs) {
 }
 
 // Lobs the crate in the facing direction from above the head. Blocked by a low ceiling.
-static bool try_throw(GameState *gs) {
-    Companion *p = &gs->player;
+static bool try_throw(GameState *gs, Companion *p) {
     const Body *b = &p->body;
     const f32 x = b->pos.x + b->size.x * 0.5f - CRATE_SIZE * 0.5f;
     const f32 y = b->pos.y - CRATE_SIZE;
@@ -361,8 +366,7 @@ static bool try_throw(GameState *gs) {
     return true;
 }
 
-void crate_carry_update(GameState *gs, const InputFrame *in) {
-    Companion *p = &gs->player;
+void crate_carry_update(GameState *gs, Companion *p, const InputFrame *in) {
     const bool grab = input_pressed(in, ACT_GRAB);
     const bool fire = input_pressed(in, ACT_FIRE);
 
@@ -373,17 +377,16 @@ void crate_carry_update(GameState *gs, const InputFrame *in) {
             return;
         }
         if (fire) {
-            try_throw(gs);
+            try_throw(gs, p);
         } else if (grab) {
-            try_place(gs);
+            try_place(gs, p);
         }
     } else if (grab && !p->on_ladder) {
-        try_pick_up(gs);
+        try_pick_up(gs, p);
     }
 }
 
-void crate_release_carried(GameState *gs) {
-    Companion *p = &gs->player;
+void crate_release_carried(GameState *gs, Companion *p) {
     Entity *e = pool_get(&gs->entities, p->carrying);
     p->carrying = ENTITY_NONE;
     if (e && !e->pending_destroy && e->as.crate.state == CRATE_CARRIED) {

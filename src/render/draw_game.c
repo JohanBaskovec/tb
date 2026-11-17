@@ -1,6 +1,7 @@
 #include "render/draw_game.h"
 
 #include "core/config.h"
+#include "game/combat.h"
 #include "game/tuning.h"
 
 #include <math.h>
@@ -14,8 +15,6 @@ static const Color COL_PLATFORM_DARK = {120, 90, 48, 255};
 static const Color COL_LADDER = {156, 116, 64, 255};
 static const Color COL_WATER = {36, 96, 190, 255};
 static const Color COL_WATER_TOP = {110, 170, 240, 255};
-static const Color COL_PLAYER = {230, 90, 70, 255};
-static const Color COL_PLAYER_DARK = {150, 50, 40, 255};
 static const Color COL_EYE = {255, 255, 255, 255};
 static const Color COL_CRATE_RED = {208, 64, 56, 255};
 static const Color COL_CRATE_BLUE = {56, 112, 226, 255};
@@ -53,6 +52,10 @@ static const Color WEAPON_COLORS[WEAPON_COUNT] = {
     [WEAPON_STRONG_GRENADES] = {190, 230, 60, 255},
     [WEAPON_ROCKET_LAUNCHER] = {230, 90, 40, 255},
 };
+static const Color TEAM_COLORS[MAX_TEAMS] = {
+    {230, 90, 70, 255}, {80, 150, 235, 255}, {100, 200, 110, 255}, {235, 205, 70, 255}};
+static const Color TEAM_COLORS_DARK[MAX_TEAMS] = {
+    {150, 50, 40, 255}, {40, 90, 160, 255}, {50, 130, 60, 255}, {160, 130, 30, 255}};
 static const Color COL_HP_BACK = {40, 20, 24, 255};
 static const Color COL_HP = {90, 220, 100, 255};
 static const Color COL_HP_LOW = {230, 70, 60, 255};
@@ -130,13 +133,43 @@ static void draw_tiles(Render *r, const Level *lv, i32 ox, i32 oy) {
     }
 }
 
-static void draw_player(Render *r, const Companion *c, f32 alpha, i32 ox, i32 oy) {
+static void fill_circle(Render *r, Vec2 c, f32 radius, Color color) {
+    for (f32 dy = -radius; dy <= radius; dy += 1.0f) {
+        const f32 half = sqrtf(MAX(radius * radius - dy * dy, 0.0f));
+        render_fill_rect(r, (Rect){c.x - half, c.y + dy, half * 2.0f, 1.0f}, color);
+    }
+}
+
+static void draw_hp_bar(Render *r, Rect box, f32 fraction) {
+    render_fill_rect(r, box, COL_HP_BACK);
+    render_fill_rect(r, (Rect){box.x, box.y, box.w * clampf(fraction, 0.0f, 1.0f), box.h},
+                     fraction > 0.3f ? COL_HP : COL_HP_LOW);
+}
+
+static const Color COL_STEEL = {150, 156, 170, 255};
+static const Color COL_MARKER = {255, 224, 80, 255};
+
+static void draw_soldier(Render *r, const Soldier *s, bool controlled, f32 alpha, i32 ox, i32 oy) {
+    const Companion *c = &s->c;
     const f32 x = roundf(lerpf(c->prev_pos.x, c->body.pos.x, alpha));
     const f32 y = roundf(lerpf(c->prev_pos.y, c->body.pos.y, alpha));
     const f32 w = c->body.size.x, h = c->body.size.y;
     const bool flash = c->hurt_ticks > 0 && (c->hurt_ticks / 2) % 2 == 0;
-    render_fill_rect(r, rect_at(ox, oy, x, y, w, h), flash ? COL_FLASH : COL_PLAYER);
-    render_fill_rect(r, rect_at(ox, oy, x, y + h - 4.0f, w, 4.0f), flash ? COL_FLASH : COL_PLAYER_DARK);
+    const Color body = flash ? COL_FLASH : TEAM_COLORS[s->team];
+    const Color dark = flash ? COL_FLASH : TEAM_COLORS_DARK[s->team];
+    render_fill_rect(r, rect_at(ox, oy, x, y, w, h), body);
+    render_fill_rect(r, rect_at(ox, oy, x, y + h - 4.0f, w, 4.0f), dark);
+    // Variants: a stripe for the strong one, shoulder pads for the heavy ones, plating for the armored one.
+    if (s->variant == SOLDIER_STRONG) {
+        render_fill_rect(r, rect_at(ox, oy, x, y + 10.0f, w, 2.0f), COL_EYE);
+    } else if (s->variant == SOLDIER_HEAVY || s->variant == SOLDIER_HEAVY_ARMORED) {
+        render_fill_rect(r, rect_at(ox, oy, x - 2.0f, y + 6.0f, 2.0f, 6.0f), dark);
+        render_fill_rect(r, rect_at(ox, oy, x + w, y + 6.0f, 2.0f, 6.0f), dark);
+        if (s->variant == SOLDIER_HEAVY_ARMORED) {
+            render_fill_rect(r, rect_at(ox, oy, x + 1.0f, y + 8.0f, w - 2.0f, 8.0f), COL_STEEL);
+            render_fill_rect(r, rect_at(ox, oy, x + 1.0f, y + 12.0f, w - 2.0f, 1.0f), dark);
+        }
+    }
     const f32 eye_x = c->facing > 0 ? x + w - 5.0f : x + 3.0f;
     render_fill_rect(r, rect_at(ox, oy, eye_x, y + 4.0f, 2.0f, 3.0f), COL_EYE);
     // The weapon in hand (a colored barrel), or the fist while punching.
@@ -152,20 +185,25 @@ static void draw_player(Render *r, const Companion *c, f32 alpha, i32 ox, i32 oy
         const f32 fx = c->facing > 0 ? x + w : x - 6.0f;
         render_fill_rect(r, rect_at(ox, oy, fx, hand_y - 1.0f, 6.0f, 5.0f), WEAPON_COLORS[WEAPON_FISTS]);
     }
-}
-
-static void fill_circle(Render *r, Vec2 c, f32 radius, Color color) {
-    for (f32 dy = -radius; dy <= radius; dy += 1.0f) {
-        const f32 half = sqrtf(MAX(radius * radius - dy * dy, 0.0f));
-        render_fill_rect(r, (Rect){c.x - half, c.y + dy, half * 2.0f, 1.0f}, color);
+    if (controlled) { // a small arrow above the head
+        const f32 mx = x + w * 0.5f - (f32)ox, my = y - 9.0f - (f32)oy;
+        render_line(r, vec2(mx - 3.0f, my), vec2(mx + 3.0f, my), COL_MARKER);
+        render_line(r, vec2(mx - 2.0f, my + 1.0f), vec2(mx + 2.0f, my + 1.0f), COL_MARKER);
+        render_line(r, vec2(mx - 1.0f, my + 2.0f), vec2(mx + 1.0f, my + 2.0f), COL_MARKER);
+        render_line(r, vec2(mx, my + 3.0f), vec2(mx, my + 3.0f), COL_MARKER);
+    } else if (c->hp < c->max_hp) {
+        draw_hp_bar(r, rect_at(ox, oy, x, y - 5.0f, w, 3.0f), (f32)c->hp / (f32)c->max_hp);
     }
 }
 
-static void draw_hp_bar(Render *r, Rect box, f32 fraction) {
-    render_fill_rect(r, box, COL_HP_BACK);
-    render_fill_rect(r, (Rect){box.x, box.y, box.w * clampf(fraction, 0.0f, 1.0f), box.h},
-                     fraction > 0.3f ? COL_HP : COL_HP_LOW);
+static void draw_soldiers(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 oy) {
+    for (i32 i = 0; i < MAX_SOLDIERS; i++) {
+        if (gs->soldiers[i].alive) {
+            draw_soldier(r, &gs->soldiers[i], i == gs->controlled, alpha, ox, oy);
+        }
+    }
 }
+
 
 // A wooden frame with crossed planks; the colored panel tells red from blue (and from team colors).
 static void draw_crate_sprite(Render *r, f32 x, f32 y, CrateKind kind) {
@@ -219,7 +257,8 @@ static void draw_pads(Render *r, const GameState *gs, i32 ox, i32 oy) {
             continue;
         }
         const Rect pr = pad_rect(gs, team);
-        render_fill_rect(r, rect_at(ox, oy, pr.x - 2.0f, pr.y + pr.h, pr.w + 4.0f, 3.0f), COL_PAD_PLATE);
+        render_fill_rect(r, rect_at(ox, oy, pr.x - 2.0f, pr.y + pr.h, pr.w + 4.0f, 3.0f), TEAM_COLORS[team]);
+        render_fill_rect(r, rect_at(ox, oy, pr.x + 2.0f, pr.y + pr.h, pr.w - 4.0f, 1.0f), COL_PAD_PLATE);
         for (i32 row = 0; row < PAD_ROWS; row++) {
             for (i32 col = 0; col < PAD_COLS; col++) {
                 render_outline_rect(r, rect_at(ox, oy, pr.x + (f32)(col * TILE_SIZE), pr.y + (f32)(row * TILE_SIZE),
@@ -348,13 +387,36 @@ static void draw_crosshair(Render *r, const Vec2 *at) {
 }
 
 // Hit points and ammunition of the controlled soldier, as bars (there is no text rendering yet).
-static void draw_hud(Render *r, const Companion *c) {
+static void draw_hud(Render *r, const GameState *gs) {
+    const Companion *c = game_player_const(gs);
     draw_hp_bar(r, (Rect){4.0f, 14.0f, 64.0f, 6.0f}, (f32)c->hp / (f32)c->max_hp);
     if (c->weapon != WEAPON_FISTS) {
         const WeaponDef *def = weapon_def(c->weapon);
         const f32 f = (f32)c->ammo / (f32)def->max_ammo;
         render_fill_rect(r, (Rect){4.0f, 22.0f, 64.0f, 4.0f}, COL_HP_BACK);
         render_fill_rect(r, (Rect){4.0f, 22.0f, 64.0f * clampf(f, 0.0f, 1.0f), 4.0f}, WEAPON_COLORS[c->weapon]);
+    }
+    // The team's current order: four pips, the active one lit.
+    const Color order_colors[ORDER_COUNT] = {{80, 220, 230, 255}, {100, 210, 100, 255}, {240, 160, 50, 255}, {235, 70, 70, 255}};
+    const i32 team = gs->controlled >= 0 ? gs->soldiers[gs->controlled].team : PLAYER_TEAM;
+    for (i32 o = 0; o < ORDER_COUNT; o++) {
+        const bool on = (i32)gs->teams[team].order == o;
+        render_fill_rect(r, (Rect){4.0f + (f32)(o * 10), 30.0f, 8.0f, on ? 8.0f : 4.0f}, on ? order_colors[o] : COL_HP_BACK);
+    }
+    // One pip per living soldier of the team (the controlled one is outlined).
+    i32 n = 0;
+    for (i32 i = 0; i < MAX_SOLDIERS && n < 24; i++) {
+        if (gs->soldiers[i].alive && gs->soldiers[i].team == team) {
+            const Rect pip = {4.0f + (f32)(n * 6), 42.0f, 4.0f, 6.0f};
+            render_fill_rect(r, pip, TEAM_COLORS[team]);
+            if (i == gs->controlled) {
+                render_outline_rect(r, (Rect){pip.x - 1.0f, pip.y - 1.0f, 6.0f, 8.0f}, COL_MARKER);
+            }
+            n++;
+        }
+    }
+    if (gs->controlled < 0) { // the whole team is gone
+        render_fill_rect(r, (Rect){0.0f, 0.0f, (f32)LOGICAL_W, (f32)LOGICAL_H}, (Color){10, 0, 0, 150});
     }
 }
 
@@ -399,7 +461,7 @@ static void draw_flag(Render *r, int slot, bool on, Color color) {
 
 static void draw_debug(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 oy) {
     const Level *lv = gs->level;
-    const Companion *c = &gs->player;
+    const Companion *c = game_player_const(gs);
 
     // Tile grid.
     const Color grid = {52, 58, 88, 255};
@@ -462,11 +524,11 @@ void draw_game(Render *r, const GameState *gs, const Camera *cam, const PadMenu 
     draw_products(r, gs, alpha, ox, oy);
     draw_loot_weapons(r, gs, alpha, ox, oy);
     draw_dummies(r, gs, alpha, ox, oy);
-    draw_player(r, &gs->player, alpha, ox, oy);
+    draw_soldiers(r, gs, alpha, ox, oy);
     draw_projectiles(r, gs, alpha, ox, oy);
     draw_fx(r, fx, ox, oy);
     draw_pad_menu(r, menu, ox, oy);
-    draw_hud(r, &gs->player);
+    draw_hud(r, gs);
     draw_crosshair(r, crosshair);
     if (flags & DRAW_DEBUG) {
         draw_debug(r, gs, alpha, ox, oy);

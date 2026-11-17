@@ -379,6 +379,10 @@ bool level_dyn_solid(const Level *lv, i32 tx, i32 ty) {
     return lv->dyn_solid[ty * lv->width + tx] != 0;
 }
 
+void level_clear_dynamic(Level *lv) {
+    memset(lv->dyn_solid, 0, (usize)lv->width * (usize)lv->height);
+}
+
 void level_set_dyn_solid(Level *lv, i32 tx, i32 ty, bool solid) {
     ASSERT(tx >= 0 && tx < lv->width && ty >= 0 && ty < lv->height);
     lv->dyn_solid[ty * lv->width + tx] = solid ? 1 : 0;

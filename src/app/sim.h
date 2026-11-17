@@ -29,6 +29,9 @@ typedef struct Sim {
     Camera cam;
     Bot bot;
     Script script;
+    u64 seed;
+    bool has_start;
+    Vec2 start_feet;
     bool use_bot;
     bool use_script;
     InputFrame input; // last frame fed to the game
@@ -42,6 +45,8 @@ typedef struct Sim {
 
 bool sim_init(Sim *sim, const SimConfig *cfg, char *err, usize err_len);
 void sim_free(Sim *sim);
+// Starts the match over (same level, same seed): soldiers, crates and counters are reset. Input sources keep going.
+void sim_restart(Sim *sim);
 // One fixed tick. Input comes from the script, else the bot, else `human` (may be NULL).
 void sim_tick(Sim *sim, const InputFrame *human);
 // True while a script is configured and not yet finished.

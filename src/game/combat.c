@@ -13,8 +13,8 @@
 // ---- Targets -----------------------------------------------------------------------------------
 
 typedef struct Target {
-    bool is_player;
-    u16 slot; // dummies: entity slot
+    bool is_soldier;
+    u16 slot; // soldier index, or dummy entity slot
     i32 team;
     Rect rect;
 } Target;
@@ -27,8 +27,11 @@ static EntityId slot_id(const GameState *gs, u16 slot) {
 
 static u32 collect_targets(GameState *gs, Target *out) {
     u32 n = 0;
-    if (gs->player.hp > 0) {
-        out[n++] = (Target){true, 0, PLAYER_TEAM, body_rect(&gs->player.body)};
+    for (u16 i = 0; i < MAX_SOLDIERS; i++) {
+        const Soldier *s = &gs->soldiers[i];
+        if (s->alive && s->c.hp > 0) {
+            out[n++] = (Target){true, i, s->team, body_rect(&s->c.body)};
+        }
     }
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
         const Entity *e = &gs->entities.slots[i];
@@ -48,12 +51,12 @@ static void hurt(GameState *gs, const Target *t, i32 amount, Vec2 impulse) {
         return;
     }
     gs->combat_stats.hits++;
-    events_push(&gs->events, EV_DAMAGE, rect_center(t->rect), amount, t->is_player ? 1 : 0);
-    if (t->is_player) {
-        Companion *p = &gs->player;
+    events_push(&gs->events, EV_DAMAGE, rect_center(t->rect), amount, t->is_soldier ? 1 : 0);
+    if (t->is_soldier) {
+        Companion *p = &gs->soldiers[t->slot].c;
         p->hp -= amount;
         p->hurt_ticks = HURT_FLASH_TICKS;
-        crate_release_carried(gs); // a hit makes the soldier drop what it carries
+        crate_release_carried(gs, p); // a hit makes the soldier drop what it carries
         p->body.vel = vec2_add(p->body.vel, impulse);
         if (impulse.y < 0.0f) {
             p->body.on_ground = false;
@@ -86,7 +89,7 @@ static bool rect_hits_solid(const Level *lv, Rect r) {
 }
 
 // True if no solid tile lies on the segment a-b.
-static bool line_clear(const Level *lv, Vec2 a, Vec2 b) {
+bool combat_line_clear(const Level *lv, Vec2 a, Vec2 b) {
     const f32 dx = b.x - a.x, dy = b.y - a.y;
     const f32 len = sqrtf(dx * dx + dy * dy);
     const i32 steps = (i32)(len / 2.0f) + 1;
@@ -115,7 +118,7 @@ void combat_explode(GameState *gs, Vec2 center, WeaponKind weapon) {
                                clampf(center.y, t->rect.y, t->rect.y + t->rect.h));
         const f32 dx = near.x - center.x, dy = near.y - center.y;
         const f32 dist = sqrtf(dx * dx + dy * dy);
-        if (dist > def->radius || !line_clear(gs->level, center, near)) {
+        if (dist > def->radius || !combat_line_clear(gs->level, center, near)) {
             continue;
         }
         const f32 falloff = 1.0f - (1.0f - TUNING_EXPLOSION_MIN_FALLOFF) * (dist / def->radius);
@@ -273,11 +276,14 @@ u32 projectile_count(const GameState *gs) {
 
 // ---- The player's weapon -----------------------------------------------------------------------
 
-void combat_give_weapon(GameState *gs, WeaponKind kind) {
-    Companion *p = &gs->player;
+void soldier_give_weapon(Companion *p, WeaponKind kind) {
     p->weapon = kind;
     p->ammo = weapon_def(kind)->max_ammo;
     p->fire_cooldown = 0;
+}
+
+void combat_give_weapon(GameState *gs, WeaponKind kind) {
+    soldier_give_weapon(game_player(gs), kind);
 }
 
 static Vec2 drop_pos(const Companion *p) {
@@ -285,8 +291,7 @@ static Vec2 drop_pos(const Companion *p) {
     return vec2(c.x - TUNING_LOOT_W * 0.5f, p->body.pos.y + p->body.size.y - TUNING_LOOT_H);
 }
 
-static void equip(GameState *gs, WeaponKind kind, i32 ammo) {
-    Companion *p = &gs->player;
+static void equip(Companion *p, WeaponKind kind, i32 ammo) {
     p->weapon = kind;
     p->ammo = ammo;
     p->fire_cooldown = 0;
@@ -294,8 +299,7 @@ static void equip(GameState *gs, WeaponKind kind, i32 ammo) {
 
 // Picks up a weapon the soldier stands on: automatically when unarmed, on the grab key (swapping
 // with the weapon in hand) otherwise.
-static void pickup_update(GameState *gs, bool grab) {
-    Companion *p = &gs->player;
+static void pickup_update(GameState *gs, Companion *p, bool grab) {
     const bool unarmed = p->weapon == WEAPON_FISTS;
     if (!unarmed && !grab) {
         return;
@@ -313,15 +317,15 @@ static void pickup_update(GameState *gs, bool grab) {
             }
             events_push(&gs->events, EV_WEAPON_DROPPED, body_center(&p->body), (i32)p->weapon, 0);
         }
-        equip(gs, item.kind, item.ammo);
+        equip(p, item.kind, item.ammo);
         events_push(&gs->events, EV_WEAPON_PICKED_UP, body_center(&p->body), (i32)item.kind, 0);
         pool_mark_destroy(&gs->entities, slot_id(gs, i));
         return;
     }
 }
 
-static void punch(GameState *gs, const WeaponDef *def) {
-    Companion *p = &gs->player;
+static void punch(GameState *gs, Soldier *s, const WeaponDef *def) {
+    Companion *p = &s->c;
     const Body *b = &p->body;
     const Rect fist = {p->facing > 0 ? b->pos.x + b->size.x : b->pos.x - def->reach, b->pos.y + 4.0f,
                        def->reach, b->size.y - 8.0f};
@@ -329,7 +333,7 @@ static void punch(GameState *gs, const WeaponDef *def) {
     const u32 n = collect_targets(gs, targets);
     i32 hits = 0;
     for (u32 i = 0; i < n; i++) {
-        if (targets[i].team != PLAYER_TEAM && rect_overlap(fist, targets[i].rect)) {
+        if (targets[i].team != s->team && rect_overlap(fist, targets[i].rect)) {
             hurt(gs, &targets[i], def->damage, vec2((f32)p->facing * def->knockback, 0.0f));
             hits++;
         }
@@ -377,8 +381,8 @@ static Vec2 grenade_velocity(const WeaponDef *def, const Companion *p, const Inp
                 clampf(dy / t - 0.5f * TUNING_GRAVITY * t, -2.2f * def->lift, 2.2f * def->lift));
 }
 
-static bool fire(GameState *gs, const WeaponDef *def, const InputFrame *in) {
-    Companion *p = &gs->player;
+static bool fire(GameState *gs, Soldier *s, const WeaponDef *def, const InputFrame *in) {
+    Companion *p = &s->c;
     const Vec2 c = body_center(&p->body);
     // Muzzle a little way along the aim; if that spot is inside a wall, shoot from the shoulder instead.
     const Vec2 sh = shoulder(p);
@@ -397,7 +401,7 @@ static bool fire(GameState *gs, const WeaponDef *def, const InputFrame *in) {
             vel = vec2_add(vel, vec2(-p->aim_dir.y * jitter, p->aim_dir.x * jitter));
         }
     }
-    if (!entity_id_valid(projectile_spawn(gs, p->weapon, PLAYER_TEAM, muzzle, vel))) {
+    if (!entity_id_valid(projectile_spawn(gs, p->weapon, s->team, muzzle, vel))) {
         return false;
     }
     gs->combat_stats.shots++;
@@ -411,8 +415,8 @@ static bool fire(GameState *gs, const WeaponDef *def, const InputFrame *in) {
     return true;
 }
 
-void combat_player_update(GameState *gs, const InputFrame *in, bool crate_busy) {
-    Companion *p = &gs->player;
+void combat_soldier_update(GameState *gs, Soldier *s, const InputFrame *in, bool crate_busy) {
+    Companion *p = &s->c;
     if (p->fire_cooldown > 0) {
         p->fire_cooldown--;
     }
@@ -429,7 +433,7 @@ void combat_player_update(GameState *gs, const InputFrame *in, bool crate_busy) 
     if (crate_busy || entity_id_valid(p->carrying)) {
         return;
     }
-    pickup_update(gs, input_pressed(in, ACT_GRAB));
+    pickup_update(gs, p, input_pressed(in, ACT_GRAB));
 
     const WeaponDef *def = weapon_def(p->weapon);
     const bool trigger = def->automatic ? input_down(in, ACT_FIRE) : input_pressed(in, ACT_FIRE);
@@ -437,19 +441,16 @@ void combat_player_update(GameState *gs, const InputFrame *in, bool crate_busy) 
         return;
     }
     if (def->shot == SHOT_MELEE) {
-        punch(gs, def);
+        punch(gs, s, def);
     } else {
-        fire(gs, def, in);
+        fire(gs, s, def, in);
     }
 }
 
-void combat_player_died(GameState *gs) {
-    Companion *p = &gs->player;
-    gs->combat_stats.deaths++;
-    events_push(&gs->events, EV_PLAYER_DIED, body_center(&p->body), 0, 0);
+void combat_drop_loot(GameState *gs, Companion *p) {
     if (p->weapon != WEAPON_FISTS && p->ammo > 0 &&
         entity_id_valid(loot_spawn_weapon(gs, p->weapon, p->ammo, drop_pos(p)))) {
         events_push(&gs->events, EV_WEAPON_DROPPED, body_center(&p->body), (i32)p->weapon, 0);
     }
-    crate_release_carried(gs);
+    crate_release_carried(gs, p);
 }

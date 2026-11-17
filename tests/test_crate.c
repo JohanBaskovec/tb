@@ -60,7 +60,7 @@ static void press(Env *e, u32 mask) {
 }
 
 static void teleport(Env *e, f32 x, f32 feet_y) {
-    companion_init(&gs_of(e)->player, vec2(x, feet_y));
+    companion_init(game_player(gs_of(e)), vec2(x, feet_y));
     ticks(e, 0, 2);
 }
 
@@ -104,7 +104,7 @@ static u32 resting_count(Env *e) {
 }
 
 static f32 player_feet(Env *e) {
-    return gs_of(e)->player.body.pos.y + gs_of(e)->player.body.size.y;
+    return game_player(gs_of(e))->body.pos.y + game_player(gs_of(e))->body.size.y;
 }
 
 // ---- Descent, landing, stacking --------------------------------------------------------------
@@ -256,7 +256,7 @@ static void test_crate_waits_while_the_player_stands_in_its_cell(void) {
     CHECK(crate_of(&e, id) != NULL);
     CHECK(crate_of(&e, id)->as.crate.state != CRATE_RESTING); // waiting on the ground
     CHECK(!level_dyn_solid(&e.sim.level, 6, 9));
-    CHECK_NEAR(gs_of(&e)->player.body.pos.x, 98.0, 1e-3); // and the player was not shoved
+    CHECK_NEAR(game_player(gs_of(&e))->body.pos.x, 98.0, 1e-3); // and the player was not shoved
     ticks(&e, KEY(ACT_RIGHT), 40); // walk away
     CHECK(is_resting_at(&e, 6, 9));
     sim_free(&e.sim);
@@ -270,7 +270,7 @@ static void test_player_is_blocked_by_a_crate_and_can_climb_a_low_stack(void) {
     CHECK(env_init(&e, &m, NULL));
     spawn_resting(&e, CRATE_RED, 8, 9);
     ticks(&e, KEY(ACT_RIGHT), 120);
-    CHECK_NEAR(gs_of(&e)->player.body.pos.x, 8.0f * TILE_SIZE - TUNING_COMPANION_W, 1e-3);
+    CHECK_NEAR(game_player(gs_of(&e))->body.pos.x, 8.0f * TILE_SIZE - TUNING_COMPANION_W, 1e-3);
 
     // A walker hops a 1-high crate and a 2-high stack.
     Walker w;
@@ -278,9 +278,9 @@ static void test_player_is_blocked_by_a_crate_and_can_climb_a_low_stack(void) {
     InputFrame in = {0};
     bool arrived = false;
     for (int i = 0; i < 400 && !arrived; i++) {
-        walker_think(&w, &e.sim.level, &gs_of(&e)->player, &in);
+        walker_think(&w, &e.sim.level, game_player(gs_of(&e)), &in);
         sim_tick(&e.sim, &in);
-        arrived = walker_arrived(&w, &gs_of(&e)->player) && gs_of(&e)->player.body.on_ground;
+        arrived = walker_arrived(&w, game_player(gs_of(&e))) && game_player(gs_of(&e))->body.on_ground;
     }
     CHECK(arrived);
     sim_free(&e.sim);
@@ -292,9 +292,9 @@ static void test_player_is_blocked_by_a_crate_and_can_climb_a_low_stack(void) {
     memset(&in, 0, sizeof(in));
     arrived = false;
     for (int i = 0; i < 500 && !arrived; i++) {
-        walker_think(&w, &e.sim.level, &gs_of(&e)->player, &in);
+        walker_think(&w, &e.sim.level, game_player(gs_of(&e)), &in);
         sim_tick(&e.sim, &in);
-        arrived = walker_arrived(&w, &gs_of(&e)->player) && gs_of(&e)->player.body.on_ground;
+        arrived = walker_arrived(&w, game_player(gs_of(&e))) && game_player(gs_of(&e))->body.on_ground;
     }
     CHECK(arrived);
     sim_free(&e.sim);
@@ -311,9 +311,9 @@ static void test_a_tall_stack_is_a_wall(void) {
     walker_init(&w, 200.0f);
     InputFrame in = {0};
     for (int i = 0; i < 600; i++) {
-        walker_think(&w, &e.sim.level, &gs_of(&e)->player, &in);
+        walker_think(&w, &e.sim.level, game_player(gs_of(&e)), &in);
         sim_tick(&e.sim, &in);
-        CHECK(gs_of(&e)->player.body.pos.x <= 8.0f * TILE_SIZE - TUNING_COMPANION_W + 1e-3f);
+        CHECK(game_player(gs_of(&e))->body.pos.x <= 8.0f * TILE_SIZE - TUNING_COMPANION_W + 1e-3f);
     }
     CHECK(walker_stuck(&w));
     sim_free(&e.sim);
@@ -325,13 +325,13 @@ static void test_player_stands_on_a_crate(void) {
     CHECK(env_init(&e, &m, NULL));
     spawn_resting(&e, CRATE_RED, 6, 9);
     teleport(&e, 104, 144); // feet on top of the crate
-    CHECK(gs_of(&e)->player.body.on_ground);
+    CHECK(game_player(gs_of(&e))->body.on_ground);
     CHECK_NEAR(player_feet(&e), 144.0, 1e-3);
     ticks(&e, 0, 30);
     CHECK_NEAR(player_feet(&e), 144.0, 1e-3);
     // Standing on it does not let you pick it up.
     press(&e, KEY(ACT_GRAB));
-    CHECK(!entity_id_valid(gs_of(&e)->player.carrying));
+    CHECK(!entity_id_valid(game_player(gs_of(&e))->carrying));
     sim_free(&e.sim);
 }
 
@@ -344,13 +344,13 @@ static void test_pick_up_and_carry(void) {
     EntityId id = spawn_resting(&e, CRATE_BLUE, 6, 9);
     teleport(&e, 88, 160); // body right edge at 94, the crate starts at 96
     tick(&e, KEY(ACT_GRAB));
-    CHECK(entity_id_eq(gs_of(&e)->player.carrying, id));
+    CHECK(entity_id_eq(game_player(gs_of(&e))->carrying, id));
     CHECK(crate_of(&e, id)->as.crate.state == CRATE_CARRIED);
     CHECK(!level_dyn_solid(&e.sim.level, 6, 9)); // no longer solid
     CHECK_EQ_U64(gs_of(&e)->crate_stats.picked_up, 1);
 
     tick(&e, 0);
-    const Body *pb = &gs_of(&e)->player.body;
+    const Body *pb = &game_player(gs_of(&e))->body;
     CHECK_NEAR(crate_of(&e, id)->body.pos.x, pb->pos.x + pb->size.x * 0.5f - 8.0f, 1e-3);
     CHECK_NEAR(crate_of(&e, id)->body.pos.y, pb->pos.y - 16.0f, 1e-3); // right above the head
     CHECK(crate_of(&e, id)->as.crate.kind == CRATE_BLUE);              // keeps its colour
@@ -364,15 +364,15 @@ static void test_pick_up_reach_and_direction(void) {
     spawn_resting(&e, CRATE_RED, 8, 9); // left edge at 128
     teleport(&e, 88, 160);              // 34 px away: out of reach
     press(&e, KEY(ACT_GRAB));
-    CHECK(!entity_id_valid(gs_of(&e)->player.carrying));
+    CHECK(!entity_id_valid(game_player(gs_of(&e))->carrying));
 
     // A crate behind the player is not picked (facing right, crate on the left).
     spawn_resting(&e, CRATE_RED, 4, 9); // right edge at 80, body starts at 82
     press(&e, KEY(ACT_GRAB));
-    CHECK(!entity_id_valid(gs_of(&e)->player.carrying));
-    gs_of(&e)->player.facing = -1; // turn around: now it is
+    CHECK(!entity_id_valid(game_player(gs_of(&e))->carrying));
+    game_player(gs_of(&e))->facing = -1; // turn around: now it is
     press(&e, KEY(ACT_GRAB));
-    CHECK(entity_id_valid(gs_of(&e)->player.carrying));
+    CHECK(entity_id_valid(game_player(gs_of(&e))->carrying));
     CHECK(!level_dyn_solid(&e.sim.level, 4, 9));
     sim_free(&e.sim);
 }
@@ -385,7 +385,7 @@ static void test_only_the_top_of_a_stack_can_be_picked(void) {
     EntityId top = spawn_resting(&e, CRATE_BLUE, 6, 8);
     teleport(&e, 88, 160);
     press(&e, KEY(ACT_GRAB));
-    CHECK(entity_id_eq(gs_of(&e)->player.carrying, top)); // the upper one
+    CHECK(entity_id_eq(game_player(gs_of(&e))->carrying, top)); // the upper one
     CHECK(is_resting_at(&e, 6, 9));                       // the lower one is untouched
     CHECK(!level_dyn_solid(&e.sim.level, 6, 8));
     sim_free(&e.sim);
@@ -397,7 +397,7 @@ static void test_only_the_top_of_a_stack_can_be_picked(void) {
     spawn_resting(&e, CRATE_RED, 6, 7);
     teleport(&e, 88, 160);
     press(&e, KEY(ACT_GRAB));
-    CHECK(!entity_id_valid(gs_of(&e)->player.carrying));
+    CHECK(!entity_id_valid(game_player(gs_of(&e))->carrying));
     CHECK_EQ_U64(resting_count(&e), 3);
     sim_free(&e.sim);
 }
@@ -410,7 +410,7 @@ static void test_carrying_slows_and_lowers_the_jump(void) {
     CHECK(env_init(&e, &m, NULL));
     teleport(&e, 88, 160);
     ticks(&e, KEY(ACT_RIGHT), 20);
-    CHECK_NEAR(gs_of(&e)->player.body.vel.x, TUNING_WALK_SPEED, 1e-3);
+    CHECK_NEAR(game_player(gs_of(&e))->body.vel.x, TUNING_WALK_SPEED, 1e-3);
     sim_free(&e.sim);
 
     // With one in the hands: slower.
@@ -418,20 +418,20 @@ static void test_carrying_slows_and_lowers_the_jump(void) {
     spawn_resting(&e, CRATE_RED, 6, 9);
     teleport(&e, 88, 160);
     press(&e, KEY(ACT_GRAB));
-    CHECK(entity_id_valid(gs_of(&e)->player.carrying));
+    CHECK(entity_id_valid(game_player(gs_of(&e))->carrying));
     ticks(&e, KEY(ACT_RIGHT), 20);
-    CHECK_NEAR(gs_of(&e)->player.body.vel.x, TUNING_WALK_SPEED * TUNING_CARRY_SPEED_MULT, 1e-3);
+    CHECK_NEAR(game_player(gs_of(&e))->body.vel.x, TUNING_WALK_SPEED * TUNING_CARRY_SPEED_MULT, 1e-3);
 
     // Lower jump: (300 * 0.8)^2 / 1800 = 32 px, minus discretisation.
     ticks(&e, 0, 20);
-    const f32 start = gs_of(&e)->player.body.pos.y;
+    const f32 start = game_player(gs_of(&e))->body.pos.y;
     f32 top = start;
     for (int i = 0; i < 70; i++) {
         tick(&e, i < 60 ? KEY(ACT_JUMP) : 0);
-        top = MIN(top, gs_of(&e)->player.body.pos.y);
+        top = MIN(top, game_player(gs_of(&e))->body.pos.y);
     }
     CHECK(start - top > 27.0f && start - top < 33.0f);
-    CHECK(entity_id_valid(gs_of(&e)->player.carrying)); // still holding it
+    CHECK(entity_id_valid(game_player(gs_of(&e))->carrying)); // still holding it
 
     sim_free(&e.sim);
 
@@ -440,13 +440,13 @@ static void test_carrying_slows_and_lowers_the_jump(void) {
     spawn_resting(&e, CRATE_RED, 16, 9);
     teleport(&e, 15.0f * TILE_SIZE + 8.0f, 160);
     press(&e, KEY(ACT_GRAB));
-    CHECK(entity_id_valid(gs_of(&e)->player.carrying));
+    CHECK(entity_id_valid(game_player(gs_of(&e))->carrying));
     ticks(&e, KEY(ACT_UP), 20);
-    CHECK(!gs_of(&e)->player.on_ladder);
+    CHECK(!game_player(gs_of(&e))->on_ladder);
     press(&e, KEY(ACT_GRAB)); // put it down
-    CHECK(!entity_id_valid(gs_of(&e)->player.carrying));
+    CHECK(!entity_id_valid(game_player(gs_of(&e))->carrying));
     ticks(&e, KEY(ACT_UP), 10);
-    CHECK(gs_of(&e)->player.on_ladder);
+    CHECK(game_player(gs_of(&e))->on_ladder);
     sim_free(&e.sim);
 }
 
@@ -459,11 +459,11 @@ static void test_place_in_front(void) {
     spawn_resting(&e, CRATE_BLUE, 6, 9);
     teleport(&e, 88, 160);
     press(&e, KEY(ACT_GRAB)); // pick it up
-    CHECK(entity_id_valid(gs_of(&e)->player.carrying));
+    CHECK(entity_id_valid(game_player(gs_of(&e))->carrying));
 
     tick(&e, 0);
     tick(&e, KEY(ACT_GRAB)); // put it down: first column entirely in front of the body
-    CHECK(!entity_id_valid(gs_of(&e)->player.carrying));
+    CHECK(!entity_id_valid(game_player(gs_of(&e))->carrying));
     CHECK(is_resting_at(&e, 6, 9)); // placed and settled within the same tick
     CHECK_EQ_U64(gs_of(&e)->crate_stats.placed, 1);
     CHECK(resting_at(&e, 6, 9)->as.crate.kind == CRATE_BLUE);
@@ -473,9 +473,9 @@ static void test_place_in_front(void) {
     CHECK(env_init(&e, &m, NULL));
     spawn_resting(&e, CRATE_RED, 4, 9);
     teleport(&e, 88, 160);
-    gs_of(&e)->player.facing = -1;
+    game_player(gs_of(&e))->facing = -1;
     press(&e, KEY(ACT_GRAB)); // takes the crate at (4,9), which is in front of us
-    CHECK(entity_id_valid(gs_of(&e)->player.carrying));
+    CHECK(entity_id_valid(game_player(gs_of(&e))->carrying));
     CHECK(!level_dyn_solid(&e.sim.level, 4, 9));
     tick(&e, KEY(ACT_GRAB)); // and puts it back: body left edge is 82, so column 4 (right edge 80)
     CHECK(is_resting_at(&e, 4, 9));
@@ -491,17 +491,17 @@ static void test_place_builds_stacks_up_to_the_raise_limit(void) {
     // Carry three more crates, one after the other, placing each in front.
     for (i32 n = 0; n < 3; n++) {
         const EntityId c = spawn_free(&e, CRATE_RED, 40, 0, CRATE_CARRIED);
-        gs_of(&e)->player.carrying = c;
+        game_player(gs_of(&e))->carrying = c;
         press(&e, KEY(ACT_GRAB));
         if (n < 2) {
-            CHECK(!entity_id_valid(gs_of(&e)->player.carrying));
+            CHECK(!entity_id_valid(game_player(gs_of(&e))->carrying));
         }
     }
     CHECK(is_resting_at(&e, 6, 9));
     CHECK(is_resting_at(&e, 6, 8));
     CHECK(is_resting_at(&e, 6, 7));
     // The third one could not be placed (4th level is out of the raise limit): still carried.
-    CHECK(entity_id_valid(gs_of(&e)->player.carrying));
+    CHECK(entity_id_valid(game_player(gs_of(&e))->carrying));
     CHECK_EQ_U64(resting_count(&e), 3);
     sim_free(&e.sim);
 }
@@ -512,9 +512,9 @@ static void test_place_is_refused_against_a_wall(void) {
     Env e;
     CHECK(env_init(&e, &m, NULL));
     teleport(&e, 88, 160);
-    gs_of(&e)->player.carrying = spawn_free(&e, CRATE_RED, 40, 0, CRATE_CARRIED);
+    game_player(gs_of(&e))->carrying = spawn_free(&e, CRATE_RED, 40, 0, CRATE_CARRIED);
     press(&e, KEY(ACT_GRAB));
-    CHECK(entity_id_valid(gs_of(&e)->player.carrying)); // nowhere to put it
+    CHECK(entity_id_valid(game_player(gs_of(&e))->carrying)); // nowhere to put it
     CHECK_EQ_U64(gs_of(&e)->crate_stats.placed, 0);
     sim_free(&e.sim);
 }
@@ -527,9 +527,9 @@ static void test_throw_lobs_in_the_facing_direction(void) {
     CHECK(env_init(&e, &m, NULL));
     teleport(&e, 40, 160);
     EntityId id = spawn_free(&e, CRATE_RED, 0, 0, CRATE_CARRIED);
-    gs_of(&e)->player.carrying = id;
+    game_player(gs_of(&e))->carrying = id;
     tick(&e, KEY(ACT_FIRE));
-    CHECK(!entity_id_valid(gs_of(&e)->player.carrying));
+    CHECK(!entity_id_valid(game_player(gs_of(&e))->carrying));
     CHECK(crate_of(&e, id)->as.crate.state == CRATE_FALLING);
     CHECK(crate_of(&e, id)->body.vel.x > 0.0f && crate_of(&e, id)->body.vel.y < 0.0f);
     CHECK_EQ_U64(gs_of(&e)->crate_stats.thrown, 1);
@@ -543,8 +543,8 @@ static void test_throw_lobs_in_the_facing_direction(void) {
     // Facing left.
     CHECK(env_init(&e, &m, NULL));
     teleport(&e, 200, 160);
-    gs_of(&e)->player.facing = -1;
-    gs_of(&e)->player.carrying = spawn_free(&e, CRATE_RED, 0, 0, CRATE_CARRIED);
+    game_player(gs_of(&e))->facing = -1;
+    game_player(gs_of(&e))->carrying = spawn_free(&e, CRATE_RED, 0, 0, CRATE_CARRIED);
     tick(&e, KEY(ACT_FIRE));
     CHECK(gs_of(&e)->entities.slots[1].body.vel.x < 0.0f);
     ticks(&e, 0, 120);
@@ -558,7 +558,7 @@ static void test_thrown_crate_stops_at_a_wall(void) {
     Env e;
     CHECK(env_init(&e, &m, NULL));
     teleport(&e, 40, 160);
-    gs_of(&e)->player.carrying = spawn_free(&e, CRATE_RED, 0, 0, CRATE_CARRIED);
+    game_player(gs_of(&e))->carrying = spawn_free(&e, CRATE_RED, 0, 0, CRATE_CARRIED);
     tick(&e, KEY(ACT_FIRE));
     ticks(&e, 0, 120);
     CHECK(is_resting_at(&e, 7, 9)); // right up against the wall, never through it
@@ -571,12 +571,12 @@ static void test_throw_is_blocked_by_a_low_ceiling(void) {
     Env e;
     CHECK(env_init(&e, &m, NULL));
     teleport(&e, 40, 160);
-    gs_of(&e)->player.carrying = spawn_free(&e, CRATE_RED, 0, 0, CRATE_CARRIED);
+    game_player(gs_of(&e))->carrying = spawn_free(&e, CRATE_RED, 0, 0, CRATE_CARRIED);
     press(&e, KEY(ACT_FIRE));
-    CHECK(entity_id_valid(gs_of(&e)->player.carrying)); // refused
+    CHECK(entity_id_valid(game_player(gs_of(&e))->carrying)); // refused
     CHECK_EQ_U64(gs_of(&e)->crate_stats.thrown, 0);
     press(&e, KEY(ACT_GRAB)); // placing still works
-    CHECK(!entity_id_valid(gs_of(&e)->player.carrying));
+    CHECK(!entity_id_valid(game_player(gs_of(&e))->carrying));
     sim_free(&e.sim);
 }
 
@@ -589,12 +589,12 @@ static void test_falling_in_water_loses_the_carried_crate(void) {
     CHECK(env_init(&e, &m, NULL));
     EntityId id = spawn_resting(&e, CRATE_RED, 2, 9);
     teleport(&e, 40, 160);
-    gs_of(&e)->player.facing = -1;
+    game_player(gs_of(&e))->facing = -1;
     press(&e, KEY(ACT_GRAB));
-    CHECK(entity_id_eq(gs_of(&e)->player.carrying, id));
+    CHECK(entity_id_eq(game_player(gs_of(&e))->carrying, id));
     ticks(&e, KEY(ACT_RIGHT), 200); // walks into the pit, respawns
     CHECK_EQ_U64(gs_of(&e)->respawns >= 1, 1);
-    CHECK(!entity_id_valid(gs_of(&e)->player.carrying));
+    CHECK(!entity_id_valid(game_player(gs_of(&e))->carrying));
     CHECK(crate_of(&e, id) == NULL); // the old id is stale
     CHECK_EQ_U64(crate_count(gs_of(&e)), 0);
     CHECK_EQ_U64(gs_of(&e)->crate_stats.destroyed, 1);

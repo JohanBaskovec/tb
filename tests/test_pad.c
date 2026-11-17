@@ -400,14 +400,23 @@ static u32 products(Env *e) {
         PadProduct k;
         n += entity_as_product(&e->sim.gs.entities.slots[i], &k) ? 1u : 0u;
     }
+    for (i32 i = 1; i < MAX_SOLDIERS; i++) { // soldiers made by the pad (slot 0 is the starting one)
+        n += e->sim.gs.soldiers[i].alive ? 1u : 0u;
+    }
     return n;
 }
 
+// What the last build made: a weapon or product lying around, or a soldier other than the starting one (slot 0).
 static PadProduct built_kind(Env *e) {
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
         PadProduct k;
         if (entity_as_product(&e->sim.gs.entities.slots[i], &k)) {
             return k;
+        }
+    }
+    for (i32 i = 1; i < MAX_SOLDIERS; i++) {
+        if (e->sim.gs.soldiers[i].alive) {
+            return product_of_variant(e->sim.gs.soldiers[i].variant);
         }
     }
     return PRODUCT_COUNT;
