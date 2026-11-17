@@ -2,6 +2,7 @@
 #include "core/config.h"
 #include "core/log.h"
 #include "game/crate.h"
+#include "game/pad.h"
 #include "game/walker.h"
 #include "platform/platform.h"
 #include "render/draw_game.h"
@@ -38,6 +39,8 @@ typedef struct Options {
     u32 crate_count;
     Vec2 crate_pos[16];
     CrateKind crate_kind[16];
+    bool has_fill_pad;
+    char fill_top[8], fill_bottom[8];
     u32 trace_every;
     const char *expect_driver;
 } Options;
@@ -59,6 +62,7 @@ static void print_usage(const char *prog) {
             "  --start X,Y             start with the feet at X,Y (pixels) instead of the spawn\n"
             "  --walk-to X             drive the player with a bot that walks to x=X and hops obstacles\n"
             "  --crate X,Y,KIND        add a falling crate (top-left X,Y in pixels; KIND red or blue); repeatable\n"
+            "  --fill-pad TOP,BOTTOM   put crates in the team-1 pad, e.g. rb..,rrr. (r red, b blue, . empty)\n"
             "  --debug-overlay         draw hitboxes, grid and state flags\n"
             "  --trace N               print the player state every N ticks\n"
             "  --expect-video-driver D abort unless SDL picked video driver D (e.g. dummy)\n",
@@ -123,6 +127,13 @@ static bool parse_args(int argc, char **argv, Options *o) {
             o->crate_pos[o->crate_count] = vec2(x, y);
             o->crate_kind[o->crate_count] = strcmp(kind, "blue") == 0 ? CRATE_BLUE : CRATE_RED;
             o->crate_count++;
+        } else if (strcmp(a, "--fill-pad") == 0 && has_val) {
+            if (sscanf(argv[++i], "%4[.rb],%4[.rb]", o->fill_top, o->fill_bottom) != 2 ||
+                strlen(o->fill_top) != 4 || strlen(o->fill_bottom) != 4) {
+                LOG_ERROR("--fill-pad expects two rows of 4 characters from . r b, e.g. rb..,rrr.");
+                return false;
+            }
+            o->has_fill_pad = true;
         } else if (strcmp(a, "--walk-to") == 0 && has_val) {
             o->has_walk_to = true;
             o->walk_to = strtof(argv[++i], NULL);
@@ -154,12 +165,13 @@ static void print_trace(const Sim *sim) {
 
 static void print_summary(const Sim *sim) {
     const Companion *c = &sim->gs.player;
-    printf("ticks=%" PRIu64 " pos=(%.2f, %.2f) respawns=%u hash=%016" PRIx64 "\n", sim->gs.tick,
-           (f64)c->body.pos.x, (f64)c->body.pos.y, sim->gs.respawns, game_hash(&sim->gs));
+    printf("ticks=%" PRIu64 " pos=(%.2f, %.2f) respawns=%u products=%u hash=%016" PRIx64 "\n",
+           sim->gs.tick, (f64)c->body.pos.x, (f64)c->body.pos.y, sim->gs.respawns,
+           sim->gs.products_built, game_hash(&sim->gs));
 }
 
 static bool write_shot(Render *render, const Sim *sim, u32 flags, const char *path) {
-    draw_game(render, &sim->gs, &sim->cam, 1.0f, flags);
+    draw_game(render, &sim->gs, &sim->cam, &sim->menu, 1.0f, flags);
     return render_screenshot(render, path);
 }
 
@@ -242,6 +254,9 @@ static int run_windowed(const Options *o, Sim *sim) {
         if (ev.toggle_slow) {
             slow = !slow;
         }
+        if (ev.click) {
+            sim_click(sim, render_window_to_logical(render, ev.click_x, ev.click_y));
+        }
 
         const f64 now = platform_time_s();
         f64 frame_dt = now - prev;
@@ -271,7 +286,7 @@ static int run_windowed(const Options *o, Sim *sim) {
 
         const bool last = o->max_ticks > 0 && sim->gs.tick >= o->max_ticks;
         const f32 alpha = paused ? 1.0f : (f32)(acc / (f64)TICK_DT);
-        draw_game(render, &sim->gs, &sim->cam, alpha, flags);
+        draw_game(render, &sim->gs, &sim->cam, &sim->menu, alpha, flags);
         if (last && o->shot && !render_screenshot(render, o->shot)) {
             rc = 1;
         }
@@ -337,6 +352,14 @@ int main(int argc, char **argv) {
     for (u32 i = 0; i < o.crate_count; i++) {
         crate_spawn(&sim.gs, o.crate_kind[i], o.crate_pos[i], CRATE_FALLING, -1);
     }
+
+    if (o.has_fill_pad && !pad_debug_fill(&sim.gs, 0, o.fill_top, o.fill_bottom)) {
+        LOG_ERROR("--fill-pad: the level has no pad for team 1");
+        sim_free(&sim);
+        platform_shutdown();
+        return 1;
+    }
+    pad_menu_refresh(&sim.menu, &sim.gs, 0);
 
     int rc = o.headless ? run_headless(&o, &sim) : run_windowed(&o, &sim);
     sim_free(&sim);

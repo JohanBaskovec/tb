@@ -152,17 +152,22 @@ Forme en L en 2D : 2 caisses côte à côte en bas + 1 sur l'une des deux (2 ori
 Les formes peuvent se situer n'importe où sur les 4 colonnes 🟡.
 
 ### Mécanique
-- 🟡 Une caisse posée ou lâchée au-dessus du pad se **cale** dans la colonne la plus proche
-  (gravité dans la colonne : rangée du bas d'abord).
+- 🟡 Le pad est une zone de 4×2 cases marquée dans le niveau (`P`, case en bas à gauche). Une caisse posée ou lâchée au-dessus
+  se **cale** dans la colonne la plus proche (les caisses se posent sur la grille ; gravité dans la colonne, rangée du bas d'abord).
+  Seules les caisses *au repos* dans ces 8 cases comptent ; une troisième caisse empilée dessus n'en fait pas partie.
 - ✅ **Menu de construction** : quand un soldat s'approche du pad, les constructions possibles avec les caisses
-  présentes s'affichent **à côté du pad** (icône + nom). Pour construire, le joueur **clique dessus**
-  (sélection + validation au clavier / à la manette 🟡) ; cela **consomme les caisses, en commençant par celles du haut**.
+  présentes s'affichent **à côté du pad** (icône + nom ; en M2, sans texte : la forme avec les couleurs réelles des caisses et une pastille de couleur pour le produit). Pour construire, le joueur **clique dessus**
+  (clavier : Tab change l'entrée choisie, Entrée valide ; manette 🟡) ; cela **consomme les caisses, en commençant par celles du haut**.
   ✅ Une construction est proposée dès que sa forme est présente parmi les caisses du pad (même s'il y en a d'autres) ;
   la version bleue dépend des caisses réellement consommées. ✅ Un pad non vide propose toujours au moins un 1×1 ;
   un pad vide ne propose rien.
 - 🟡 Il n'y a **aucune construction automatique** (pas de compte à rebours) : on empile librement, puis on choisit.
 - 🟡 L'objet produit apparaît à côté du pad : une arme se ramasse, un compagnon rejoint l'escouade,
   un véhicule attend un pilote.
+- 🟡 Pour la même forme, la version rouge (que des caisses rouges) et la version bleue (au moins une bleue) sont deux entrées du menu
+  quand les deux existent ; à chaque entrée, les caisses consommées sont les plus hautes, puis les plus à gauche.
+- 🟡 En M2 l'objet produit est un **placeholder** (une petite boîte colorée qui tombe et repose au sol, à gauche du pad ; le menu est à droite).
+  Il devient une vraie arme en M3, un compagnon en M4. Un objet enterré par une caisse qui se pose est remonté au sommet de la pile.
 - 🟡 Les caisses d'un pad peuvent être **reprises par n'importe qui**, y compris un ennemi (vol).
 - L'IA construit via la même fonction que le menu (aucune triche, mêmes recettes).
 

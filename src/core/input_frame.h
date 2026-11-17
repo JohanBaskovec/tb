@@ -15,6 +15,7 @@ typedef enum Action {
     ACT_SWITCH,
     ACT_ORDER,
     ACT_PAUSE,
+    ACT_CONFIRM, // validates the selected entry of a menu (pad construction menu)
     ACT_COUNT
 } Action;
 

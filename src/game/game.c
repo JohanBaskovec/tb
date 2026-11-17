@@ -2,6 +2,7 @@
 
 #include "core/log.h"
 #include "game/crate.h"
+#include "game/pad.h"
 
 #include <string.h>
 
@@ -22,15 +23,18 @@ bool game_init(GameState *gs, u64 seed, Level *level) {
 }
 
 void game_update(GameState *gs, const InputFrame *input) {
+    events_clear(&gs->events);
     companion_update(&gs->player, gs->level, input);
     crate_carry_update(gs, input);
     crates_update(gs);
     crate_carried_follow(gs);
+    products_update(gs);
 
     if (companion_in_hazard(&gs->player, gs->level)) {
         crate_destroy(gs, gs->player.carrying); // the crate is lost with its carrier
         companion_init(&gs->player, gs->level->spawns[0]);
         gs->respawns++;
+        events_push(&gs->events, EV_PLAYER_RESPAWNED, gs->player.body.pos, 0, 0);
     }
     pool_flush(&gs->entities);
     gs->tick++;
@@ -63,6 +67,7 @@ u64 game_hash(const GameState *gs) {
     h = fnv_mix(h, &c->ladder_cooldown_ticks, sizeof(c->ladder_cooldown_ticks));
     h = fnv_mix(h, &c->carrying, sizeof(c->carrying));
     h = fnv_mix(h, gs->drop_timers, sizeof(gs->drop_timers));
+    h = fnv_mix(h, &gs->products_built, sizeof(gs->products_built));
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
         const Entity *e = &gs->entities.slots[i];
         if (e->type == ENT_NONE) {
@@ -79,6 +84,9 @@ u64 game_hash(const GameState *gs) {
             h = fnv_mix(h, &cr->cell_x, sizeof(cr->cell_x));
             h = fnv_mix(h, &cr->cell_y, sizeof(cr->cell_y));
             h = fnv_mix(h, &cr->origin_zone, sizeof(cr->origin_zone));
+        } else if (e->type == ENT_PRODUCT) {
+            h = fnv_mix(h, &e->as.product.kind, sizeof(e->as.product.kind));
+            h = fnv_mix(h, &e->as.product.team, sizeof(e->as.product.team));
         }
     }
     return h;

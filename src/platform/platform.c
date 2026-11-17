@@ -27,6 +27,10 @@ void platform_pump_events(PlatformEvents *out) {
     while (SDL_PollEvent(&e)) {
         if (e.type == SDL_EVENT_QUIT) {
             out->quit = true;
+        } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            out->click = true;
+            out->click_x = e.button.x;
+            out->click_y = e.button.y;
         } else if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) {
             switch (e.key.scancode) {
             case SDL_SCANCODE_F1:
@@ -74,6 +78,8 @@ u32 platform_map_keyboard(const bool *keys, int count) {
     map_key(keys, count, SDL_SCANCODE_TAB, ACT_SWITCH, &mask);
     map_key(keys, count, SDL_SCANCODE_Q, ACT_ORDER, &mask);
     map_key(keys, count, SDL_SCANCODE_ESCAPE, ACT_PAUSE, &mask);
+    map_key(keys, count, SDL_SCANCODE_RETURN, ACT_CONFIRM, &mask);
+    map_key(keys, count, SDL_SCANCODE_KP_ENTER, ACT_CONFIRM, &mask);
     return mask;
 }
 

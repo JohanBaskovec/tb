@@ -2,6 +2,7 @@
 // Shared by the headless and windowed loops, and by integration tests.
 #pragma once
 
+#include "app/pad_menu.h"
 #include "core/arena.h"
 #include "game/bot.h"
 #include "game/game.h"
@@ -22,6 +23,7 @@ typedef struct Sim {
     Arena arena; // owns the level tiles
     Level level;
     GameState gs;
+    PadMenu menu; // construction menu of the pad of the controlled team (team 0)
     Camera cam;
     Bot bot;
     Script script;
@@ -36,3 +38,8 @@ void sim_free(Sim *sim);
 void sim_tick(Sim *sim, const InputFrame *human);
 // True while a script is configured and not yet finished.
 bool sim_script_running(const Sim *sim);
+// Mouse click at a position in logical (640x360) pixels: builds the pad menu entry under it, if any.
+// Returns true if something was built. Applied between ticks, like the AI's builds.
+bool sim_click(Sim *sim, Vec2 logical);
+// Logical screen pixels -> world pixels, for the current camera (same rounding as the renderer).
+Vec2 sim_logical_to_world(const Sim *sim, Vec2 logical);

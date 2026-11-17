@@ -5,11 +5,12 @@
 #include "core/rng.h"
 #include "game/companion.h"
 #include "game/entity.h"
+#include "game/events.h"
 #include "game/level.h"
 
 // Counters of what happened to crates since the start (tests, future HUD and stats screen).
 typedef struct CrateStats {
-    u32 spawned, settled, picked_up, placed, thrown, destroyed;
+    u32 spawned, settled, picked_up, placed, thrown, destroyed, consumed;
 } CrateStats;
 
 typedef struct GameState {
@@ -21,6 +22,8 @@ typedef struct GameState {
     EntityPool entities;
     u32 drop_timers[MAX_DROP_ZONES]; // ticks until the next drop of each zone
     CrateStats crate_stats;
+    u32 products_built;
+    EventQueue events; // what happened during the last tick (presentation only, not hashed)
 } GameState;
 
 // Returns false if the level has no spawn for team 0.

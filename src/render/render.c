@@ -94,6 +94,14 @@ void render_line(Render *r, Vec2 a, Vec2 b, Color c) {
     SDL_RenderLine(r->renderer, a.x, a.y, b.x, b.y);
 }
 
+Vec2 render_window_to_logical(const Render *r, f32 window_x, f32 window_y) {
+    f32 x = window_x, y = window_y;
+    if (r->renderer && !r->headless) {
+        SDL_RenderCoordinatesFromWindow(r->renderer, window_x, window_y, &x, &y);
+    }
+    return vec2(x, y);
+}
+
 void render_set_title(Render *r, const char *title) {
     if (r->window) {
         SDL_SetWindowTitle(r->window, title);

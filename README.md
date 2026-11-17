@@ -74,6 +74,7 @@ cmake --build build -j && ctest --test-dir build --output-on-failure
 | Prendre / poser une caisse | C | B / Rond       |
 | Lancer la caisse portée | X       | X / Carré        |
 | Changer de soldat   | Tab           | RB / R1          |
+| Menu du pad : entrée suivante / valider | Tab / Entrée (ou clic gauche sur l'entrée) | — |
 | Menu d'ordres       | touche à la position de Q (étiquetée A en AZERTY) | LB / L1 |
 | Pause               | Échap         | Start            |
 | Debug overlay       | F1            | —                |

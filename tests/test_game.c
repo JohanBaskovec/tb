@@ -74,6 +74,13 @@ static u32 check_crate_invariants(const Sim *sim) {
         }
         alive++;
         CHECK(!e->pending_destroy); // everything flagged was flushed at the end of the tick
+        if (e->type == ENT_PRODUCT) { // made at the pad by the bot: a valid kind, inside the map, not in terrain
+            CHECK(e->as.product.kind >= 0 && e->as.product.kind < PRODUCT_COUNT);
+            CHECK(e->body.pos.x >= 0.0f && e->body.pos.x < level_width_px(lv));
+            CHECK(!level_is_solid(lv, level_px_to_tile(e->body.pos.x + e->body.size.x * 0.5f),
+                                  level_px_to_tile(e->body.pos.y + e->body.size.y * 0.5f)));
+            continue;
+        }
         CHECK(e->type == ENT_CRATE);
         const Crate *c = &e->as.crate;
         if (c->origin_zone >= 0) {

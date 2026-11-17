@@ -38,6 +38,9 @@ static bool key_bit(char c, u32 *bit) {
     case 'P':
         *bit = action_bit(ACT_PAUSE);
         return true;
+    case 'C':
+        *bit = action_bit(ACT_CONFIRM);
+        return true;
     default:
         return false;
     }

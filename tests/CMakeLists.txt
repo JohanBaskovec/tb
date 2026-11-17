@@ -21,6 +21,9 @@ cs_test(script cs_game)
 cs_test(camera cs_app)
 cs_test(game cs_app)
 cs_test(crate cs_app)
+cs_test(pad cs_app)
+cs_test(pad_menu cs_app)
+cs_test(events cs_app)
 cs_test(scenarios cs_app)
 cs_test(platform cs_platform cs_game)
 
@@ -39,12 +42,24 @@ add_test(NAME smoke_headless_filmstrip
     COMMAND cratesquad --headless --bot --frames 600 --seed 3
             --screenshot ${SHOTS}/film_%u.png --shot-every 200)
 
+# Pad: fill it, move the menu selection, validate (L is entry 0, 2x1 vertical entry 1): one product made.
+add_test(NAME smoke_pad_build
+    COMMAND cratesquad --headless --fill-pad "r...,rr.b" --script ".:5 S:1 .:2 C:1 .:60"
+            --screenshot ${SHOTS}/smoke_pad_built.png --shot-cam 0,300)
+set_tests_properties(smoke_pad_build PROPERTIES PASS_REGULAR_EXPRESSION "products=1")
+# Without validation nothing is built.
+add_test(NAME smoke_pad_no_confirm
+    COMMAND cratesquad --headless --fill-pad "r...,rr.b" --script ".:5 S:1 .:60")
+set_tests_properties(smoke_pad_no_confirm PROPERTIES PASS_REGULAR_EXPRESSION "products=0")
+
 # Bad input must fail cleanly (non-zero exit), never crash.
-foreach(case bad_args bad_level bad_script)
+foreach(case bad_args bad_level bad_script bad_fill_pad)
     if(case STREQUAL "bad_args")
         set(args --nonsense)
     elseif(case STREQUAL "bad_level")
         set(args --headless --level ${CMAKE_SOURCE_DIR}/assets/levels/nope.lvl)
+    elseif(case STREQUAL "bad_fill_pad")
+        set(args --headless --fill-pad "rrr,rrr")
     else()
         set(args --headless --script "R:abc")
     endif()

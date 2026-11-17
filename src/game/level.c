@@ -138,6 +138,17 @@ static bool parse_header_line(Level *lv, const char *line, usize len, int line_n
         snprintf(lv->name, sizeof(lv->name), "%.*s", (int)vlen, val);
         return true;
     }
+    if (klen > 4 && strncmp(line, "pad.", 4) == 0) {
+        i32 n = 0, team = 0;
+        if (!parse_int(line + 4, klen - 4, &n) || n < 1 || n > MAX_TEAMS || !parse_int(val, vlen, &team) ||
+            team < 1 || team > MAX_TEAMS) {
+            set_err(err, err_len, "line %d: expected pad.N=TEAM with N and TEAM in 1..%d", line_no,
+                    MAX_TEAMS);
+            return false;
+        }
+        lv->pad_owner[n - 1] = team - 1;
+        return true;
+    }
     if (klen > 5 && strncmp(line, "drop.", 5) == 0) {
         return parse_drop_line(lv, line, klen, val, vlen, line_no, err, err_len);
     }
@@ -177,6 +188,27 @@ static bool fill_cell(Level *lv, i32 x, i32 y, char c, int line_no, char *err, u
         *cell = TILE_EMPTY;
         return true;
     }
+    case 'P': {
+        const i32 n = lv->pad_marker_count;
+        if (n >= MAX_TEAMS) {
+            set_err(err, err_len, "line %d: too many pads (max %d)", line_no, MAX_TEAMS);
+            return false;
+        }
+        const i32 team = lv->pad_owner[n] >= 0 ? lv->pad_owner[n] : n;
+        if (lv->pads[team].present) {
+            set_err(err, err_len, "line %d: team %d already has a pad", line_no, (int)team + 1);
+            return false;
+        }
+        if (x + 4 > lv->width || y < 1) {
+            set_err(err, err_len, "line %d: the pad at column %d does not fit (4 columns, 2 rows up)",
+                    line_no, (int)x + 1);
+            return false;
+        }
+        lv->pads[team] = (PadSite){.present = true, .cell_x = x, .cell_y = y};
+        lv->pad_marker_count++;
+        *cell = TILE_EMPTY;
+        return true;
+    }
     case 'D':
         if (lv->drop_zone_count >= MAX_DROP_ZONES) {
             set_err(err, err_len, "line %d: too many drop zones (max %d)", line_no,
@@ -195,6 +227,9 @@ static bool fill_cell(Level *lv, i32 x, i32 y, char c, int line_no, char *err, u
 
 bool level_parse(Level *lv, Arena *arena, const char *text, char *err, usize err_len) {
     memset(lv, 0, sizeof(*lv));
+    for (i32 i = 0; i < MAX_TEAMS; i++) {
+        lv->pad_owner[i] = -1;
+    }
     const char *p = text;
     const char *line;
     usize len;

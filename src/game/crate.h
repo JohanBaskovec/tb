@@ -13,6 +13,8 @@
 EntityId crate_spawn(GameState *gs, CrateKind kind, Vec2 pos, CrateState state, i32 origin_zone);
 // Deferred: the entity is flushed at the end of the tick, but the grid and the carrier are updated now.
 void crate_destroy(GameState *gs, EntityId id);
+// Same, for a crate used up by a pad construction (counted and announced differently).
+void crate_consume(GameState *gs, EntityId id);
 
 // One tick of drop zones and crate physics. Call after the companions have moved.
 void crates_update(GameState *gs);

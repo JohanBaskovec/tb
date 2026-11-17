@@ -10,6 +10,8 @@ typedef struct PlatformEvents {
     bool toggle_pause; // F2
     bool step;         // F3: advance one tick while paused
     bool toggle_slow;  // F4: quarter speed
+    bool click;        // left mouse button pressed
+    f32 click_x, click_y; // where, in window pixels (convert with render_window_to_logical)
 } PlatformEvents;
 
 // Headless mode initializes no video/audio subsystem at all.

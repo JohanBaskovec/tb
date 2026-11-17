@@ -23,7 +23,7 @@ static void test_parse_ok(void) {
 static void test_every_key(void) {
     Script s;
     char err[64] = "";
-    CHECK(script_parse(&s, "LRUDJFGSOP:1", err, sizeof(err)));
+    CHECK(script_parse(&s, "LRUDJFGSOPC:1", err, sizeof(err)));
     u32 all = 0;
     for (int a = 0; a < ACT_COUNT; a++) {
         all |= action_bit((Action)a);

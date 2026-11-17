@@ -41,9 +41,9 @@ Pas encore de police de caractères : l'overlay de debug utilise des pastilles d
 - [x] Caisses rouges et bleues ; largage sur les zones `D` configurables par niveau (`drop.N=couleur,intervalle,plafond[,%bleu]`) : descente lente, puis physique
 - [x] Empilement des caisses libres (alignées sur la grille, solides pour tout le monde, piles qui se tassent)
 - [x] Prendre / porter / poser / lancer une caisse (C prend/pose, X lance ; vitesse et saut réduits en portant)
-- [ ] Pad d'empilement 4×2 : calage en grille, `pad_options()` pur (1×1, 2×1 H/V, L, 2×2, 4×2 × rouge/bleu ; caisses du haut consommées d'abord) + tests
-- [ ] Menu de construction à l'approche du pad (liste à côté du pad, clic / validation) ; `pad_build()` consomme les caisses et produit un objet placeholder
-- [ ] File d'événements jeu → présentation
+- [x] Pad d'empilement 4×2 (marqueur `P` dans le niveau, une zone de 4×2 cases où les caisses se calent en colonne) ; `pad_options()` pur (1×1, 2×1 H/V, L, 2×2, 4×2 × rouge/bleu ; caisses du haut consommées d'abord), testé exhaustivement sur les 3⁸ grilles
+- [x] Menu de construction à l'approche du pad (liste à côté du pad ; clic, ou Tab + Entrée) ; `pad_build()` consomme les caisses et produit un objet placeholder (l'IA appellera la même fonction)
+- [x] File d'événements jeu → présentation (`GameState.events`, vidée à chaque tick ; aucun lecteur côté simulation)
 
 **Fin :** on remplit son pad et on obtient des objets selon la forme construite.
 

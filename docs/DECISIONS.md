@@ -154,3 +154,27 @@ Les entrées clavier utilisent les scancodes SDL (position physique de la touche
 touches de déplacement sont à la position WASD : ZQSD sur un clavier AZERTY, WASD sur un QWERTY, donc les mêmes touches physiques sur
 tous les claviers, sans détection de disposition. Les flèches restent actives en parallèle. Conséquence : la touche d'ordres (scancode Q)
 est étiquetée A sur un AZERTY. Si les contrôles deviennent configurables, ils le seront par scancode.
+
+### D029 — Le pad est une zone du niveau marquée `P`
+**Statut :** Acceptée
+Un pad est une zone de 4×2 cases dont le marqueur `P` désigne la case en bas à gauche (la case reste vide). Le N-ᵉ marqueur dans l'ordre de
+lecture appartient à l'équipe N, sauf `pad.N=ÉQUIPE` dans l'en-tête. Les caisses n'ont pas de logique de « calage » propre : elles se verrouillent
+déjà dans la grille (D024), donc une caisse lâchée au-dessus du pad finit dans la colonne qu'elle recouvre le plus. Le contenu du pad est lu
+dans le monde (caisses *au repos* dans les 8 cases) au lieu d'être dupliqué dans une grille tenue à jour.
+
+### D030 — Les constructions sont des commandes appliquées entre deux ticks, via `pad_build()`
+**Statut :** Acceptée
+Le menu (humain) et l'IA appellent `pad_build(gs, équipe, forme, bleu?)` ; la fonction recalcule les options au moment de l'appel et refuse
+ce qui n'est plus valide, ce qui rend les menus périmés inoffensifs. Ce n'est pas une entrée de `game_update` : si un rejeu / du réseau devient
+nécessaire, les commandes devront être enregistrées avec leur numéro de tick (à décider alors). Pour une même forme, la version rouge et
+la version bleue sont deux entrées distinctes quand les deux existent ; les caisses consommées sont les plus hautes, puis les plus à gauche.
+
+### D031 — File d'événements vidée à chaque tick, hors du hash
+**Statut :** Acceptée
+`GameState.events` contient les événements du dernier tick et est vidée au début de `game_update`. Elle est de taille fixe (les débordements
+sont comptés) et exclue de `game_hash` : la présentation lit, la simulation n'écrit que dedans, jamais l'inverse.
+
+### D032 — Produit du pad : placeholder jusqu'aux armes et aux compagnons
+**Statut :** Provisoire
+`ENT_PRODUCT` (type + équipe) tombe et repose à côté du pad (à gauche ; le menu est à droite). Il sert à vérifier la chaîne caisses → recette →
+objet avant M3 (armes ramassables) et M4 (compagnons). Un produit enterré par une caisse qui se pose est remonté au sommet de la pile.

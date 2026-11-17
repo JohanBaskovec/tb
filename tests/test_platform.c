@@ -19,6 +19,7 @@ static void test_keyboard_mapping(void) {
     keys[SDL_SCANCODE_RIGHT] = keys[SDL_SCANCODE_UP] = keys[SDL_SCANCODE_DOWN] = true;
     keys[SDL_SCANCODE_X] = keys[SDL_SCANCODE_C] = keys[SDL_SCANCODE_TAB] = true;
     keys[SDL_SCANCODE_Q] = keys[SDL_SCANCODE_ESCAPE] = true;
+    keys[SDL_SCANCODE_RETURN] = true;
     m = platform_map_keyboard(keys, SDL_SCANCODE_COUNT);
     u32 expected = 0;
     for (int a = 0; a < ACT_COUNT; a++) {
@@ -34,7 +35,7 @@ static void test_keyboard_mapping(void) {
     u32 short_mask = platform_map_keyboard(keys, SDL_SCANCODE_LEFT);
     CHECK_EQ_U64(short_mask, action_bit(ACT_RIGHT) | action_bit(ACT_FIRE) | action_bit(ACT_GRAB) |
                                  action_bit(ACT_SWITCH) | action_bit(ACT_ORDER) |
-                                 action_bit(ACT_PAUSE));
+                                 action_bit(ACT_PAUSE) | action_bit(ACT_CONFIRM));
 }
 
 // The movement keys are physical positions (SDL scancodes): the WASD position, which is labelled
@@ -107,6 +108,26 @@ static void test_events(void) {
     push_key(SDL_SCANCODE_F1, true); // auto-repeat must be ignored
     platform_pump_events(&ev);
     CHECK(ev.toggle_pause && ev.toggle_slow && !ev.toggle_debug);
+
+    // A left click is reported with its window position; other buttons are ignored.
+    memset(&ev, 0, sizeof(ev));
+    SDL_Event click;
+    memset(&click, 0, sizeof(click));
+    click.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    click.button.button = SDL_BUTTON_RIGHT;
+    click.button.x = 5.0f;
+    click.button.y = 6.0f;
+    CHECK(SDL_PushEvent(&click));
+    platform_pump_events(&ev);
+    CHECK(!ev.click);
+    click.button.button = SDL_BUTTON_LEFT;
+    click.button.x = 123.0f;
+    click.button.y = 45.0f;
+    CHECK(SDL_PushEvent(&click));
+    platform_pump_events(&ev);
+    CHECK(ev.click);
+    CHECK_NEAR(ev.click_x, 123.0, 0.0);
+    CHECK_NEAR(ev.click_y, 45.0, 0.0);
 
     memset(&ev, 0, sizeof(ev));
     SDL_Event quit;

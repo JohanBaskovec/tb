@@ -10,7 +10,7 @@ void bot_init(Bot *bot, u64 seed) {
 // Random wanderer: holds a random direction for 10..60 ticks, and now and then holds jump for a
 // few ticks (a short hold gives a short hop). Up/down are random too, so it also uses ladders
 // and drops through platforms (down + jump). It also mashes grab and fire now and then, which
-// picks up, places and throws crates.
+// picks up, places and throws crates, and switch / confirm, which drive the pad menu.
 void bot_think(Bot *bot, InputFrame *frame) {
     if (bot->ticks_left == 0) {
         bot->mask = 0;
@@ -53,6 +53,13 @@ void bot_think(Bot *bot, InputFrame *frame) {
     }
     if (rng_below(&bot->rng, 90) == 0) {
         mask |= action_bit(ACT_FIRE);
+    }
+    // Pad menu: move the selection now and then, and now and then validate it.
+    if (rng_below(&bot->rng, 60) == 0) {
+        mask |= action_bit(ACT_SWITCH);
+    }
+    if (rng_below(&bot->rng, 150) == 0) {
+        mask |= action_bit(ACT_CONFIRM);
     }
     input_frame_update(frame, mask);
 }

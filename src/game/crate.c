@@ -65,10 +65,11 @@ EntityId crate_spawn(GameState *gs, CrateKind kind, Vec2 pos, CrateState state, 
         level_set_dyn_solid(gs->level, cx, cy, true);
     }
     gs->crate_stats.spawned++;
+    events_push(&gs->events, EV_CRATE_SPAWNED, pos, (i32)kind, origin_zone);
     return id;
 }
 
-void crate_destroy(GameState *gs, EntityId id) {
+static void crate_remove(GameState *gs, EntityId id, bool consumed) {
     Entity *e = pool_get(&gs->entities, id);
     if (!e || e->pending_destroy || e->type != ENT_CRATE) {
         return;
@@ -81,7 +82,21 @@ void crate_destroy(GameState *gs, EntityId id) {
         gs->player.carrying = ENTITY_NONE;
     }
     pool_mark_destroy(&gs->entities, id);
-    gs->crate_stats.destroyed++;
+    if (consumed) {
+        gs->crate_stats.consumed++;
+    } else {
+        gs->crate_stats.destroyed++;
+    }
+    events_push(&gs->events, consumed ? EV_CRATE_CONSUMED : EV_CRATE_DESTROYED, e->body.pos,
+                (i32)c->kind, 0);
+}
+
+void crate_destroy(GameState *gs, EntityId id) {
+    crate_remove(gs, id, false);
+}
+
+void crate_consume(GameState *gs, EntityId id) {
+    crate_remove(gs, id, true);
 }
 
 // ---- Drop zones ------------------------------------------------------------------------------
@@ -167,6 +182,7 @@ static void try_settle(GameState *gs, EntityId id, Entity *e) {
     c->cell_y = r;
     level_set_dyn_solid(lv, col, r, true);
     gs->crate_stats.settled++;
+    events_push(&gs->events, EV_CRATE_SETTLED, e->body.pos, (i32)c->kind, 0);
 }
 
 static void crate_step(GameState *gs, u16 slot) {
@@ -296,6 +312,7 @@ static void try_pick_up(GameState *gs) {
     e->prev_pos = e->body.pos;
     gs->player.carrying = id;
     gs->crate_stats.picked_up++;
+    events_push(&gs->events, EV_CRATE_PICKED_UP, e->body.pos, (i32)c->kind, 0);
 }
 
 // Puts the crate in the first column entirely in front of the body, on the feet row, or up to
@@ -318,6 +335,7 @@ static bool try_place(GameState *gs) {
         e->as.crate.state = CRATE_FALLING;
         p->carrying = ENTITY_NONE;
         gs->crate_stats.placed++;
+        events_push(&gs->events, EV_CRATE_PLACED, e->body.pos, (i32)e->as.crate.kind, 0);
         return true;
     }
     return false;
@@ -339,6 +357,7 @@ static bool try_throw(GameState *gs) {
     e->as.crate.state = CRATE_FALLING;
     p->carrying = ENTITY_NONE;
     gs->crate_stats.thrown++;
+    events_push(&gs->events, EV_CRATE_THROWN, e->body.pos, (i32)e->as.crate.kind, 0);
     return true;
 }
 

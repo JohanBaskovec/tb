@@ -2,6 +2,7 @@
 
 #include "core/config.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -42,6 +43,7 @@ bool sim_init(Sim *sim, const SimConfig *cfg, char *err, usize err_len) {
     }
     sim->use_bot = cfg->use_bot;
     bot_init(&sim->bot, cfg->seed);
+    pad_menu_refresh(&sim->menu, &sim->gs, 0);
     camera_init(&sim->cam, (f32)LOGICAL_W, (f32)LOGICAL_H);
     camera_follow(&sim->cam, follow_target(sim), sim->gs.player.facing, &sim->level, true);
     return true;
@@ -66,8 +68,19 @@ void sim_tick(Sim *sim, const InputFrame *human) {
         input_frame_update(&sim->input, 0);
     }
 
+    pad_menu_handle_input(&sim->menu, &sim->gs, &sim->input);
+
     const u32 respawns_before = sim->gs.respawns;
     game_update(&sim->gs, &sim->input);
+    pad_menu_refresh(&sim->menu, &sim->gs, 0);
     const bool teleported = sim->gs.respawns != respawns_before;
     camera_follow(&sim->cam, follow_target(sim), sim->gs.player.facing, &sim->level, teleported);
+}
+
+Vec2 sim_logical_to_world(const Sim *sim, Vec2 logical) {
+    return vec2(logical.x + roundf(sim->cam.pos.x), logical.y + roundf(sim->cam.pos.y));
+}
+
+bool sim_click(Sim *sim, Vec2 logical) {
+    return pad_menu_click(&sim->menu, &sim->gs, sim_logical_to_world(sim, logical));
 }

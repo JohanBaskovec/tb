@@ -32,6 +32,7 @@ add_library(cs_game STATIC
     src/game/game.c
     src/game/entity.c
     src/game/crate.c
+    src/game/pad.c
     src/game/level.c
     src/game/physics.c
     src/game/companion.c
@@ -48,6 +49,7 @@ endif()
 add_library(cs_app STATIC
     src/render/camera.c
     src/app/sim.c
+    src/app/pad_menu.c
 )
 target_link_libraries(cs_app PUBLIC cs_game)
 

@@ -168,6 +168,53 @@ static void test_drop_zone_config_errors(void) {
     arena_free(&a);
 }
 
+static void test_pad_markers(void) {
+    Arena a;
+    CHECK(arena_init(&a, 1 << 16));
+    Level lv;
+    char err[128] = "";
+    // The N-th marker in reading order belongs to team N by default; each marks a bottom-left cell.
+    CHECK(parse(&lv, &a, "---\n..........\n.P...P....\n##########\n", err, sizeof(err)));
+    CHECK(lv.pads[0].present && lv.pads[1].present && !lv.pads[2].present && !lv.pads[3].present);
+    CHECK(lv.pads[0].cell_x == 1 && lv.pads[0].cell_y == 1);
+    CHECK(lv.pads[1].cell_x == 5 && lv.pads[1].cell_y == 1);
+    CHECK_EQ_U64(level_tile(&lv, 1, 1), TILE_EMPTY); // the marker leaves an empty tile
+
+    // Not enough room: 4 columns to the right, 1 more row above.
+    CHECK(!parse(&lv, &a, "---\n........\n.....P..\n########\n", err, sizeof(err)));
+    CHECK(strstr(err, "does not fit") != NULL);
+    CHECK(!parse(&lv, &a, "---\nP.......\n########\n", err, sizeof(err)));
+    CHECK(strstr(err, "does not fit") != NULL);
+    arena_free(&a);
+}
+
+static void test_pad_owner_header_and_errors(void) {
+    Arena a;
+    CHECK(arena_init(&a, 1 << 16));
+    Level lv;
+    char err[128] = "";
+    const char *map = "---\n..........\n.P....P...\n##########\n";
+    char text[256];
+
+    snprintf(text, sizeof(text), "pad.1=3\npad.2=2\n%s", map);
+    CHECK(parse(&lv, &a, text, err, sizeof(err)));
+    CHECK(lv.pads[2].present && lv.pads[2].cell_x == 1); // first marker -> team 3
+    CHECK(lv.pads[1].present && lv.pads[1].cell_x == 6); // second marker -> team 2
+    CHECK(!lv.pads[0].present);
+
+    snprintf(text, sizeof(text), "pad.1=2\n%s", map); // marker 1 -> team 2, marker 2 defaults to team 2
+    CHECK(!parse(&lv, &a, text, err, sizeof(err)));
+    CHECK(strstr(err, "already has a pad") != NULL);
+
+    const char *bad[] = {"pad.1=9", "pad.1=0", "pad.0=1", "pad.5=1", "pad.x=1", "pad.1=", "pad.1=a"};
+    for (u32 i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+        snprintf(text, sizeof(text), "%s\n%s", bad[i], map);
+        CHECK(!parse(&lv, &a, text, err, sizeof(err)));
+        CHECK(strstr(err, "pad.N=TEAM") != NULL);
+    }
+    arena_free(&a);
+}
+
 static void test_dynamic_solid_overlay(void) {
     Arena a;
     CHECK(arena_init(&a, 1 << 16));
@@ -252,6 +299,18 @@ static void test_real_level_file(void) {
         CHECK(!level_is_solid(&lv, level_px_to_tile(lv.drop_zones[z].x), level_px_to_tile(lv.drop_zones[z].y)));
     }
 
+    // Pads of teams 1 and 2: 4 columns x 2 rows, free air above solid ground.
+    for (int t = 0; t < 2; t++) {
+        CHECK(lv.pads[t].present);
+        for (int c = 0; c < 4; c++) {
+            const i32 x = lv.pads[t].cell_x + c, y = lv.pads[t].cell_y;
+            CHECK(level_is_solid(&lv, x, y + 1));
+            CHECK(!level_is_solid(&lv, x, y) && !level_is_solid(&lv, x, y - 1));
+        }
+    }
+    CHECK(!lv.pads[2].present && !lv.pads[3].present);
+    CHECK(lv.pads[0].cell_x < lv.pads[1].cell_x);
+
     CHECK(!level_load_file(&lv, &a, CS_ASSET_DIR "/levels/does_not_exist.lvl", err, sizeof(err)));
     CHECK(strstr(err, "cannot open") != NULL);
     arena_free(&a);
@@ -263,6 +322,8 @@ int main(void) {
     RUN_TEST(test_parse_errors);
     RUN_TEST(test_drop_zone_config);
     RUN_TEST(test_drop_zone_config_errors);
+    RUN_TEST(test_pad_markers);
+    RUN_TEST(test_pad_owner_header_and_errors);
     RUN_TEST(test_dynamic_solid_overlay);
     RUN_TEST(test_out_of_bounds_tiles);
     RUN_TEST(test_one_way_rules);

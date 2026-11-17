@@ -43,3 +43,8 @@
 // Carrying a crate: slower, and a lower jump. No ladders, no shooting.
 #define TUNING_CARRY_SPEED_MULT 0.75f
 #define TUNING_CARRY_JUMP_MULT 0.8f
+
+// Stacking pad menu: shown while the controlled soldier is within this distance of the pad (px,
+// measured from the soldier's center to the pad rectangle).
+#define TUNING_PAD_MENU_RANGE_X 56.0f
+#define TUNING_PAD_MENU_RANGE_Y 40.0f

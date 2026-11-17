@@ -3,7 +3,7 @@
 // An EntityId stays valid only as long as its entity lives: once the slot is freed (and possibly
 // reused) the old id resolves to NULL. Never keep a raw Entity pointer across ticks, keep the id.
 // Destruction is deferred: pool_mark_destroy flags the entity, pool_flush (end of tick) frees it.
-// Companions join the pool with the squad milestone; for now only crates live here.
+// Companions join the pool with the squad milestone; for now crates and pad products live here.
 #pragma once
 
 #include "core/config.h"
@@ -27,8 +27,24 @@ static inline bool entity_id_eq(EntityId a, EntityId b) {
 typedef enum EntityType {
     ENT_NONE = 0, // free slot
     ENT_CRATE,
+    ENT_PRODUCT, // result of a pad construction (placeholder until weapons / soldiers exist)
     ENT_TYPE_COUNT
 } EntityType;
+
+typedef enum PadProduct {
+    PRODUCT_PISTOL,
+    PRODUCT_UZI,
+    PRODUCT_GRENADES,
+    PRODUCT_STRONG_GRENADES,
+    PRODUCT_COMPANION,
+    PRODUCT_STRONG_COMPANION,
+    PRODUCT_ROCKET_LAUNCHER,
+    PRODUCT_HEAVY_COMPANION,
+    PRODUCT_HEAVY_ARMORED_COMPANION,
+    PRODUCT_TANK,
+    PRODUCT_HEAVY_TANK,
+    PRODUCT_COUNT
+} PadProduct;
 
 typedef enum CrateKind {
     CRATE_RED,
@@ -49,6 +65,11 @@ typedef struct Crate {
     i32 origin_zone;    // drop zone that produced it, -1 if none
 } Crate;
 
+typedef struct Product {
+    PadProduct kind;
+    i32 team; // team whose pad made it
+} Product;
+
 typedef struct Entity {
     EntityType type;
     u16 generation;
@@ -57,6 +78,7 @@ typedef struct Entity {
     Vec2 prev_pos; // position at the start of the last tick, for render interpolation
     union {
         Crate crate;
+        Product product;
     } as;
 } Entity;
 

@@ -91,7 +91,7 @@ tb/
 │   │   └── events.h        # File d'événements (son, particules, HUD)
 │   ├── ui/
 │   │   ├── hud.h/.c
-│   │   ├── pad_menu.h/.c   # Menu de construction affiché à côté du pad
+│   │   ├── pad_menu.h/.c   # Menu de construction (M2 : dans app/pad_menu.h/.c, sans SDL ; dessin dans render/draw_game.c)
 │   │   └── menu.h/.c
 │   └── scenes/
 │       ├── scene.h         # Interface commune
@@ -198,8 +198,15 @@ typedef struct GameState {
 ### Communication jeu → présentation
 
 La simulation ne joue pas de son et ne crée pas de particules. Elle pousse des
-événements (`EV_SHOT`, `EV_EXPLOSION`, `EV_CRATE_LANDED`, `EV_PAD_TRANSFORM`, `EV_COMPANION_DIED`…)
-dans `GameState.events`, que `audio/`, `render/` (effets) et `ui/` lisent après l'update.
+événements dans `GameState.events` (`game/events.h` : `EV_CRATE_SPAWNED`, `EV_CRATE_SETTLED`, `EV_CRATE_PICKED_UP`,
+`EV_CRATE_PLACED`, `EV_CRATE_THROWN`, `EV_CRATE_DESTROYED`, `EV_CRATE_CONSUMED`, `EV_PAD_BUILT`, `EV_PLAYER_RESPAWNED` ;
+`EV_SHOT`, `EV_EXPLOSION`… viendront avec le combat), que `audio/`, `render/` (effets) et `ui/` lisent après l'update.
+Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont le sens dépend du type.
+
+- La file est **vidée au début de chaque `game_update`** : elle contient les événements du dernier tick seulement.
+  Une boucle qui exécute plusieurs ticks par image doit donc la vider après chaque tick.
+- Elle est de capacité fixe (`MAX_EVENTS`) ; en cas de débordement les événements en trop sont comptés (`dropped`), jamais fatals.
+- Elle n'est **pas dans le hash d'état** et la simulation ne la relit jamais : la présentation ne peut pas influencer le jeu.
 
 ## Physique
 
@@ -219,6 +226,15 @@ dans `GameState.events`, que `audio/`, `render/` (effets) et `ui/` lisent après
   Formes : `1x1`, `2x1_horizontal`, `2x1_vertical`, `L`, `2x2`, `4x2`. `pad_build()` applique un choix
   (consomme les caisses, émet l'événement de production). Testées unitairement : toutes les formes,
   rouge/bleu, orientations du L, ordre de consommation, pad vide, et « un pad non vide propose toujours un 1×1 ».
+- **Dans le monde** : le pad d'une équipe est une zone de 4×2 cases marquée `P` dans le niveau (case en bas à gauche ; `Level.pads[équipe]`).
+  `pad_read_grid()` lit les caisses *au repos* de ces cases ; `pad_world_options()` en déduit le menu.
+  `pad_build(gs, équipe, forme, bleu?)` **recalcule** les options au moment de l'appel, refuse (sans rien changer) si la forme n'est plus là,
+  si le pad est inutilisable ou s'il n'y a plus de place pour le produit, puis consomme les caisses (`crate_consume`, du haut vers le bas) et crée un `ENT_PRODUCT`.
+  Les menus périmés sont donc sans danger.
+- **Menu** (`app/pad_menu.h/.c`, sans SDL) : visible tant que le soldat contrôlé est près du pad et que le pad propose quelque chose ;
+  entrées à droite du pad (à gauche en bord de carte), rangées de bas en haut, deuxième colonne au-delà de 6. La sélection suit
+  un couple (forme, couleur), pas un indice. Clavier : `ACT_SWITCH` (Tab) puis `ACT_CONFIRM` (Entrée) ; souris : `sim_click()` (position
+  logique → monde). Le menu appelle `pad_build()` **entre deux ticks**, comme le fera l'IA ; ce n'est pas une entrée de `game_update`.
 - **Pas de construction automatique** : le menu de construction est l'unique déclencheur, pour les humains comme pour l'IA.
 - Une table de recettes `(forme, bleue?) → résultat` est **data-driven** (voir GAME_DESIGN.md § 6) :
   ajuster une recette ne touche pas au code.
@@ -254,7 +270,9 @@ dans `GameState.events`, que `audio/`, `render/` (effets) et `ui/` lisent après
 
 - **Niveaux** : format texte ASCII (`.lvl`), un caractère par tuile + section d'en-tête clé=valeur
   (nom, taille, fréquence de largage…). Lisible, versionnable, éditable à la main.
-  Légende : `#` sol, `=` plateforme fine, `H` échelle, `~` eau, `1`..`4` camps, `D` zone de largage.
+  Légende : `#` sol, `=` plateforme fine, `H` échelle, `~` eau, `1`..`4` camps, `D` zone de largage,
+  `P` pad d'empilement (case en bas à gauche de la zone 4×2 ; le N-ᵉ `P` dans l'ordre de lecture appartient à l'équipe N,
+  sauf `pad.N=ÉQUIPE` dans l'en-tête).
   En-tête : `name=…` et `drop.N=rouge|bleu|mixte…` : voir `game/level.h` (couleur `red|blue|mixed`, intervalle en secondes,
   plafond de caisses simultanées pour cette zone, % de bleues pour `mixed`, 25 par défaut).
 - **Constantes de gameplay** : `tuning.h` au départ ; éventuellement un fichier texte rechargé à chaud plus tard.
@@ -284,10 +302,11 @@ RGBA 640×360 via le renderer logiciel de SDL. Aucun display n'est requis.
 | `--screenshot PATH` | PNG écrit après le dernier tick |
 | `--shot-every N` | Avec `--screenshot motif_%u.png` : un PNG tous les N ticks (films) |
 | `--shot-cam X,Y` | Coin haut-gauche de la caméra pour la capture (voir une autre partie du niveau) |
+| `--fill-pad HAUT,BAS` | Pose des caisses dans le pad de l'équipe 1 (ex. `r...,rr.b` : r rouge, b bleue, `.` vide) |
 | `--debug-overlay` | Grille, hitboxes, vitesse, pastilles d'état, spawns et zones de largage |
 | `--trace N` | Affiche l'état du joueur tous les N ticks |
 
-La dernière ligne affichée (`ticks=… respawns=… hash=…`) sert aux tests de déterminisme.
+La dernière ligne affichée (`ticks=… respawns=… products=… hash=…`) sert aux tests de déterminisme.
 
 ### Boucle fenêtrée testée sans fenêtre
 
@@ -308,14 +327,17 @@ Les touches F1–F4 sont testées en injectant des événements (`SDL_PushEvent`
   (accélération, saut variable, coyote, buffer, plateformes, échelles), `script`, `camera`,
   `game` (invariants sous bots sur 24 graines × 8000 ticks, déterminisme, eau/respawn),
   `scenarios` (traversée du vrai niveau : sauts plateforme à plateforme, échelle, fosse ; bot marcheur),
-  `platform` (mapping clavier, événements).
+  `platform` (mapping clavier, événements dont le clic gauche), `pad` (recettes : toutes les formes, rouge/bleu, orientations du L,
+  ordre de consommation, pad vide, « non vide ⇒ au moins un 1×1 », **toutes les 3⁸ grilles** comparées à un calcul indépendant ;
+  monde : lecture des caisses, construction, produits, menu périmé, pool plein), `pad_menu` (visibilité, disposition, clavier, souris,
+  bot qui martèle Tab/Entrée), `events` (file, débordement, événements émis par les caisses, hash inchangé).
 - Tests de fumée sur l'exécutable : headless (bot, script + overlay, film), déterminisme, arguments/niveau/script
   invalides, boucle fenêtrée sous `dummy`, garde du pilote vidéo.
 - Les invariants vérifiés à chaque tick sous bots : jamais dans une tuile solide, dans les bornes du niveau,
   vitesses bornées, `on_ground` ⇒ appui sous les pieds, caméra dans le niveau.
   Pour les caisses : grille et pool cohérents (une case solide par caisse au repos, alignement exact, appui sous chaque caisse),
   au plus une caisse portée et référencée par le joueur, plafond de chaque zone respecté.
-- À venir : détection de formes du pad (M2), A* (M5), partie IA vs IA simulée.
+- À venir : A* (M5), partie IA vs IA simulée.
 
 ## Cibles CMake
 

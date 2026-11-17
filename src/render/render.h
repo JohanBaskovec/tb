@@ -21,6 +21,9 @@ void render_fill_rect(Render *r, Rect rect, Color c);
 void render_outline_rect(Render *r, Rect rect, Color c);
 void render_line(Render *r, Vec2 a, Vec2 b, Color c);
 
+// Window pixels (mouse position) -> logical 640x360 pixels, undoing the letterbox and scaling.
+Vec2 render_window_to_logical(const Render *r, f32 window_x, f32 window_y);
+
 void render_set_title(Render *r, const char *title);
 // Current window title (empty string in headless mode).
 const char *render_title(const Render *r);

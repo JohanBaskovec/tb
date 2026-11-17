@@ -24,6 +24,27 @@ static const Color COL_WOOD_DARK = {92, 60, 30, 255};
 static const Color COL_CHUTE = {240, 236, 220, 255};
 static const Color COL_CHUTE_STRIPE = {214, 190, 120, 255};
 
+static const Color COL_PAD_PLATE = {70, 190, 170, 255};
+static const Color COL_PAD_CELL = {56, 120, 118, 255};
+static const Color COL_MENU_BG = {20, 22, 36, 235};
+static const Color COL_MENU_BORDER = {120, 126, 160, 255};
+static const Color COL_MENU_SELECTED = {255, 224, 80, 255};
+
+// One placeholder color per product (final art comes later).
+static const Color PRODUCT_COLORS[PRODUCT_COUNT] = {
+    [PRODUCT_PISTOL] = {190, 190, 200, 255},
+    [PRODUCT_UZI] = {120, 120, 140, 255},
+    [PRODUCT_GRENADES] = {110, 170, 70, 255},
+    [PRODUCT_STRONG_GRENADES] = {190, 230, 60, 255},
+    [PRODUCT_COMPANION] = {240, 170, 120, 255},
+    [PRODUCT_STRONG_COMPANION] = {240, 120, 70, 255},
+    [PRODUCT_ROCKET_LAUNCHER] = {230, 90, 40, 255},
+    [PRODUCT_HEAVY_COMPANION] = {180, 90, 200, 255},
+    [PRODUCT_HEAVY_ARMORED_COMPANION] = {120, 60, 160, 255},
+    [PRODUCT_TANK] = {90, 140, 90, 255},
+    [PRODUCT_HEAVY_TANK] = {50, 90, 60, 255},
+};
+
 static Rect rect_at(i32 ox, i32 oy, f32 x, f32 y, f32 w, f32 h) {
     return (Rect){x - (f32)ox, y - (f32)oy, w, h};
 }
@@ -148,6 +169,71 @@ static void draw_crates(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 o
     }
 }
 
+// The 4x2 area of every pad: a plate under it and faint cell outlines.
+static void draw_pads(Render *r, const GameState *gs, i32 ox, i32 oy) {
+    for (i32 team = 0; team < MAX_TEAMS; team++) {
+        if (!gs->level->pads[team].present) {
+            continue;
+        }
+        const Rect pr = pad_rect(gs, team);
+        render_fill_rect(r, rect_at(ox, oy, pr.x - 2.0f, pr.y + pr.h, pr.w + 4.0f, 3.0f), COL_PAD_PLATE);
+        for (i32 row = 0; row < PAD_ROWS; row++) {
+            for (i32 col = 0; col < PAD_COLS; col++) {
+                render_outline_rect(r, rect_at(ox, oy, pr.x + (f32)(col * TILE_SIZE), pr.y + (f32)(row * TILE_SIZE),
+                                               (f32)TILE_SIZE, (f32)TILE_SIZE), COL_PAD_CELL);
+            }
+        }
+    }
+}
+
+static void draw_products(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 oy) {
+    for (u16 i = 1; i <= MAX_ENTITIES; i++) {
+        const Entity *e = &gs->entities.slots[i];
+        if (e->type != ENT_PRODUCT) {
+            continue;
+        }
+        const f32 x = roundf(lerpf(e->prev_pos.x, e->body.pos.x, alpha));
+        const f32 y = roundf(lerpf(e->prev_pos.y, e->body.pos.y, alpha));
+        const Color c = PRODUCT_COLORS[e->as.product.kind];
+        render_fill_rect(r, rect_at(ox, oy, x, y, e->body.size.x, e->body.size.y), COL_WOOD_DARK);
+        render_fill_rect(r, rect_at(ox, oy, x + 1.0f, y + 1.0f, e->body.size.x - 2.0f, e->body.size.y - 2.0f), c);
+    }
+}
+
+// Mini picture of the shape: one 5 px square per consumed crate, in that crate's color.
+static void draw_menu_entry(Render *r, const PadMenu *m, i32 index, i32 ox, i32 oy) {
+    const PadOption *o = &m->options.items[index];
+    const Rect er = m->rects[index];
+    const bool selected = index == m->selected;
+    const Rect box = rect_at(ox, oy, er.x, er.y, er.w, er.h);
+    render_fill_rect(r, box, COL_MENU_BG);
+    render_outline_rect(r, box, selected ? COL_MENU_SELECTED : COL_MENU_BORDER);
+    if (selected) {
+        render_outline_rect(r, (Rect){box.x + 1.0f, box.y + 1.0f, box.w - 2.0f, box.h - 2.0f}, COL_MENU_SELECTED);
+    }
+    const f32 cell = 5.0f;
+    const f32 ix = box.x + 5.0f, iy = box.y + (box.h - 2.0f * cell) * 0.5f;
+    for (u32 k = 0; k < o->count; k++) {
+        const PadCoord c = o->cells[k];
+        const bool blue = m->grid.cells[c.row][c.col] == PAD_BLUE;
+        render_fill_rect(r, (Rect){ix + (f32)c.col * cell, iy + (f32)c.row * cell, cell - 1.0f, cell - 1.0f},
+                         blue ? COL_CRATE_BLUE : COL_CRATE_RED);
+    }
+    const Color pc = PRODUCT_COLORS[o->product];
+    const Rect sw = {box.x + box.w - 15.0f, box.y + 3.0f, 12.0f, box.h - 6.0f};
+    render_fill_rect(r, sw, pc);
+    render_outline_rect(r, sw, COL_WOOD_DARK);
+}
+
+static void draw_pad_menu(Render *r, const PadMenu *m, i32 ox, i32 oy) {
+    if (!m || !m->visible) {
+        return;
+    }
+    for (u32 i = 0; i < m->options.count; i++) {
+        draw_menu_entry(r, m, (i32)i, ox, oy);
+    }
+}
+
 static void draw_flag(Render *r, int slot, bool on, Color color) {
     const Color off = {40, 40, 56, 255};
     render_fill_rect(r, (Rect){4.0f + (f32)(slot * 9), 4.0f, 7.0f, 7.0f}, on ? color : off);
@@ -204,7 +290,7 @@ static void draw_debug(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 oy
     draw_flag(r, 5, c->is_jumping, (Color){255, 150, 40, 255});
 }
 
-void draw_game(Render *r, const GameState *gs, const Camera *cam, f32 alpha, u32 flags) {
+void draw_game(Render *r, const GameState *gs, const Camera *cam, const PadMenu *menu, f32 alpha, u32 flags) {
     const Vec2 cp = camera_interpolated(cam, alpha);
     const i32 ox = (i32)roundf(cp.x);
     const i32 oy = (i32)roundf(cp.y);
@@ -212,8 +298,11 @@ void draw_game(Render *r, const GameState *gs, const Camera *cam, f32 alpha, u32
     render_begin(r, (Color){24, 28, 44, 255});
     draw_background(r);
     draw_tiles(r, gs->level, ox, oy);
+    draw_pads(r, gs, ox, oy);
     draw_crates(r, gs, alpha, ox, oy, flags);
+    draw_products(r, gs, alpha, ox, oy);
     draw_player(r, &gs->player, alpha, ox, oy);
+    draw_pad_menu(r, menu, ox, oy);
     if (flags & DRAW_DEBUG) {
         draw_debug(r, gs, alpha, ox, oy);
     }
