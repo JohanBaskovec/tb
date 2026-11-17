@@ -80,9 +80,15 @@ les escouades adverses (ou selon l'objectif de la mission).
 ### Déplacement 🟡
 - Marcher, sauter (hauteur variable selon durée d'appui, *coyote time* et *jump buffer*),
   tomber à travers les plateformes fines (bas + saut), grimper aux échelles.
-- **Porter une caisse** : la caisse est tenue au-dessus de la tête ; vitesse réduite, saut réduit,
-  impossible de tirer. On peut la **poser** devant soi ou la **lancer** en cloche.
-- Prendre un coup en portant une caisse la fait tomber.
+- **Porter une caisse** ✅ : la caisse est tenue au-dessus de la tête ; vitesse réduite (×0,75), saut réduit (×0,8),
+  impossible de tirer, 🟡 impossible de grimper aux échelles. On peut la **poser** devant soi ou la **lancer** en cloche.
+  - 🟡 **Touche d'action** (C / B) : à mains libres, prend la caisse la plus proche **devant soi** (portée 16 px) ;
+    en portant, la **pose** dans la première colonne entièrement devant le corps (ou jusqu'à 2 tuiles plus haut si
+    la case est prise, pour construire des piles). Si rien n'est possible (mur devant), on garde la caisse.
+  - 🟡 **Touche de tir** (X) en portant : **lance** la caisse en cloche (≈ 5 tuiles). Refusé sous un plafond trop bas.
+  - 🟡 On ne peut prendre que la caisse du **dessus** d'une pile, et jamais celle sur laquelle on se tient.
+- Prendre un coup en portant une caisse la fait tomber (avec les dégâts, jalon M3).
+- Tomber à l'eau avec une caisse : la caisse est perdue. 🟡
 
 ### Santé et mort 🟡
 - ✅ **100 points de vie** pour le compagnon de base ; 150 / 200 pour les variantes plus fortes (§ 4). 🟡 Recul quand on est touché.
@@ -118,7 +124,13 @@ les escouades adverses (ou selon l'objectif de la mission).
   - une seule zone de largage sur la carte ;
   - une zone de caisses **rouges** à côté de chaque base + une zone **centrale** qui ne largue que des caisses **bleues**
     (zone contestée, donc point stratégique).
-- Une caisse libre est un corps soumis à la gravité ; elle repose sur le sol ou sur d'autres caisses.
+- Une caisse libre est un corps soumis à la gravité ; elle repose sur le sol, sur une plateforme fine ou sur d'autres caisses.
+- 🟡 **Les caisses sont alignées sur la grille de tuiles** : en atterrissant, une caisse se cale dans la colonne qu'elle
+  recouvre le plus (et qui est soutenue), sur la rangée où elle a atterri. Les caisses au repos sont **solides** pour tout
+  le monde : on ne les traverse pas, on peut monter dessus (une pile de 2 se franchit en sautant, 4 est un mur).
+- 🟡 Une caisse qui perd son support (celle du dessous a été prise) retombe ; une pile se tasse.
+- 🟡 Une caisse tombée à l'eau ou dans le vide est détruite. Elle attend de se poser tant qu'un soldat occupe sa case.
+- 🟡 Les caisses ne blessent pas (pour l'instant).
 - Plus tard 🟡 : caisses spéciales (piégée, dorée…).
 
 ## 6. Le pad d'empilement ✅ (recettes) / 🟡 (mécanique)

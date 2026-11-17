@@ -103,6 +103,90 @@ static void test_parse_errors(void) {
     arena_free(&a);
 }
 
+static void test_drop_zone_config(void) {
+    Arena a;
+    CHECK(arena_init(&a, 1 << 16));
+    Level lv;
+    char err[128] = "";
+    // Zones are numbered in reading order: D at (1,0), D at (3,0), D at (2,1).
+    const char *txt = "drop.1=red,5,3\ndrop.3=mixed,10,4,30\n---\n.D.D.\n..D..\n";
+    CHECK(parse(&lv, &a, txt, err, sizeof(err)));
+    CHECK_EQ_U64(lv.drop_zone_count, 3);
+    CHECK_EQ_U64(lv.drop_cfg[0].color, DROP_RED);
+    CHECK_EQ_U64(lv.drop_cfg[0].interval_s, 5);
+    CHECK_EQ_U64(lv.drop_cfg[0].cap, 3);
+    // Zone 2 is not configured: defaults.
+    CHECK_EQ_U64(lv.drop_cfg[1].color, DROP_MIXED);
+    CHECK_EQ_U64(lv.drop_cfg[1].interval_s, DEFAULT_DROP_INTERVAL_S);
+    CHECK_EQ_U64(lv.drop_cfg[1].cap, DEFAULT_DROP_CAP);
+    CHECK_EQ_U64(lv.drop_cfg[1].blue_percent, DEFAULT_DROP_BLUE_PERCENT);
+    CHECK_EQ_U64(lv.drop_cfg[2].color, DROP_MIXED);
+    CHECK_EQ_U64(lv.drop_cfg[2].interval_s, 10);
+    CHECK_EQ_U64(lv.drop_cfg[2].cap, 4);
+    CHECK_EQ_U64(lv.drop_cfg[2].blue_percent, 30);
+    // And the markers are where the numbering says.
+    CHECK_NEAR(lv.drop_zones[0].x, 1.5f * TILE_SIZE, 0.0);
+    CHECK_NEAR(lv.drop_zones[2].y, 1.0f * TILE_SIZE, 0.0);
+
+    CHECK(parse(&lv, &a, "drop.1=blue,1,1\n---\nD\n", err, sizeof(err)));
+    CHECK_EQ_U64(lv.drop_cfg[0].color, DROP_BLUE);
+    arena_free(&a);
+}
+
+static void test_drop_zone_config_errors(void) {
+    static const ErrCase cases[] = {
+        {"drop.1=green,5,3\n---\nD\n", "unknown color"},
+        {"drop.1=red,0,3\n---\nD\n", "interval"},
+        {"drop.1=red,601,3\n---\nD\n", "interval"},
+        {"drop.1=red,5,0\n---\nD\n", "cap"},
+        {"drop.1=red,5,65\n---\nD\n", "cap"},
+        {"drop.1=mixed,5,3,101\n---\nD\n", "blue percentage"},
+        {"drop.1=red,5\n---\nD\n", "expects COLOR"},
+        {"drop.1=red,5,3,10,9\n---\nD\n", "expects COLOR"},
+        {"drop.1=\n---\nD\n", "expects COLOR"},
+        {"drop.1=red,x,3\n---\nD\n", "interval"},
+        {"drop.0=red,5,3\n---\nD\n", "zone number"},
+        {"drop.17=red,5,3\n---\nD\n", "zone number"},
+        {"drop.a=red,5,3\n---\nD\n", "zone number"},
+        {"drop.1=red,5,3\ndrop.1=blue,5,3\n---\nD\n", "duplicate drop.1"},
+        {"drop.2=red,5,3\n---\nD\n", "does not exist"},
+        {"drop.1=red,5,3\n---\n.\n", "does not exist"},
+    };
+    Arena a;
+    CHECK(arena_init(&a, 1 << 16));
+    for (usize i = 0; i < ARRAY_LEN(cases); i++) {
+        Level lv;
+        char err[160] = "";
+        bool ok = parse(&lv, &a, cases[i].text, err, sizeof(err));
+        CHECK(!ok);
+        if (strstr(err, cases[i].expected) == NULL) {
+            fprintf(stderr, "case %d: error '%s' does not contain '%s'\n", (int)i, err,
+                    cases[i].expected);
+            g_failures++;
+        }
+    }
+    arena_free(&a);
+}
+
+static void test_dynamic_solid_overlay(void) {
+    Arena a;
+    CHECK(arena_init(&a, 1 << 16));
+    Level lv;
+    char err[128];
+    CHECK(parse(&lv, &a, "---\n...\n###\n", err, sizeof(err)));
+    CHECK(!level_is_solid(&lv, 1, 0));
+    level_set_dyn_solid(&lv, 1, 0, true);
+    CHECK(level_is_solid(&lv, 1, 0));   // a resting crate is solid like terrain...
+    CHECK(level_dyn_solid(&lv, 1, 0));
+    CHECK_EQ_U64(level_tile(&lv, 1, 0), TILE_EMPTY); // ...but the static map is untouched
+    CHECK(!level_is_one_way(&lv, 1, 0));
+    level_set_dyn_solid(&lv, 1, 0, false);
+    CHECK(!level_is_solid(&lv, 1, 0));
+    CHECK(!level_dyn_solid(&lv, -1, 0)); // out of range: no crate (walls are solid through level_tile)
+    CHECK(level_is_solid(&lv, -1, 0));
+    arena_free(&a);
+}
+
 static void test_out_of_bounds_tiles(void) {
     Arena a;
     CHECK(arena_init(&a, 1 << 16));
@@ -158,6 +242,15 @@ static void test_real_level_file(void) {
         CHECK_EQ_U64(level_tile(&lv, tx, ty - 1), TILE_EMPTY);
     }
     CHECK_EQ_U64(lv.drop_zone_count, 3);
+    // Red near each base, blue only at the centre.
+    CHECK_EQ_U64(lv.drop_cfg[0].color, DROP_RED);
+    CHECK_EQ_U64(lv.drop_cfg[1].color, DROP_BLUE);
+    CHECK_EQ_U64(lv.drop_cfg[2].color, DROP_RED);
+    CHECK(lv.drop_zones[0].x < lv.drop_zones[1].x && lv.drop_zones[1].x < lv.drop_zones[2].x);
+    for (int z = 0; z < 3; z++) {
+        // Each zone has open sky around its marker cell.
+        CHECK(!level_is_solid(&lv, level_px_to_tile(lv.drop_zones[z].x), level_px_to_tile(lv.drop_zones[z].y)));
+    }
 
     CHECK(!level_load_file(&lv, &a, CS_ASSET_DIR "/levels/does_not_exist.lvl", err, sizeof(err)));
     CHECK(strstr(err, "cannot open") != NULL);
@@ -168,6 +261,9 @@ int main(void) {
     RUN_TEST(test_parse_basic);
     RUN_TEST(test_parse_crlf_and_trailing_blank_lines);
     RUN_TEST(test_parse_errors);
+    RUN_TEST(test_drop_zone_config);
+    RUN_TEST(test_drop_zone_config_errors);
+    RUN_TEST(test_dynamic_solid_overlay);
     RUN_TEST(test_out_of_bounds_tiles);
     RUN_TEST(test_one_way_rules);
     RUN_TEST(test_real_level_file);

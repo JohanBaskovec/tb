@@ -1,10 +1,11 @@
 #include "game/game.h"
 
 #include "core/log.h"
+#include "game/crate.h"
 
 #include <string.h>
 
-bool game_init(GameState *gs, u64 seed, const Level *level) {
+bool game_init(GameState *gs, u64 seed, Level *level) {
     memset(gs, 0, sizeof(*gs));
     if (!level->has_spawn[0]) {
         LOG_ERROR("level '%s' has no spawn for team 1", level->name);
@@ -12,17 +13,26 @@ bool game_init(GameState *gs, u64 seed, const Level *level) {
     }
     rng_seed(&gs->rng, seed, 1);
     gs->level = level;
+    pool_init(&gs->entities);
     companion_init(&gs->player, level->spawns[0]);
+    for (i32 z = 0; z < level->drop_zone_count; z++) {
+        gs->drop_timers[z] = (u32)level->drop_cfg[z].interval_s * TICK_HZ;
+    }
     return true;
 }
 
 void game_update(GameState *gs, const InputFrame *input) {
     companion_update(&gs->player, gs->level, input);
+    crate_carry_update(gs, input);
+    crates_update(gs);
+    crate_carried_follow(gs);
 
     if (companion_in_hazard(&gs->player, gs->level)) {
+        crate_destroy(gs, gs->player.carrying); // the crate is lost with its carrier
         companion_init(&gs->player, gs->level->spawns[0]);
         gs->respawns++;
     }
+    pool_flush(&gs->entities);
     gs->tick++;
 }
 
@@ -51,5 +61,25 @@ u64 game_hash(const GameState *gs) {
     h = fnv_mix(h, &c->jump_buffer_ticks, sizeof(c->jump_buffer_ticks));
     h = fnv_mix(h, &c->drop_ticks, sizeof(c->drop_ticks));
     h = fnv_mix(h, &c->ladder_cooldown_ticks, sizeof(c->ladder_cooldown_ticks));
+    h = fnv_mix(h, &c->carrying, sizeof(c->carrying));
+    h = fnv_mix(h, gs->drop_timers, sizeof(gs->drop_timers));
+    for (u16 i = 1; i <= MAX_ENTITIES; i++) {
+        const Entity *e = &gs->entities.slots[i];
+        if (e->type == ENT_NONE) {
+            continue;
+        }
+        h = fnv_mix(h, &i, sizeof(i));
+        h = fnv_mix(h, &e->generation, sizeof(e->generation));
+        h = fnv_mix(h, &e->body.pos, sizeof(e->body.pos));
+        h = fnv_mix(h, &e->body.vel, sizeof(e->body.vel));
+        if (e->type == ENT_CRATE) {
+            const Crate *cr = &e->as.crate;
+            h = fnv_mix(h, &cr->kind, sizeof(cr->kind));
+            h = fnv_mix(h, &cr->state, sizeof(cr->state));
+            h = fnv_mix(h, &cr->cell_x, sizeof(cr->cell_x));
+            h = fnv_mix(h, &cr->cell_y, sizeof(cr->cell_y));
+            h = fnv_mix(h, &cr->origin_zone, sizeof(cr->origin_zone));
+        }
+    }
     return h;
 }

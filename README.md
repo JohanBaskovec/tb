@@ -71,7 +71,8 @@ cmake --build build -j && ctest --test-dir build --output-on-failure
 | Monter / descendre (échelles) | ↑ ↓ | Stick G / croix  |
 | Sauter              | Espace        | A / Croix        |
 | Tirer / frapper     | X             | X / Carré        |
-| Prendre / poser / lancer une caisse | C | B / Rond       |
+| Prendre / poser une caisse | C | B / Rond       |
+| Lancer la caisse portée | X       | X / Carré        |
 | Changer de soldat   | Tab           | RB / R1          |
 | Menu d'ordres       | Q             | LB / L1          |
 | Pause               | Échap         | Start            |

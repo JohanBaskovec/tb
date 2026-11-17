@@ -129,8 +129,10 @@ scene_render(scene, alpha)              // interpolation positions précédentes
 
 ### Entités
 
-Un tableau de taille fixe d'`Entity` avec un en-tête commun et une union par type.
-Simple, lisible en C, sans allocation dynamique.
+Un tableau de taille fixe d'`Entity` (`EntityPool`, 256 emplacements) avec un en-tête commun et une union par type.
+Simple, lisible en C, sans allocation dynamique. **État actuel (M2) : seules les caisses vivent dans le pool**,
+le joueur est encore un champ de `GameState` ; les compagnons y entrent avec le jalon « escouade » (M4).
+Le schéma ci-dessous est la cible.
 
 ```c
 typedef struct { u16 index; u16 generation; } EntityId;   // 0 = invalide
@@ -156,8 +158,25 @@ typedef struct Entity {
 ```
 
 - Références entre entités via `EntityId` (jamais de pointeur conservé d'une frame à l'autre).
-- Destruction **différée** en fin de frame ; création possible pendant la frame.
+- Destruction **différée** en fin de frame (`pool_mark_destroy` puis `pool_flush`) ; création possible pendant la frame.
+- Les identifiants sont **générationnels** : un `EntityId` périmé (entité détruite, emplacement réutilisé) se résout en `NULL`.
+  Le compagnon garde l'id de la caisse portée (`Companion.carrying`), jamais un pointeur.
+
+### Caisses et grille
+
+- États d'une caisse : `DESCENDING` (descente lente à vitesse constante) → `FALLING` (corps libre : posée, lancée ou
+  privée de support) → `RESTING` (verrouillée dans une case) ; `CARRIED` (au-dessus d'un compagnon).
+- Les caisses au repos sont écrites dans une **couche solide dynamique** du `Level` (`dyn_solid`, mêmes dimensions que
+  `tiles`). `level_is_solid()` = terrain solide **ou** caisse : la physique des compagnons et des caisses n'a donc rien
+  de spécial à savoir. `level_tile()` ne voit que la carte statique (le rendu dessine les caisses à part).
+- Une caisse qui atterrit **se cale sur la grille** (colonne la plus recouverte et soutenue). Ce choix rend l'empilement
+  robuste et prépare le pad 4×2. Les caisses sont traitées **de bas en haut** pour qu'une pile se pose en un seul tick.
+- `GameState.level` est donc un `Level *` mutable ; `Sim` possède le niveau.
+- Les zones de largage (`drop.N=couleur,intervalle_s,plafond[,%bleu]` dans l'en-tête du niveau) vivent dans les données
+  de niveau ; `GameState.drop_timers` compte à rebours par zone, et ne tourne que sous le plafond.
 - Ordre de mise à jour fixe par type : entrées → IA → soldats → véhicules → projectiles → caisses → pads → règles.
+  Actuellement dans `game_update` : soldat → prendre/poser/lancer → caisses (largage, physique, calage) → caisse portée
+  suit la tête → respawn (eau) → `pool_flush`.
 
 ### GameState
 
@@ -232,7 +251,9 @@ dans `GameState.events`, que `audio/`, `render/` (effets) et `ui/` lisent après
 
 - **Niveaux** : format texte ASCII (`.lvl`), un caractère par tuile + section d'en-tête clé=valeur
   (nom, taille, fréquence de largage…). Lisible, versionnable, éditable à la main.
-  Exemple de légende : `#` sol, `=` plateforme fine, `H` échelle, `~` eau, `P1..P4` camps, `D` zone de largage (couleur rouge/bleue/mixte, cadence et plafond définis dans l'en-tête du niveau).
+  Légende : `#` sol, `=` plateforme fine, `H` échelle, `~` eau, `1`..`4` camps, `D` zone de largage.
+  En-tête : `name=…` et `drop.N=rouge|bleu|mixte…` : voir `game/level.h` (couleur `red|blue|mixed`, intervalle en secondes,
+  plafond de caisses simultanées pour cette zone, % de bleues pour `mixed`, 25 par défaut).
 - **Constantes de gameplay** : `tuning.h` au départ ; éventuellement un fichier texte rechargé à chaud plus tard.
 - **Sauvegarde / options** : fichier texte clé=valeur dans `SDL_GetPrefPath()`.
 
@@ -278,7 +299,9 @@ Les touches F1–F4 sont testées en injectant des événements (`SDL_PushEvent`
 
 - Exécutables CTest dans `tests/`. Les tests de logique sont liés à `cs_game` / `cs_app` (sans SDL) ;
   `test_platform` lie SDL mais n'initialise que le sous-système d'événements.
-- `core` (maths, arène, RNG, entrées), `png`, `level` (parseur, erreurs, vrai fichier), `physics`, `companion`
+- `core` (maths, arène, RNG, entrées), `png`, `level` (parseur, erreurs, config des zones de largage, couche solide, vrai fichier),
+  `entity` (pool générationnel), `crate` (descente, empilement, alignement, solidité, prendre/porter/poser/lancer, effondrement,
+  eau, zones de largage), `physics`, `companion`
   (accélération, saut variable, coyote, buffer, plateformes, échelles), `script`, `camera`,
   `game` (invariants sous bots sur 24 graines × 8000 ticks, déterminisme, eau/respawn),
   `scenarios` (traversée du vrai niveau : sauts plateforme à plateforme, échelle, fosse ; bot marcheur),
@@ -287,6 +310,8 @@ Les touches F1–F4 sont testées en injectant des événements (`SDL_PushEvent`
   invalides, boucle fenêtrée sous `dummy`, garde du pilote vidéo.
 - Les invariants vérifiés à chaque tick sous bots : jamais dans une tuile solide, dans les bornes du niveau,
   vitesses bornées, `on_ground` ⇒ appui sous les pieds, caméra dans le niveau.
+  Pour les caisses : grille et pool cohérents (une case solide par caisse au repos, alignement exact, appui sous chaque caisse),
+  au plus une caisse portée et référencée par le joueur, plafond de chaque zone respecté.
 - À venir : détection de formes du pad (M2), A* (M5), partie IA vs IA simulée.
 
 ## Cibles CMake

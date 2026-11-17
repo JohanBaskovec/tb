@@ -31,3 +31,15 @@
 // Ladders.
 #define TUNING_CLIMB_SPEED 70.0f
 #define TUNING_LADDER_COOLDOWN_S 0.15f // no re-grab right after letting go
+
+// Crates (16x16 px = one tile).
+#define TUNING_CRATE_SIZE 16.0f
+#define TUNING_CRATE_DESCENT_SPEED 60.0f // slow descent from the sky, constant
+#define TUNING_THROW_VX 150.0f           // lob: horizontal speed
+#define TUNING_THROW_VY 250.0f           // lob: initial upward speed
+#define TUNING_PICKUP_REACH 16.0f        // how far in front of the body a crate can be grabbed
+#define TUNING_PLACE_MAX_RAISE 2         // a crate can be placed up to this many tiles above the feet
+
+// Carrying a crate: slower, and a lower jump. No ladders, no shooting.
+#define TUNING_CARRY_SPEED_MULT 0.75f
+#define TUNING_CARRY_JUMP_MULT 0.8f

@@ -22,7 +22,9 @@ bool walker_stuck(const Walker *w) {
 
 static bool solid_ahead(const Level *lv, const Body *b, f32 dir, f32 height_above_feet) {
     const f32 x = (dir > 0.0f ? b->pos.x + b->size.x : b->pos.x) + dir * 3.0f;
-    return level_tile_at_px(lv, x, b->pos.y + b->size.y - height_above_feet) == TILE_SOLID;
+    // Terrain or a resting crate.
+    return level_is_solid(lv, level_px_to_tile(x),
+                          level_px_to_tile(b->pos.y + b->size.y - height_above_feet));
 }
 
 void walker_think(Walker *w, const Level *lv, const Companion *c, InputFrame *frame) {

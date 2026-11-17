@@ -130,8 +130,10 @@ void companion_update(Companion *c, const Level *lv, const InputFrame *in) {
         c->coyote_ticks--;
     }
 
-    // Ladders.
-    if (!c->on_ladder && c->ladder_cooldown_ticks == 0 && (up || down) &&
+    const bool carrying = entity_id_valid(c->carrying);
+
+    // Ladders (not while carrying a crate).
+    if (!c->on_ladder && !carrying && c->ladder_cooldown_ticks == 0 && (up || down) &&
         can_grab_ladder(c, lv, up, down)) {
         c->on_ladder = true;
         c->is_jumping = false;
@@ -146,7 +148,9 @@ void companion_update(Companion *c, const Level *lv, const InputFrame *in) {
     }
 
     // Horizontal movement.
-    const f32 target = dir * TUNING_WALK_SPEED;
+    const f32 walk_speed = carrying ? TUNING_WALK_SPEED * TUNING_CARRY_SPEED_MULT : TUNING_WALK_SPEED;
+    const f32 jump_speed = carrying ? TUNING_JUMP_SPEED * TUNING_CARRY_JUMP_MULT : TUNING_JUMP_SPEED;
+    const f32 target = dir * walk_speed;
     f32 accel;
     if (dir != 0.0f) {
         accel = b->on_ground ? TUNING_GROUND_ACCEL : TUNING_AIR_ACCEL;
@@ -168,7 +172,7 @@ void companion_update(Companion *c, const Level *lv, const InputFrame *in) {
         c->jump_buffer_ticks = 0;
         c->coyote_ticks = 0;
     } else if (c->jump_buffer_ticks > 0 && c->coyote_ticks > 0) {
-        b->vel.y = -TUNING_JUMP_SPEED;
+        b->vel.y = -jump_speed;
         b->on_ground = false;
         c->is_jumping = true;
         c->jump_buffer_ticks = 0;

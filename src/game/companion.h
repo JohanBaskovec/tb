@@ -2,6 +2,7 @@
 #pragma once
 
 #include "core/input_frame.h"
+#include "game/entity.h"
 #include "game/physics.h"
 
 typedef struct Companion {
@@ -14,6 +15,7 @@ typedef struct Companion {
     u32 jump_buffer_ticks;
     u32 drop_ticks;            // > 0: ignoring one-way platforms
     u32 ladder_cooldown_ticks; // > 0: cannot grab a ladder
+    EntityId carrying;         // crate held above the head, ENTITY_NONE if none
 } Companion;
 
 // `feet` = bottom-center of the body.

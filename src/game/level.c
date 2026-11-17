@@ -40,6 +40,90 @@ static bool next_line(const char **p, const char **line, usize *len) {
     return true;
 }
 
+static bool parse_int(const char *s, usize len, i32 *out) {
+    if (len == 0 || len > 9) {
+        return false;
+    }
+    i32 v = 0;
+    for (usize i = 0; i < len; i++) {
+        if (s[i] < '0' || s[i] > '9') {
+            return false;
+        }
+        v = v * 10 + (s[i] - '0');
+    }
+    *out = v;
+    return true;
+}
+
+// `drop.N=COLOR,INTERVAL_S,CAP[,BLUE_PERCENT]`
+static bool parse_drop_line(Level *lv, const char *key, usize klen, const char *val, usize vlen,
+                            int line_no, char *err, usize err_len) {
+    i32 n = 0;
+    if (!parse_int(key + 5, klen - 5, &n) || n < 1 || n > MAX_DROP_ZONES) {
+        set_err(err, err_len, "line %d: '%.*s': the zone number must be 1..%d", line_no, (int)klen,
+                key, MAX_DROP_ZONES);
+        return false;
+    }
+    const int zi = n - 1;
+    if (lv->drop_cfg_set[zi]) {
+        set_err(err, err_len, "line %d: duplicate drop.%d", line_no, (int)n);
+        return false;
+    }
+
+    const char *f[4];
+    usize fl[4];
+    int nf = 0;
+    const char *p = val;
+    const char *end = val + vlen;
+    for (;;) {
+        const char *comma = (const char *)memchr(p, ',', (usize)(end - p));
+        if (nf == 4) {
+            nf = 5;
+            break;
+        }
+        f[nf] = p;
+        fl[nf] = comma ? (usize)(comma - p) : (usize)(end - p);
+        nf++;
+        if (!comma) {
+            break;
+        }
+        p = comma + 1;
+    }
+    if (nf < 3 || nf > 4) {
+        set_err(err, err_len, "line %d: drop.%d expects COLOR,INTERVAL_S,CAP[,BLUE_PERCENT]", line_no,
+                (int)n);
+        return false;
+    }
+
+    DropZoneConfig cfg = {.blue_percent = DEFAULT_DROP_BLUE_PERCENT};
+    if (fl[0] == 3 && strncmp(f[0], "red", 3) == 0) {
+        cfg.color = DROP_RED;
+    } else if (fl[0] == 4 && strncmp(f[0], "blue", 4) == 0) {
+        cfg.color = DROP_BLUE;
+    } else if (fl[0] == 5 && strncmp(f[0], "mixed", 5) == 0) {
+        cfg.color = DROP_MIXED;
+    } else {
+        set_err(err, err_len, "line %d: drop.%d: unknown color '%.*s' (red, blue or mixed)", line_no,
+                (int)n, (int)fl[0], f[0]);
+        return false;
+    }
+    if (!parse_int(f[1], fl[1], &cfg.interval_s) || cfg.interval_s < 1 || cfg.interval_s > 600) {
+        set_err(err, err_len, "line %d: drop.%d: the interval must be 1..600 seconds", line_no, (int)n);
+        return false;
+    }
+    if (!parse_int(f[2], fl[2], &cfg.cap) || cfg.cap < 1 || cfg.cap > 64) {
+        set_err(err, err_len, "line %d: drop.%d: the cap must be 1..64", line_no, (int)n);
+        return false;
+    }
+    if (nf == 4 && (!parse_int(f[3], fl[3], &cfg.blue_percent) || cfg.blue_percent > 100)) {
+        set_err(err, err_len, "line %d: drop.%d: the blue percentage must be 0..100", line_no, (int)n);
+        return false;
+    }
+    lv->drop_cfg[zi] = cfg;
+    lv->drop_cfg_set[zi] = true;
+    return true;
+}
+
 static bool parse_header_line(Level *lv, const char *line, usize len, int line_no, char *err,
                               usize err_len) {
     const char *eq = (const char *)memchr(line, '=', len);
@@ -53,6 +137,9 @@ static bool parse_header_line(Level *lv, const char *line, usize len, int line_n
     if (klen == 4 && strncmp(line, "name", 4) == 0) {
         snprintf(lv->name, sizeof(lv->name), "%.*s", (int)vlen, val);
         return true;
+    }
+    if (klen > 5 && strncmp(line, "drop.", 5) == 0) {
+        return parse_drop_line(lv, line, klen, val, vlen, line_no, err, err_len);
     }
     set_err(err, err_len, "line %d: unknown header key '%.*s'", line_no, (int)klen, line);
     return false;
@@ -170,7 +257,8 @@ bool level_parse(Level *lv, Arena *arena, const char *text, char *err, usize err
     lv->width = width;
     lv->height = height;
     lv->tiles = ARENA_PUSH_ARRAY(arena, u8, (usize)(width * height));
-    if (!lv->tiles) {
+    lv->dyn_solid = ARENA_PUSH_ARRAY(arena, u8, (usize)(width * height));
+    if (!lv->tiles || !lv->dyn_solid) {
         set_err(err, err_len, "level arena is full");
         return false;
     }
@@ -183,6 +271,21 @@ bool level_parse(Level *lv, Arena *arena, const char *text, char *err, usize err
             if (!fill_cell(lv, x, y, line[x], map_first_line + (int)y, err, err_len)) {
                 return false;
             }
+        }
+    }
+
+    // Drop zone configs: validate against the markers found, fill in defaults for the others.
+    for (i32 z = 0; z < MAX_DROP_ZONES; z++) {
+        if (lv->drop_cfg_set[z] && z >= lv->drop_zone_count) {
+            set_err(err, err_len, "drop.%d refers to a zone that does not exist (the map has %d)",
+                    (int)z + 1, (int)lv->drop_zone_count);
+            return false;
+        }
+        if (!lv->drop_cfg_set[z]) {
+            lv->drop_cfg[z] = (DropZoneConfig){.color = DROP_MIXED,
+                                               .interval_s = DEFAULT_DROP_INTERVAL_S,
+                                               .cap = DEFAULT_DROP_CAP,
+                                               .blue_percent = DEFAULT_DROP_BLUE_PERCENT};
         }
     }
     return true;
@@ -226,8 +329,20 @@ TileType level_tile(const Level *lv, i32 tx, i32 ty) {
     return (TileType)lv->tiles[ty * lv->width + tx];
 }
 
+bool level_dyn_solid(const Level *lv, i32 tx, i32 ty) {
+    if (!lv->dyn_solid || tx < 0 || tx >= lv->width || ty < 0 || ty >= lv->height) {
+        return false;
+    }
+    return lv->dyn_solid[ty * lv->width + tx] != 0;
+}
+
+void level_set_dyn_solid(Level *lv, i32 tx, i32 ty, bool solid) {
+    ASSERT(tx >= 0 && tx < lv->width && ty >= 0 && ty < lv->height);
+    lv->dyn_solid[ty * lv->width + tx] = solid ? 1 : 0;
+}
+
 bool level_is_solid(const Level *lv, i32 tx, i32 ty) {
-    return level_tile(lv, tx, ty) == TILE_SOLID;
+    return level_tile(lv, tx, ty) == TILE_SOLID || level_dyn_solid(lv, tx, ty);
 }
 
 bool level_is_one_way(const Level *lv, i32 tx, i32 ty) {

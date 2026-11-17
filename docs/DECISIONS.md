@@ -123,3 +123,27 @@ et réutilisés par les tests. Le « marcheur » n'est pas un pathfinder ; l'IA 
 Compagnon 100 PV, fort 150, lourd 200, lourd blindé 300 (provisoire : « encore plus de PV »). Munitions provisoires :
 pistolet 24, uzi 60, grenades 6, grenades puissantes 4, lance-roquettes 5. Valeurs dans `game/tuning.h` à l'implémentation,
 à ajuster en jouant.
+
+### D024 — Les caisses au repos sont alignées sur la grille et écrites dans une couche solide du niveau
+**Statut :** Proposée
+En atterrissant, une caisse se cale dans la colonne qu'elle recouvre le plus (et qui est soutenue). Les caisses au repos
+sont dans `Level.dyn_solid`, que `level_is_solid()` consulte : aucune règle spéciale dans la physique. Rend l'empilement
+robuste et prépare le pad 4×2. *Alternative écartée :* caisses à position libre avec collisions AABB entre elles, plus fragile
+pour les piles et sans lien avec la grille du pad.
+
+### D025 — Prendre / poser / lancer
+**Statut :** Proposée (à valider en jouant)
+Touche d'action (C) : prend la caisse du dessus la plus proche devant soi (portée 16 px), ou pose la caisse portée devant soi
+(jusqu'à 2 tuiles plus haut si la case est prise). Touche de tir (X) en portant : lance en cloche (le tir est de toute façon
+impossible en portant). En portant : vitesse ×0,75, saut ×0,8, pas d'échelle. Valeurs dans `game/tuning.h`.
+
+### D026 — Configuration des zones de largage dans l'en-tête du niveau
+**Statut :** Acceptée
+`drop.N=COULEUR,INTERVALLE_S,PLAFOND[,POURCENT_BLEU]`, N comptant les marqueurs `D` dans l'ordre de lecture. Le plafond compte
+les caisses issues de la zone encore existantes ; le compte à rebours ne tourne que sous le plafond. Zone non configurée :
+mixte, 8 s, plafond 3, 25 % de bleues.
+
+### D027 — Les caisses ne blessent pas et attendent si un soldat occupe leur case
+**Statut :** Proposée
+Une caisse qui atterrit sur la case d'un soldat attend qu'il la libère avant de se verrouiller. Les dégâts éventuels
+viennent avec le combat (M3). Une caisse tombée à l'eau ou dans le vide est détruite ; le soldat qui tombe à l'eau perd sa caisse.

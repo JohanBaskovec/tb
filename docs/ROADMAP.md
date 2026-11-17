@@ -37,10 +37,10 @@ les valeurs de `tuning.h` (vitesse, hauteur de saut, gravité…) sont des régl
 Pas encore de police de caractères : l'overlay de debug utilise des pastilles de couleur (la police arrive avec le HUD, M6).
 
 ## M2 — Caisses et pad (cœur du jeu)
-- [ ] Pool d'entités avec `EntityId` générationnels
-- [ ] Caisses rouges et bleues ; largage sur les zones `D` configurables par niveau (couleur, cadence, plafond) : descente lente, puis physique
-- [ ] Empilement des caisses libres (solides entre elles et pour les soldats)
-- [ ] Prendre / porter / poser / lancer une caisse
+- [x] Pool d'entités avec `EntityId` générationnels (seules les caisses y vivent pour l'instant ; le joueur y entre en M4)
+- [x] Caisses rouges et bleues ; largage sur les zones `D` configurables par niveau (`drop.N=couleur,intervalle,plafond[,%bleu]`) : descente lente, puis physique
+- [x] Empilement des caisses libres (alignées sur la grille, solides pour tout le monde, piles qui se tassent)
+- [x] Prendre / porter / poser / lancer une caisse (C prend/pose, X lance ; vitesse et saut réduits en portant)
 - [ ] Pad d'empilement 4×2 : calage en grille, `pad_options()` pur (1×1, 2×1 H/V, L, 2×2, 4×2 × rouge/bleu ; caisses du haut consommées d'abord) + tests
 - [ ] Menu de construction à l'approche du pad (liste à côté du pad, clic / validation) ; `pad_build()` consomme les caisses et produit un objet placeholder
 - [ ] File d'événements jeu → présentation

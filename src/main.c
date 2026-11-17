@@ -1,6 +1,7 @@
 #include "app/sim.h"
 #include "core/config.h"
 #include "core/log.h"
+#include "game/crate.h"
 #include "game/walker.h"
 #include "platform/platform.h"
 #include "render/draw_game.h"
@@ -34,6 +35,9 @@ typedef struct Options {
     Vec2 start_feet;
     bool has_walk_to;
     f32 walk_to;
+    u32 crate_count;
+    Vec2 crate_pos[16];
+    CrateKind crate_kind[16];
     u32 trace_every;
     const char *expect_driver;
 } Options;
@@ -54,6 +58,7 @@ static void print_usage(const char *prog) {
             "  --shot-cam X,Y          screenshot camera top-left, in pixels\n"
             "  --start X,Y             start with the feet at X,Y (pixels) instead of the spawn\n"
             "  --walk-to X             drive the player with a bot that walks to x=X and hops obstacles\n"
+            "  --crate X,Y,KIND        add a falling crate (top-left X,Y in pixels; KIND red or blue); repeatable\n"
             "  --debug-overlay         draw hitboxes, grid and state flags\n"
             "  --trace N               print the player state every N ticks\n"
             "  --expect-video-driver D abort unless SDL picked video driver D (e.g. dummy)\n",
@@ -107,6 +112,17 @@ static bool parse_args(int argc, char **argv, Options *o) {
             }
             o->has_start = true;
             o->start_feet = vec2(x, y);
+        } else if (strcmp(a, "--crate") == 0 && has_val) {
+            float x, y;
+            char kind[8];
+            if (o->crate_count >= 16 || sscanf(argv[++i], "%f,%f,%7s", &x, &y, kind) != 3 ||
+                (strcmp(kind, "red") != 0 && strcmp(kind, "blue") != 0)) {
+                LOG_ERROR("--crate expects X,Y,red|blue (at most 16)");
+                return false;
+            }
+            o->crate_pos[o->crate_count] = vec2(x, y);
+            o->crate_kind[o->crate_count] = strcmp(kind, "blue") == 0 ? CRATE_BLUE : CRATE_RED;
+            o->crate_count++;
         } else if (strcmp(a, "--walk-to") == 0 && has_val) {
             o->has_walk_to = true;
             o->walk_to = strtof(argv[++i], NULL);
@@ -316,6 +332,10 @@ int main(int argc, char **argv) {
         LOG_ERROR("%s", err);
         platform_shutdown();
         return 1;
+    }
+
+    for (u32 i = 0; i < o.crate_count; i++) {
+        crate_spawn(&sim.gs, o.crate_kind[i], o.crate_pos[i], CRATE_FALLING, -1);
     }
 
     int rc = o.headless ? run_headless(&o, &sim) : run_windowed(&o, &sim);

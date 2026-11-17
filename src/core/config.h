@@ -16,3 +16,5 @@
 #define MAX_LEVEL_W 256
 #define MAX_LEVEL_H 128
 #define MAX_DROP_ZONES 16
+
+#define MAX_ENTITIES 256

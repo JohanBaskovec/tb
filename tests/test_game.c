@@ -57,9 +57,77 @@ typedef struct Coverage {
     bool ladder, drop, jump, respawn, upper_slab;
     f32 min_y;
     f32 max_x;
+    u32 max_resting; // most crates resting at once
 } Coverage;
 
+// Crates: the grid, the pool and the player must tell the same story at the end of every tick.
+static u32 check_crate_invariants(const Sim *sim) {
+    const GameState *gs = &sim->gs;
+    const Level *lv = &sim->level;
+    u32 resting = 0, carried = 0, alive = 0;
+    u32 per_zone[MAX_DROP_ZONES] = {0};
+
+    for (u16 i = 1; i <= MAX_ENTITIES; i++) {
+        const Entity *e = &gs->entities.slots[i];
+        if (e->type == ENT_NONE) {
+            continue;
+        }
+        alive++;
+        CHECK(!e->pending_destroy); // everything flagged was flushed at the end of the tick
+        CHECK(e->type == ENT_CRATE);
+        const Crate *c = &e->as.crate;
+        if (c->origin_zone >= 0) {
+            CHECK(c->origin_zone < lv->drop_zone_count);
+            per_zone[c->origin_zone]++;
+        }
+        if (c->state == CRATE_RESTING) {
+            resting++;
+            bool ok = e->body.pos.x == (f32)(c->cell_x * TILE_SIZE) &&
+                      e->body.pos.y == (f32)(c->cell_y * TILE_SIZE) &&
+                      level_dyn_solid(lv, c->cell_x, c->cell_y) &&
+                      level_tile(lv, c->cell_x, c->cell_y) != TILE_SOLID &&
+                      (level_is_solid(lv, c->cell_x, c->cell_y + 1) ||
+                       level_is_one_way(lv, c->cell_x, c->cell_y + 1));
+            if (!ok) {
+                fprintf(stderr, "tick %llu: resting crate in a bad state at cell (%d,%d)\n",
+                        (unsigned long long)gs->tick, (int)c->cell_x, (int)c->cell_y);
+                g_failures++;
+            }
+        } else if (c->state == CRATE_CARRIED) {
+            carried++;
+            CHECK(entity_id_eq(gs->player.carrying, (EntityId){i, e->generation}));
+        } else {
+            // In flight: inside the map horizontally, and not embedded in a resting crate.
+            CHECK(e->body.pos.x >= 0.0f && e->body.pos.x + e->body.size.x <= level_width_px(lv));
+            CHECK(!level_dyn_solid(lv, level_px_to_tile(e->body.pos.x + 8.0f),
+                                   level_px_to_tile(e->body.pos.y + 8.0f)));
+        }
+    }
+    CHECK(carried <= 1);
+    CHECK_EQ_U64(carried, entity_id_valid(gs->player.carrying) ? 1 : 0);
+    if (entity_id_valid(gs->player.carrying)) {
+        CHECK(pool_get_const(&gs->entities, gs->player.carrying) != NULL);
+    }
+    CHECK_EQ_U64(gs->entities.live_count, alive);
+    // The solid overlay holds exactly the resting crates (no ghost cells, none missing).
+    // A full scan of the map is the costly part of this check, so it runs every 16 ticks.
+    if (gs->tick % 16 == 0) {
+        u32 cells = 0;
+        for (i32 y = 0; y < lv->height; y++) {
+            for (i32 x = 0; x < lv->width; x++) {
+                cells += level_dyn_solid(lv, x, y) ? 1u : 0u;
+            }
+        }
+        CHECK_EQ_U64(cells, resting);
+    }
+    for (i32 z = 0; z < lv->drop_zone_count; z++) {
+        CHECK(per_zone[z] <= (u32)lv->drop_cfg[z].cap);
+    }
+    return resting;
+}
+
 static void check_invariants(const Sim *sim, Coverage *cov) {
+    cov->max_resting = MAX(cov->max_resting, check_crate_invariants(sim));
     const GameState *gs = &sim->gs;
     const Companion *c = &gs->player;
     const Body *b = &c->body;
@@ -94,6 +162,7 @@ static void check_invariants(const Sim *sim, Coverage *cov) {
 
 static void test_bot_invariants_on_real_level(void) {
     Coverage cov = {.min_y = 1e9f};
+    CrateStats stats = {0};
     for (u64 seed = 1; seed <= 24; seed++) {
         Sim sim;
         CHECK(real_sim(&sim, seed, true, NULL));
@@ -102,12 +171,26 @@ static void test_bot_invariants_on_real_level(void) {
             check_invariants(&sim, &cov);
         }
         CHECK_EQ_U64(sim.gs.tick, 8000);
+        const CrateStats *cs = &sim.gs.crate_stats;
+        stats.spawned += cs->spawned;
+        stats.settled += cs->settled;
+        stats.picked_up += cs->picked_up;
+        stats.placed += cs->placed;
+        stats.thrown += cs->thrown;
+        stats.destroyed += cs->destroyed;
         sim_free(&sim);
     }
     printf("       coverage: ladder=%d drop=%d jump=%d respawn=%d upper=%d min_y=%.0f max_x=%.0f\n",
            cov.ladder, cov.drop, cov.jump, cov.respawn, cov.upper_slab, (double)cov.min_y,
            (double)cov.max_x);
+    printf("       crates: spawned=%u settled=%u picked_up=%u placed=%u thrown=%u destroyed=%u "
+           "max_resting=%u\n",
+           stats.spawned, stats.settled, stats.picked_up, stats.placed, stats.thrown,
+           stats.destroyed, cov.max_resting);
     // The random bots must actually exercise the mechanics, not just stand still.
+    CHECK(stats.spawned > 100 && stats.settled > 50);
+    CHECK(stats.picked_up > 20 && stats.placed > 5 && stats.thrown > 5);
+    CHECK(cov.max_resting >= 3); // crates did pile up
     CHECK(cov.jump);
     CHECK(cov.ladder);
     CHECK(cov.drop);

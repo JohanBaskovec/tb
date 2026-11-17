@@ -30,6 +30,8 @@ target_link_libraries(cs_core PUBLIC cs_project_options)
 
 add_library(cs_game STATIC
     src/game/game.c
+    src/game/entity.c
+    src/game/crate.c
     src/game/level.c
     src/game/physics.c
     src/game/companion.c
