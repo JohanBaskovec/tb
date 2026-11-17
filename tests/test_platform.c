@@ -37,6 +37,48 @@ static void test_keyboard_mapping(void) {
                                  action_bit(ACT_PAUSE));
 }
 
+// The movement keys are physical positions (SDL scancodes): the WASD position, which is labelled
+// ZQSD on an AZERTY keyboard. Same keys on every layout; the arrow keys keep working too.
+static void test_wasd_position_keys(void) {
+    static const struct {
+        SDL_Scancode sc;
+        Action action;
+    } cases[] = {{SDL_SCANCODE_W, ACT_UP},
+                 {SDL_SCANCODE_A, ACT_LEFT},
+                 {SDL_SCANCODE_S, ACT_DOWN},
+                 {SDL_SCANCODE_D, ACT_RIGHT},
+                 {SDL_SCANCODE_UP, ACT_UP},
+                 {SDL_SCANCODE_LEFT, ACT_LEFT},
+                 {SDL_SCANCODE_DOWN, ACT_DOWN},
+                 {SDL_SCANCODE_RIGHT, ACT_RIGHT}};
+    bool keys[SDL_SCANCODE_COUNT];
+    for (usize i = 0; i < ARRAY_LEN(cases); i++) {
+        memset(keys, 0, sizeof(keys));
+        keys[cases[i].sc] = true;
+        CHECK_EQ_U64(platform_map_keyboard(keys, SDL_SCANCODE_COUNT), action_bit(cases[i].action));
+    }
+
+    // Letter and arrow for the same direction: one action, not two.
+    memset(keys, 0, sizeof(keys));
+    keys[SDL_SCANCODE_A] = keys[SDL_SCANCODE_LEFT] = true;
+    CHECK_EQ_U64(platform_map_keyboard(keys, SDL_SCANCODE_COUNT), action_bit(ACT_LEFT));
+
+    // Diagonal with letters: left + up.
+    memset(keys, 0, sizeof(keys));
+    keys[SDL_SCANCODE_A] = keys[SDL_SCANCODE_W] = true;
+    CHECK_EQ_U64(platform_map_keyboard(keys, SDL_SCANCODE_COUNT),
+                 action_bit(ACT_LEFT) | action_bit(ACT_UP));
+
+    // The other letters did not change meaning: Q (AZERTY "A") is still the order menu, not left;
+    // X, C and Tab are untouched; the keys next to the movement ones do nothing.
+    memset(keys, 0, sizeof(keys));
+    keys[SDL_SCANCODE_Q] = true;
+    CHECK_EQ_U64(platform_map_keyboard(keys, SDL_SCANCODE_COUNT), action_bit(ACT_ORDER));
+    memset(keys, 0, sizeof(keys));
+    keys[SDL_SCANCODE_E] = keys[SDL_SCANCODE_R] = keys[SDL_SCANCODE_F] = keys[SDL_SCANCODE_Z] = true;
+    CHECK_EQ_U64(platform_map_keyboard(keys, SDL_SCANCODE_COUNT), 0);
+}
+
 static void push_key(SDL_Scancode sc, bool repeat) {
     SDL_Event e;
     memset(&e, 0, sizeof(e));
@@ -80,6 +122,7 @@ static void test_events(void) {
 
 int main(void) {
     RUN_TEST(test_keyboard_mapping);
+    RUN_TEST(test_wasd_position_keys);
     RUN_TEST(test_events);
     TEST_MAIN_END();
 }

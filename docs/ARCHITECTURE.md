@@ -244,6 +244,9 @@ dans `GameState.events`, que `audio/`, `render/` (effets) et `ui/` lisent après
 
 - `platform/input` mappe clavier et `SDL_Gamepad` vers des **actions** (`ACT_LEFT`, `ACT_JUMP`,
   `ACT_FIRE`, `ACT_GRAB`, `ACT_SWITCH`, `ACT_ORDER`, `ACT_PAUSE`…) avec états `down / pressed / released`.
+- Le clavier est lu par **scancodes SDL** (position physique des touches), jamais par keycodes : les touches de
+  déplacement sont celles de la position WASD (ZQSD sur AZERTY), identiques sur tous les claviers ; les flèches restent actives.
+  `platform_map_keyboard()` est pure et testée.
 - Jusqu'à 4 joueurs locaux ; attribution des manettes dans l'écran de configuration ; hotplug géré.
 - Souris : clic pour choisir une construction du pad ; au clavier / à la manette, sélection + validation.
 

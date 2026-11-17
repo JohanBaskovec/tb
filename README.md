@@ -67,17 +67,21 @@ cmake --build build -j && ctest --test-dir build --output-on-failure
 
 | Action              | Clavier       | Manette          |
 |---------------------|---------------|------------------|
-| Se déplacer         | ← →           | Stick G / croix  |
-| Monter / descendre (échelles) | ↑ ↓ | Stick G / croix  |
+| Se déplacer         | ← → ou **ZQSD** (Q / D) | Stick G / croix |
+| Monter / descendre (échelles) | ↑ ↓ ou **ZQSD** (Z / S) | Stick G / croix |
 | Sauter              | Espace        | A / Croix        |
 | Tirer / frapper     | X             | X / Carré        |
 | Prendre / poser une caisse | C | B / Rond       |
 | Lancer la caisse portée | X       | X / Carré        |
 | Changer de soldat   | Tab           | RB / R1          |
-| Menu d'ordres       | Q             | LB / L1          |
+| Menu d'ordres       | touche à la position de Q (étiquetée A en AZERTY) | LB / L1 |
 | Pause               | Échap         | Start            |
 | Debug overlay       | F1            | —                |
 | Pause / pas-à-pas / ralenti ×0,25 (debug) | F2 / F3 / F4 | — |
+
+**Les touches sont repérées par leur position physique** (scancodes SDL), pas par la lettre imprimée dessus :
+les touches de déplacement sont celles de la position WASD, qui se lisent **ZQSD sur un clavier AZERTY** et WASD sur un
+QWERTY. Ce sont les mêmes touches physiques sur tous les claviers, sans réglage. Les flèches fonctionnent aussi.
 
 ## Documentation
 

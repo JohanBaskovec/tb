@@ -54,12 +54,20 @@ static void map_key(const bool *keys, int count, int scancode, Action action, u3
     }
 }
 
+// Keys are identified by SDL *scancodes*, i.e. by their physical position on the keyboard, not by
+// the letter printed on them. The four movement keys are the ones at the WASD position: they read
+// WASD on a QWERTY keyboard and ZQSD on an AZERTY one, and they are the same physical keys on every
+// layout. (Using keycodes would make "Z" mean a different key on each layout.)
 u32 platform_map_keyboard(const bool *keys, int count) {
     u32 mask = 0;
     map_key(keys, count, SDL_SCANCODE_LEFT, ACT_LEFT, &mask);
     map_key(keys, count, SDL_SCANCODE_RIGHT, ACT_RIGHT, &mask);
     map_key(keys, count, SDL_SCANCODE_UP, ACT_UP, &mask);
     map_key(keys, count, SDL_SCANCODE_DOWN, ACT_DOWN, &mask);
+    map_key(keys, count, SDL_SCANCODE_A, ACT_LEFT, &mask);  // Q on AZERTY
+    map_key(keys, count, SDL_SCANCODE_D, ACT_RIGHT, &mask); // D on AZERTY
+    map_key(keys, count, SDL_SCANCODE_W, ACT_UP, &mask);    // Z on AZERTY
+    map_key(keys, count, SDL_SCANCODE_S, ACT_DOWN, &mask);  // S on AZERTY
     map_key(keys, count, SDL_SCANCODE_SPACE, ACT_JUMP, &mask);
     map_key(keys, count, SDL_SCANCODE_X, ACT_FIRE, &mask);
     map_key(keys, count, SDL_SCANCODE_C, ACT_GRAB, &mask);

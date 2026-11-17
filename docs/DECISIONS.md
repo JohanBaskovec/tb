@@ -147,3 +147,10 @@ mixte, 8 s, plafond 3, 25 % de bleues.
 **Statut :** Proposée
 Une caisse qui atterrit sur la case d'un soldat attend qu'il la libère avant de se verrouiller. Les dégâts éventuels
 viennent avec le combat (M3). Une caisse tombée à l'eau ou dans le vide est détruite ; le soldat qui tombe à l'eau perd sa caisse.
+
+### D028 — Contrôles clavier par position physique : ZQSD en AZERTY = WASD en QWERTY
+**Statut :** Acceptée (demandée par l'utilisateur)
+Les entrées clavier utilisent les scancodes SDL (position physique de la touche) et non les keycodes (lettre imprimée). Les quatre
+touches de déplacement sont à la position WASD : ZQSD sur un clavier AZERTY, WASD sur un QWERTY, donc les mêmes touches physiques sur
+tous les claviers, sans détection de disposition. Les flèches restent actives en parallèle. Conséquence : la touche d'ordres (scancode Q)
+est étiquetée A sur un AZERTY. Si les contrôles deviennent configurables, ils le seront par scancode.
