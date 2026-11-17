@@ -199,7 +199,7 @@ dans `GameState.events`, que `audio/`, `render/` (effets) et `ui/` lisent après
   les cellules à consommer (**celles du haut d'abord**) et sa version rouge/bleue.
   Formes : `1x1`, `2x1_horizontal`, `2x1_vertical`, `L`, `2x2`, `4x2`. `pad_build()` applique un choix
   (consomme les caisses, émet l'événement de production). Testées unitairement : toutes les formes,
-  rouge/bleu, orientations du L, ordre de consommation, arrangements sans recette.
+  rouge/bleu, orientations du L, ordre de consommation, pad vide, et « un pad non vide propose toujours un 1×1 ».
 - **Pas de construction automatique** : le menu de construction est l'unique déclencheur, pour les humains comme pour l'IA.
 - Une table de recettes `(forme, bleue?) → résultat` est **data-driven** (voir GAME_DESIGN.md § 6) :
   ajuster une recette ne touche pas au code.

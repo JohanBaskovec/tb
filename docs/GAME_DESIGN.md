@@ -33,32 +33,32 @@
 | # | Sujet | Statut |
 |---|-------|--------|
 | 1 | Combinaisons du pad | ✅ fournies (§ 6) |
-| 2 | Classes de soldats | ◐ trois variantes de compagnon (normal / fort / lourd) ; stats à définir |
+| 2 | Classes de soldats | ✅ quatre variantes de compagnon (§ 4) ; PV 100 / 150 / 200 confirmés, la 4ᵉ est provisoire |
 | 3 | Armes et véhicules | ✅ liste suffisante « pour l'instant » : pistolet, uzi, grenades, lance-roquettes, tank |
 | 4 | Ordres de l'escouade | ✅ suivre, garder la base, ramasser, attaquer |
 | 5 | Chutes de caisses | ✅ dépend de la carte (§ 5) |
-| 6 | Bases / victoire | ◐ base détruite = pad inutilisable, l'équipe continue à jouer ; PV des bases et conditions de victoire encore ❓ |
+| 6 | Bases / victoire | ◐ base de 1000 PV, destructible par toute arme ; détruite = pad inutilisable, l'équipe continue ; conditions de victoire multijoueur encore ❓ |
 | 7 | Missions de campagne | ⏳ à voir mission par mission, plus tard |
 | 8 | Autres mécaniques importantes pour le « feeling » | ❓ ouvert, à compléter au fil du jeu |
 
-### ❓ Questions ouvertes (issues des réponses)
+### Questions résolues ✅
 
-1. **Règle « bleue »** : j'ai compris « il suffit d'**au moins une** caisse bleue dans la forme pour obtenir la version
-   puissante ». Correct ? Et le 2×2 avec une bleue : même résultat que le 2×2 rouge, ou autre chose ?
-2. **Menu du pad** (§ 6), ma lecture de ta description :
-   (a) une construction est proposée dès que sa forme est présente parmi les caisses du pad, même s'il y en a d'autres ;
-   (b) si elle n'utilise qu'une partie des caisses, on consomme celles **du haut d'abord**, et la version « bleue »
-   dépend des caisses réellement consommées ;
-   (c) « cliquer » = clic souris, avec sélection + validation au clavier / à la manette ;
-   (d) un arrangement sans recette propose simplement… rien.
-   C'est bien ça ?
-3. **Forme en L** : en vue de côté avec 2 rangées, c'est 2 caisses côte à côte en bas + 1 posée sur l'une des deux,
-   à gauche ou à droite (les deux orientations comptent). C'est bien ça ?
-4. **Bases** : combien de points de vie ? Comment les détruire (explosifs, tank…) ?
-5. **PV** : chaque personnage a 100 PV, mais le compagnon lourd a « plus de PV ». Donc plus de 100 pour lui seul ?
-   Et le compagnon fort ?
-6. **Munitions** : combien de coups par arme (pistolet, uzi, grenades, roquettes) ? Sinon je mets des valeurs
-   provisoires dans `tuning.h`, à ajuster en jouant.
+1. **Règle « bleue »** : une seule caisse bleue dans la forme suffit pour la version puissante. Le 2×2 avec une bleue donne
+   un compagnon **avec armure lourde** (encore plus de PV que le compagnon lourd).
+2. **Menu du pad** : une construction est proposée dès que sa forme est présente parmi les caisses ; si elle n'en utilise qu'une
+   partie, on consomme celles du haut d'abord ; « cliquer » = clic souris (sélection + validation au clavier / manette).
+   Un pad non vide propose **toujours au moins une construction**, puisqu'une caisse seule est un 1×1.
+3. **Forme en L** : 2 caisses côte à côte en bas + 1 sur l'une des deux, dans les deux orientations.
+4. **Bases** : 1000 points de vie, destructibles avec n'importe quelle arme.
+5. **PV** : 100 (compagnon), 150, 200, du plus faible au plus fort.
+6. **Munitions** : dépendent de l'arme ; valeurs provisoires ci-dessous (§ 7), à ajuster en jouant.
+
+### ❓ Questions encore ouvertes
+
+1. **Quel PV pour quelle variante ?** Tu as donné 100, 150, 200 « du plus faible au plus fort » pour 4 variantes
+   (compagnon, fort, lourd, lourd blindé). J'ai mis 100 / 150 / 200 / **300 (provisoire)** dans cet ordre. Correct ?
+2. **Armement de départ du compagnon lourd blindé** : lance-roquettes comme le lourd ? (hypothèse retenue)
+3. **Tank / tank lourd** : PV et armement (valeurs provisoires dans `tuning.h` le moment venu).
 
 ## 2. Pitch de la version 2D 🟡
 
@@ -85,7 +85,7 @@ les escouades adverses (ou selon l'objectif de la mission).
 - Prendre un coup en portant une caisse la fait tomber.
 
 ### Santé et mort 🟡
-- ✅ **100 points de vie** par personnage (le compagnon lourd en a plus, question 5). 🟡 Recul quand on est touché.
+- ✅ **100 points de vie** pour le compagnon de base ; 150 / 200 pour les variantes plus fortes (§ 4). 🟡 Recul quand on est touché.
 - Un soldat mort lâche son arme et sa caisse. Pas de réapparition : l'équipe
   grossit uniquement via le pad.
 - Une équipe sans soldat vivant est éliminée.
@@ -102,9 +102,10 @@ les escouades adverses (ou selon l'objectif de la mission).
 ### Variantes de compagnon ✅ (stats 🟡)
 | Variante | Obtenu avec | Particularité |
 |----------|-------------|---------------|
-| Compagnon | 2×1 vertical, rouge | Soldat de base, arme de départ : poings 🟡 |
-| Compagnon fort | 2×1 vertical, avec bleue | Plus fort que le compagnon de base (à définir, question 5) |
-| Compagnon lourd | 2×2 | Apparaît **avec un lance-roquettes** et plus de PV |
+| Compagnon | 2×1 vertical, rouge | **100 PV** ✅. Soldat de base, arme de départ : poings 🟡 |
+| Compagnon fort | 2×1 vertical, avec bleue | **150 PV** ✅ |
+| Compagnon lourd | 2×2, rouge | **200 PV** ✅. Apparaît **avec un lance-roquettes** |
+| Compagnon lourd blindé | 2×2, avec bleue | **Armure lourde, encore plus de PV** ✅ : 300 provisoire 🟡. Lance-roquettes 🟡 |
 
 ## 5. Les caisses ✅
 
@@ -132,10 +133,10 @@ Transposition 2D du pad 3D : une grille **4 colonnes × 2 rangées** posée au s
 | 2×1 horizontal (côte à côte) | 2 | Grenades | Grenades plus puissantes (explosion plus grande) |
 | 2×1 vertical (empilées) | 2 | Compagnon | Compagnon fort |
 | Forme en L | 3 | Uzi | Lance-roquettes |
-| 2×2 | 4 | Compagnon lourd (lance-roquettes, plus de PV) | ❓ voir question 1 |
+| 2×2 | 4 | Compagnon lourd (lance-roquettes, 200 PV) | Compagnon lourd blindé (armure lourde, encore plus de PV) |
 | 4×2 (pad plein) | 8 | Tank | Tank lourd |
 
-Forme en L en 2D : 2 caisses côte à côte en bas + 1 sur l'une des deux (2 orientations) — à confirmer, question 3.
+Forme en L en 2D : 2 caisses côte à côte en bas + 1 sur l'une des deux (2 orientations) ✅.
 Les formes peuvent se situer n'importe où sur les 4 colonnes 🟡.
 
 ### Mécanique
@@ -144,7 +145,9 @@ Les formes peuvent se situer n'importe où sur les 4 colonnes 🟡.
 - ✅ **Menu de construction** : quand un soldat s'approche du pad, les constructions possibles avec les caisses
   présentes s'affichent **à côté du pad** (icône + nom). Pour construire, le joueur **clique dessus**
   (sélection + validation au clavier / à la manette 🟡) ; cela **consomme les caisses, en commençant par celles du haut**.
-  Détails de l'interprétation : question 2.
+  ✅ Une construction est proposée dès que sa forme est présente parmi les caisses du pad (même s'il y en a d'autres) ;
+  la version bleue dépend des caisses réellement consommées. ✅ Un pad non vide propose toujours au moins un 1×1 ;
+  un pad vide ne propose rien.
 - 🟡 Il n'y a **aucune construction automatique** (pas de compte à rebours) : on empile librement, puis on choisit.
 - 🟡 L'objet produit apparaît à côté du pad : une arme se ramasse, un compagnon rejoint l'escouade,
   un véhicule attend un pilote.
@@ -154,20 +157,20 @@ Les formes peuvent se situer n'importe où sur les 4 colonnes 🟡.
 ### Bases
 - ✅ **Une base détruite ne peut plus utiliser son pad** ; l'équipe peut continuer à jouer avec les soldats qui lui restent
   (elle ne peut plus produire d'armes, de compagnons ni de véhicules).
-- 🟡 Une base a des points de vie et est endommagée par les explosions (grenades, roquettes, tank). Voir question 4.
+- ✅ Une base a **1000 points de vie** et est **destructible avec n'importe quelle arme**.
 
 ## 7. Armes ✅
 
-✅ **Chaque arme a un nombre de munitions limité** (valeurs : question 6).
+✅ **Chaque arme a un nombre de munitions limité** (valeurs 🟡 provisoires, dans `tuning.h` le moment venu).
 🟡 Un soldat porte une arme à la fois ; une arme vide disparaît.
 
-| Arme | Obtenue avec | Tir | Notes |
-|------|--------------|-----|-------|
-| Pistolet | 1×1 rouge | Balle droite | |
-| Uzi | 1×1 bleue, L rouge | Rafale | |
-| Grenades | 2×1 horizontal rouge | Lancer en cloche, explosion | Dégâts de zone |
-| Grenades puissantes | 2×1 horizontal avec bleue | Idem | Explosion plus grande |
-| Lance-roquettes | L avec bleue ; équipement du compagnon lourd | Roquette droite, explosion | Peut endommager les bases |
+| Arme | Obtenue avec | Tir | Munitions 🟡 | Notes |
+|------|--------------|-----|:------------:|-------|
+| Pistolet | 1×1 rouge | Balle droite | 24 | |
+| Uzi | 1×1 bleue, L rouge | Rafale | 60 | |
+| Grenades | 2×1 horizontal rouge | Lancer en cloche, explosion | 6 | Dégâts de zone |
+| Grenades puissantes | 2×1 horizontal avec bleue | Idem | 4 | Explosion plus grande |
+| Lance-roquettes | L avec bleue ; équipement des compagnons lourds | Roquette droite, explosion | 5 | Dégâts de zone |
 
 🟡 Corps à corps à mains nues (infini, faible) comme arme de repli.
 

@@ -50,7 +50,7 @@ Pas encore de police de caractères : l'overlay de debug utilise des pastilles d
 ## M3 — Combat
 - [ ] Armes data-driven : pistolet, uzi, grenades (+ puissantes), lance-roquettes ; ramassage, munitions limitées par arme
 - [ ] Projectiles : droits, gerbe, en cloche, explosions (dégâts de zone)
-- [ ] Santé (100 PV par personnage), recul, mort (lâcher arme et caisse)
+- [ ] Santé (100 / 150 / 200 / 300 PV selon la variante), recul, mort (lâcher arme et caisse)
 - [ ] Poings
 - [ ] Mannequins ennemis immobiles pour tester
 
@@ -61,7 +61,7 @@ Pas encore de police de caractères : l'overlay de debug utilise des pastilles d
 - [ ] Le pad crée des compagnons : 2×1 vertical (fort si bleue), 2×2 (lourd, avec lance-roquettes)
 - [ ] Changer de soldat contrôlé, transfert auto à la mort
 - [ ] Ordres : suivre, garder la base, ramasser, attaquer (comportements simples sans pathfinding)
-- [ ] Variantes de compagnon (normal, fort, lourd) : PV et équipement dans `tuning.h`
+- [ ] Variantes de compagnon (normal 100 PV, fort 150, lourd 200 avec lance-roquettes, lourd blindé 300 provisoire) : PV et équipement dans `tuning.h`
 
 **Fin :** on gère une petite escouade qui grossit grâce au pad.
 
@@ -77,7 +77,7 @@ Pas encore de police de caractères : l'overlay de debug utilise des pastilles d
 
 ## M6 — Tranche verticale : escarmouche 1 vs IA
 - [ ] Règles d'escarmouche, élimination, écran de résultats
-- [ ] Bases destructibles : PV, pad inutilisable une fois la base détruite (l'équipe continue à jouer)
+- [ ] Bases destructibles : 1000 PV, dégâts de n'importe quelle arme, pad inutilisable une fois détruite (l'équipe continue à jouer)
 - [ ] HUD (PV, arme, munitions, effectif, ordre, indicateurs hors écran)
 - [ ] Écran titre, configuration de partie, pause
 - [ ] Premier niveau soigné

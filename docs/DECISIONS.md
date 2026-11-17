@@ -68,7 +68,7 @@ avec compte à rebours relancé à chaque ajout. Voir GAME_DESIGN.md § 6. En at
 ### D013 — Caisses rouges/bleues et recettes du pad
 **Statut :** Acceptée (fournie par l'utilisateur, 2026-11-17)
 Deux types de caisses : rouge (standard) et bleue (plus forte). Grille 4×2. Une forme contenant au moins
-une caisse bleue donne la version puissante (hypothèse à confirmer, GAME_DESIGN § 1 question 1).
+une caisse bleue donne la version puissante (confirmé le 2026-11-17). 2×2 rouge : compagnon lourd ; 2×2 avec bleue : compagnon lourd blindé.
 Recettes : 1×1 pistolet/uzi ; 2×1 horizontal grenades/grenades puissantes ; 2×1 vertical compagnon/compagnon fort ;
 L uzi/lance-roquettes ; 2×2 compagnon lourd ; 4×2 tank/tank lourd. Les recettes vivent dans une table de données.
 
@@ -84,17 +84,17 @@ ou une zone rouge près de chaque base + une zone centrale 100 % bleue.
 
 ### D016 — Une base détruite ne peut plus utiliser son pad
 **Statut :** Acceptée (fournie par l'utilisateur)
-Les bases ont des points de vie. L'équipe peut continuer à jouer avec ses soldats restants.
-Les valeurs de PV et les conditions de victoire restent à définir.
+Les bases ont 1000 PV et sont destructibles avec n'importe quelle arme. L'équipe peut continuer à jouer avec ses
+soldats restants. Les conditions de victoire multijoueur restent à définir.
 
 ### D017 — Construction manuelle via un menu à côté du pad (pas de compte à rebours)
-**Statut :** Acceptée (fournie par l'utilisateur) ; détails en attente de confirmation (GAME_DESIGN § 1, question 2)
+**Statut :** Acceptée (fournie par l'utilisateur, détails confirmés le 2026-11-17)
 À l'approche du pad, les constructions possibles s'affichent à côté. Le joueur en choisit une (clic ; sélection +
 validation au clavier / manette), ce qui consomme les caisses en commençant par celles du haut. Remplace le compte à
 rebours automatique que j'avais proposé. L'IA passe par la même fonction.
 
 ### D018 — 100 PV par personnage, munitions limitées par arme
-**Statut :** Acceptée (fournie par l'utilisateur) ; valeurs de munitions et PV du compagnon lourd à préciser
+**Statut :** Acceptée (fournie par l'utilisateur)
 
 ### D019 — Le haut d'une échelle est une plateforme traversable
 **Statut :** Acceptée
@@ -117,3 +117,9 @@ L'option `--expect-video-driver` sert de garde : le programme refuse de créer u
 **Statut :** Acceptée
 Scripts d'entrées, bot aléatoire, bot « marcheur », `--start`, `--trace`, films de captures : disponibles en CLI
 et réutilisés par les tests. Le « marcheur » n'est pas un pathfinder ; l'IA vient avec M5.
+
+### D023 — PV des compagnons et munitions provisoires
+**Statut :** Acceptée pour 100 / 150 / 200 PV (fournis par l'utilisateur) ; **Proposée** pour le reste
+Compagnon 100 PV, fort 150, lourd 200, lourd blindé 300 (provisoire : « encore plus de PV »). Munitions provisoires :
+pistolet 24, uzi 60, grenades 6, grenades puissantes 4, lance-roquettes 5. Valeurs dans `game/tuning.h` à l'implémentation,
+à ajuster en jouant.
