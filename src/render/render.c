@@ -152,6 +152,8 @@ void render_sprite(Render *r, const SpriteDraw *d) {
     const SDL_FPoint center = {px, py};
     const SDL_FlipMode flip = d->flip_x ? SDL_FLIP_HORIZONTAL : (d->flip_y ? SDL_FLIP_VERTICAL : SDL_FLIP_NONE);
     SDL_SetTextureAlphaMod(tex, d->alpha ? d->alpha : 255);
+    const u8 light = (u8)(255 - d->darken);
+    SDL_SetTextureColorMod(tex, light, light, light);
     SDL_RenderTextureRotated(r->renderer, tex, &s, &dst, (double)d->angle, &center, flip);
 }
 

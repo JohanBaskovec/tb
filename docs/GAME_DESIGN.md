@@ -320,6 +320,13 @@ Idées non confirmées, **non planifiées** : jeep, mini-hélico.
   tournoyant avant de disparaître.
 - Placeholders au début : rectangles colorés + police bitmap. 🟡 (M6) Terrain habillé : herbe, terre, planches, eau animée, ciel du soir et collines en parallaxe ;
   bases en forme de bunker aux couleurs de l'équipe, avec un drapeau (fissurées sous 50 % de PV, en ruine une fois détruites).
+  🟡 Tileset en pixel art (après M6) : herbe sur terre en 3 variantes, terre qui s'assombrit en douceur avec la profondeur, faces éclairées à gauche et ombrées à droite,
+  herbe qui déborde des arêtes, touffes, fleurs et cailloux posés au hasard (jamais sous un pad), planches et échelles dessinées ; eau plus sombre en profondeur, surface qui
+  ondule et scintille, écume contre la rive. Base dessinée (toit en sacs de sable, murs de planches aux couleurs de l'équipe, fenêtres éclairées, porte, badge) en trois états
+  — intacte, fissurée sous 50 %, éventrée sous 25 % — puis tas de gravats ; drapeau qui flotte. Mannequin d'entraînement en paille avec une cible, qui vacille quand on le touche ;
+  produits pas encore jouables (tanks) dessinés en maquette aux couleurs de l'équipe ; mallette sous les armes au sol ; pad en plaque d'acier rayée aux couleurs de l'équipe
+  avec un repère à chaque angle de case. Le HUD montre l'arme tenue et une petite silhouette par soldat ; le menu du pad montre ce que donne chaque construction (arme,
+  soldat ou tank). L'écran titre montre les deux camps sur le même sol.
 - Sons courts et cartoon ; musique chiptune originale. 🟡 (M6) Sons placeholders synthétisés (aucun fichier) pour les événements : tirs, explosions (plus grosses pour roquettes et
   grenades fortes), coups, ricochets, caisses (prise, pose, chute du ciel, arrivée au sol), constructions, apparitions, morts, plouf, mannequin brisé, arme ramassée / lâchée, changement de soldat,
   sauts et atterrissages du soldat suivi, équipe éliminée, **alarme quand la base du joueur est attaquée**, victoire / défaite, menus ; atténués avec la distance à la caméra.

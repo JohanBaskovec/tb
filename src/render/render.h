@@ -32,6 +32,7 @@ typedef struct SpriteDraw {
     bool flip_x, flip_y;
     bool pivot_center; // turn around the middle of the sprite instead of its pivot
     u8 alpha;          // 0 means opaque
+    u8 darken;         // 0: true colors, 255: black (deep earth)
 } SpriteDraw;
 
 void render_sprite(Render *r, const SpriteDraw *d);

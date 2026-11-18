@@ -5,8 +5,9 @@
 // are the team color, its dark and light shades...). The soldiers are assembled from parts (head, torso, legs) so that
 // each pose exists for each variant. Sprites face right; the renderer mirrors them.
 //
-// An atlas holds every sprite in a grid of SPRITE_CELL x SPRITE_CELL cells. There is one atlas per palette: one per
-// team (the team colors differ) and a white one (the silhouette that flashes when a soldier is hit).
+// An atlas holds every sprite in a grid of SPRITE_CELL x SPRITE_CELL cells (the big ones, after SPR_BIG_FIRST, take
+// 2x2 cells). There is one atlas per palette: one per team (the team colors differ) and a white one (the silhouette
+// that flashes when a soldier is hit).
 #pragma once
 
 #include "core/geom.h"
@@ -44,8 +45,35 @@ typedef enum SpriteId {
     SPR_CRATE_BLUE,
     SPR_PARACHUTE,
     SPR_STAR,
+    SPR_DUMMY,
+    SPR_TANK, // pad products waiting for the vehicles
+    SPR_HEAVY_TANK,
+    SPR_CASE, // under a weapon lying on the ground
+    SPR_FLAG0, // base flag on its pole, two frames of waving
+    SPR_FLAG1,
+    // Terrain (fixed colors in every atlas): 16x16 tiles, plus plants and stones that sit on the grass.
+    SPR_TILE_GRASS0, // top of the ground: grass over dirt
+    SPR_TILE_GRASS1,
+    SPR_TILE_GRASS2,
+    SPR_TILE_DIRT0,
+    SPR_TILE_DIRT1,
+    SPR_TILE_DIRT2,
+    SPR_TILE_PLANK, // 16x6, top of a one-way platform
+    SPR_TILE_LADDER,
+    SPR_DECO_TUFT,
+    SPR_DECO_FLOWER,
+    SPR_DECO_DAISY,
+    SPR_DECO_ROCK,
+    // Big sprites take 2x2 cells.
+    SPR_BIG_FIRST,
+    SPR_BASE = SPR_BIG_FIRST, // 40x40, team colors
+    SPR_BASE_DAMAGED,
+    SPR_BASE_WRECKED,
+    SPR_BASE_RUIN, // 40x20
     SPR_COUNT
 } SpriteId;
+
+#define SPRITE_TILE_VARIANTS 3
 
 // Body canvas: the feet are on the bottom row, centered on column BODY_FEET_X.
 #define SPRITE_BODY_W 16

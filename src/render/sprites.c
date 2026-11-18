@@ -12,6 +12,10 @@
 //  M  metal              m  metal, dark           V  olive          v  olive, dark
 //  w  wood               d  wood, dark            R  red (rocket head)
 //  C  red crate panel    c  red crate, dark       U  blue crate     u  blue crate, dark
+//  x  wood, light        y  straw, sandbag        z  straw, dark
+//  A  stone              a  stone, dark           q  stone, light
+//  g  grass              h  grass, dark           l  grass, light
+//  D  dirt               e  dirt, dark            E  dirt, light    p  pebble          F  flower
 
 typedef struct PaletteEntry {
     char key;
@@ -22,7 +26,10 @@ static const PaletteEntry FIXED_COLORS[] = {
     {'o', 34, 28, 42},    {'S', 244, 196, 150}, {'s', 206, 150, 112}, {'W', 250, 250, 250}, {'K', 24, 24, 32},
     {'B', 70, 58, 56},    {'G', 126, 96, 58},   {'Y', 255, 214, 80},  {'M', 176, 182, 196}, {'m', 112, 118, 134},
     {'V', 110, 134, 70},  {'v', 74, 92, 46},    {'w', 176, 124, 66},  {'d', 112, 74, 38},   {'R', 220, 50, 40},
-    {'C', 210, 62, 52},   {'c', 140, 36, 32},   {'U', 60, 112, 228},  {'u', 34, 66, 150},
+    {'C', 210, 62, 52},   {'c', 140, 36, 32},   {'U', 60, 112, 228},  {'u', 34, 66, 150},   {'x', 214, 166, 100},
+    {'y', 214, 186, 120}, {'z', 160, 128, 78},  {'A', 134, 130, 146}, {'a', 88, 84, 102},   {'q', 178, 176, 192},
+    {'g', 108, 178, 84},  {'h', 62, 120, 60},   {'l', 158, 214, 104}, {'D', 118, 84, 74},   {'e', 94, 66, 62},
+    {'E', 140, 102, 88},  {'p', 164, 128, 106}, {'F', 240, 120, 160},
 };
 
 static bool known_key(char k) {
@@ -292,6 +299,391 @@ static const char *const STAR[] = {
     "..Y..",
 };
 
+static const char *const DUMMY[] = { // a straw training dummy with a target on its chest
+    ".....oooo.....",
+    "....oyyyyo....",
+    "...oyyyyyyo...",
+    "...oyzyyzyo...",
+    "...oyyyyyyo...",
+    "...oyzzzzyo...",
+    "....oyyyyo....",
+    ".oooooddooooo.",
+    "oddddddddddddo",
+    "ooooyyyyyyoooo",
+    "...oyWWWWyo...",
+    "...oWRRRRWo...",
+    "...oWRWWRWo...",
+    "...oWRWWRWo...",
+    "...oWRRRRWo...",
+    "...oyWWWWyo...",
+    "...oyyzyyyo...",
+    "...ozyzyzzo...",
+    "....oodwoo....",
+    ".....odwo.....",
+    ".....odwo.....",
+    ".....odwo.....",
+    "...ooddwwoo...",
+    "..oooooooooo..",
+};
+
+static const char *const TANK[] = {
+    "......oooo......",
+    ".....oLTTTo.....",
+    ".....oTTTToooooo",
+    ".....oTTTTMMMMMo",
+    "..oooottttoooooo",
+    ".oLLLLLLLLLLLLo.",
+    "oTTTTTTTTTTTTTTo",
+    "otttttttttttttto",
+    "oBmBmBmBmBmBmBmo",
+    ".oBBBBBBBBBBBBo.",
+    "..oooooooooooo..",
+};
+
+static const char *const HEAVY_TANK[] = { // steel plates and a thicker gun
+    "......ooooo.......",
+    ".....oMLTTTo......",
+    ".....oMTTTTooooooo",
+    ".....oMTTTTMMMMMMo",
+    ".....oMTTTTmmmmmmo",
+    "..oooottttoooooooo",
+    ".oMMLLLLLLLLLLMMo.",
+    "oMMTTTTTTTTTTTTMMo",
+    "otttttttttttttttto",
+    "oBmBmBmBmBmBmBmBmo",
+    ".oBBBBBBBBBBBBBBo.",
+    "..oooooooooooooo..",
+};
+
+static const char *const CASE[] = {
+    "....oooo....",
+    "...o....o...",
+    "oooooooooooo",
+    "oVVVVMMVVVVo",
+    "ovvvvvvvvvvo",
+    "oooooooooooo",
+};
+
+static const char *const FLAG0[] = {
+    "YY.........",
+    "Mmooooooo..",
+    "MmoLTTTTTo.",
+    "MmoTTTTTTTo",
+    "MmoTTTTTTto",
+    "Mmottttoooo",
+    "Mmoooo.....",
+    "Mm.........",
+    "Mm.........",
+    "Mm.........",
+    "Mm.........",
+    "Mm.........",
+    "Mm.........",
+    "Mm.........",
+    "Mm.........",
+    "Mm.........",
+};
+
+static const char *const FLAG1[] = {
+    "YY.........",
+    "Mmoooo.....",
+    "MmoLTToooo.",
+    "MmoTTTTTTTo",
+    "MmoTTTTTTTo",
+    "MmotttTTtto",
+    "Mmooooooooo",
+    "Mm.........",
+    "Mm.........",
+    "Mm.........",
+    "Mm.........",
+    "Mm.........",
+    "Mm.........",
+    "Mm.........",
+    "Mm.........",
+    "Mm.........",
+};
+
+// Terrain: no outline, the tiles must join without seams.
+static const char *const DIRT0[] = {
+    "DDDDDDDDDDDDDDDD",
+    "DDDDDDDDDDDEDDDD",
+    "DDeDDDDDDDDDDDDD",
+    "DDDDDDDDDDDDDDDD",
+    "DDDDDDDEpDDDDDDD",
+    "DDDDDDEppeDDDDeD",
+    "DDDDDDDeeDDDDDDD",
+    "DEDDDDDDDDDDDDDD",
+    "DDDDDDDDDDDDDDDD",
+    "DDDDDDDDDDDDeDDD",
+    "DDDDDDDDDDDDDDDD",
+    "DDDDeDDDDDDDDDDD",
+    "DDDDDDDDDDDDEpDD",
+    "DDDDDDDDDDDEppeD",
+    "DDEDDDDDDDDDeeDD",
+    "DDDDDDDDDDDDDDDD",
+};
+
+static const char *const DIRT1[] = {
+    "DDDDDDDDDDDDDDDD",
+    "DDDDDeDDDDDDDDDD",
+    "DDDDDDDDDDDDDEDD",
+    "DDDDDDDDDDDDDDDD",
+    "DDEpDDDDDDDDDDDD",
+    "DEppeDDDDDDeDDDD",
+    "DDeeDDDDDDDDDDDD",
+    "DDDDDDDDDDDDDDDD",
+    "DDDDDDDDEDDDDDDD",
+    "DDDDDDDDDDDDDDeD",
+    "DDDDDDDDDDDDDDDD",
+    "DDDDDDDEpDDDDDDD",
+    "DDeDDDEppeDDDDDD",
+    "DDDDDDDeeDDDDDDD",
+    "DDDDDDDDDDDDDEDD",
+    "DDDDDDDDDDDDDDDD",
+};
+
+static const char *const DIRT2[] = {
+    "DDDDDDDDDDDDDDDD",
+    "DDDDDDDDDDDDDDDD",
+    "DDDDDDDDDeDDDDDD",
+    "DDDDEDDDDDDDDDDD",
+    "DDDDDDDDDDDDDDDD",
+    "DDDDDDDDDDDEDDDD",
+    "DDeDDDDDDDDDDDDD",
+    "DDDDDDDDDDDDDDDD",
+    "DDDDDDDDDDDDDDDD",
+    "DDDDDDEpppDDDDDD",
+    "DDDDDEppppeDDDDD",
+    "DDDDDDeeeeDDDeDD",
+    "DDDDDDDDDDDDDDDD",
+    "DEDDDDDDDDDDDDDD",
+    "DDDDDDDDDDEDDDDD",
+    "DDDDDDDDDDDDDDDD",
+};
+
+static const char *const GRASS_TOP0[] = { // stamped over a dirt tile; '.' lets the dirt show (ragged edge)
+    "llllllllllllllll",
+    "glgggglgggggglgg",
+    "gggggggggggggggg",
+    "ggghggggghgggggh",
+    "hghhhghhhhhghhhh",
+    "hh.h.hh..h.hh.hh",
+    ".h....h.....h...",
+};
+
+static const char *const GRASS_TOP1[] = {
+    "llllllllllllllll",
+    "gggglgggglgggggl",
+    "gggggggggggggggg",
+    "hggggghgggggghgg",
+    "hhhghhhhghhhhhgh",
+    "h.hhh.h.hh.h.hhh",
+    "..h.....h.....h.",
+};
+
+static const char *const PLANK[] = {
+    "xxxxxxxxxxxxxxxx",
+    "wwdwwwwdwwwwwdww",
+    "wwwwwwwdwwwwwwww",
+    "wwwwwwwdwwwwwwww",
+    "dwwwwwwdwwwwwwwd",
+    "dddddddddddddddd",
+};
+
+static const char *const LADDER[] = {
+    "..dw........dw..",
+    "..dwxxxxxxxxdw..",
+    "..dwdddddddddw..",
+    "..dw........dw..",
+    "..dw........dw..",
+    "..dwxxxxxxxxdw..",
+    "..dwdddddddddw..",
+    "..dw........dw..",
+    "..dw........dw..",
+    "..dwxxxxxxxxdw..",
+    "..dwdddddddddw..",
+    "..dw........dw..",
+    "..dw........dw..",
+    "..dwxxxxxxxxdw..",
+    "..dwdddddddddw..",
+    "..dw........dw..",
+};
+
+static const char *const TUFT[] = {
+    ".l...l.",
+    ".g.l.g.",
+    "lg.g.gl",
+    "ghgghgh",
+};
+
+static const char *const FLOWER[] = {
+    ".F.",
+    "FYF",
+    ".F.",
+    ".g.",
+    "gg.",
+    ".g.",
+};
+
+static const char *const ROCK[] = {
+    "..aaa..",
+    ".aqAAa.",
+    "aqAAAAa",
+    "aaaaaaa",
+};
+
+// The base, in three states of damage, and what is left of it. Team colors on the walls.
+static const char *const BASE[] = {
+    ".....oooooooooooooooooooooooooooooo.....",
+    "....ozyyyyyzyyyyyyzyyyyyyzyyyyyyzyyo....",
+    "....oyyyyyyzyyyyyyzyyyyyyzyyyyyyzyyo....",
+    "....oyyyyyyzyyyyyyzyyyyyyzyyyyyyzyyo....",
+    "...oozzzzzzzzzzzzzzzzzzzzzzzzzzzzzzoo...",
+    "..ozyyzyyyyyyzyyyyyyzyyyyyyzyyyyyyzyyo..",
+    "..oyyyzyyyyyyzyyyyyyzyyyyyyzyyyyyyzyyo..",
+    "..oyyyzyyyyyyzyyyyyyzyyyyyyzyyyyyyzyyo..",
+    ".oozzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzoo.",
+    "oqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo",
+    "oAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAo",
+    "oaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaao",
+    ".oottttttttttttttttttttttttttttttttttoo.",
+    "..ottttttttttttttttWWtttttttttttttttto..",
+    "..oLTTTTTTTTTTTTTTWWWWTTTTTTTTTTTTTTto..",
+    "..oLTTooooooTTTTTTWWWWTTTTTTooooooTTto..",
+    "..oLTToWWWWoTTTTTTTWWTTTTTTToWWWWoTTto..",
+    "..oLTToYYYYoTTTTTTTTTTTTTTTToYYYYoTTto..",
+    "..oLttoooooottttttttttttttttoooooottto..",
+    "..oLTToYYYYoTTTooooooooooTTToYYYYoTTto..",
+    "..oLTTooooooTTToddddddddoTTTooooooTTto..",
+    "..oLTTTaaaaTTTTodwdwdwddoTTTTaaaaTTTto..",
+    "..oLTTTTTTTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLTTTTTTTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLtttttttttttodwdwdwddotttttttttttto..",
+    "..oLTTTTTTTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLTTTTTTTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLTTTTTTTTTTTodwdwdwYdoTTTTTTTTTTTto..",
+    "..oLTTTTTTTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLTTTTTTTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLtttttttttttodwdwdwddotttttttttttto..",
+    "..oLTTTTTTTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLTTTTTTTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "oooLTTTTTTTTTTTodwdwdwddoTTTTTTTTTTTtooo",
+    "qqqqqqqqqqqqqqqAAAAAAAAAAqqqqqqqqqqqqqqq",
+    "aAAAAAAAaAAAAAAaaaaaaaaaaAAAAAAAaAAAAAAA",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "AAAAaAAAAAAAaAAaaaaaaaaaaAAAaAAAAAAAaAAA",
+    "AAAAaAAAAAAAaAAaaaaaaaaaaAAAaAAAAAAAaAAA",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+};
+
+static const char *const BASE_DAMAGED[] = {
+    ".....ooooooooooooooooooooo.......oo.....",
+    "....ozyyyyyzyyyyyyzyyyyyyzo.....oyyo....",
+    "....oyyyyyyzyyyyyyzyyyyyyzo.....oyyo....",
+    "....oyyyyyyzyyyyyyzyyyyyyzo.....oyyo....",
+    "...oozzzzzzzzzzzzzzzzzzzzzooooooozzoo...",
+    "..ozyyzyyyyyyzyyyyyyzyyyyyyzyyyyyyzyyo..",
+    "..oyyyzyyyyyyzyyyyyyzyyyyyyzyyyyyyzyyo..",
+    "..oyyyzyyyyyyzyyyyyyzyyyyyyzyyyyyyzyyo..",
+    ".oozzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzoo.",
+    "oqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo",
+    "oAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAo",
+    "oaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaao",
+    ".oottttttttttttttttttttttttttttttttttoo.",
+    "..ottttttttttttttttWWtttttttttttotttto..",
+    "..oLTTTTTTTTTTTTTTWWWWTTTTTTTTToTTTTto..",
+    "..oLTTooooooTTTTTTWWWWTTTTTTooooooTTto..",
+    "..oLTToWWWWoTTTTTTTWWTTTTTTToaaaaoTTto..",
+    "..oLTToYYYYoTTTTTTTTTTTTTTTToaaaaoTTto..",
+    "..oLttoooooottttttttttttttttoooooottto..",
+    "..oLTToYYYYoTTTooooooooooTTToYYYYoTTto..",
+    "..oLTTooooooTTToddddddddoTTTooooooTTto..",
+    "..oLTTTaaaaTTTTodwdwdwddoTTTTaaaaTTTto..",
+    "..oLTTTTTTTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLTTTTTTTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLttttottttttodwdwdwddotttttttttttto..",
+    "..oLTTTTToTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLTTTTToTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLTTTTTToTTTTodwdwdwYdoTTTTTTTTTTTto..",
+    "..oLTTTTTToTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLTTTTTTToTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLtttttttttttodwdwdwddotttttttttttto..",
+    "..oLTTTTTTTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLTTTTTTTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "oooLTTTTTTTTTTTodwdwdwddoTTTTTTTTTTTtooo",
+    "qqqqqqqqqqqqqqqAAAAAAAAAAqqqqqqqqqqqqqqq",
+    "aAAAAAAAaAAAAAAaaaaaaaaaaAAAAAAAaAAAAAAA",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "AAAAaAAAAAAAaAAaaaaaaaaaaAAAaAAAAAAAaAAA",
+    "AAAAaAAAAAAAaAAaaaaaaaaaaAAAaAAAAAAAaAAA",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+};
+
+static const char *const BASE_WRECKED[] = {
+    ".....ooooooooooooooooooooo.......oo.....",
+    "....ozyyyyyzyyyyyyzyyyyyyzo.....oyyo....",
+    "....oyyyyyyzyyyyyyzyyyyyyzo.....oyyo....",
+    "....oyyyyyyzyyyyyyzyyyyyyzo.....oyyo....",
+    "...oozzzzzzzzzzzzzzzzzzzzzooooooozzoo...",
+    "..ozyyoooooooooyyyyyzyyyyyyzyyyyyyzyyo..",
+    "..oyyyo.......oyyyyyzyyyyyyzyyyyyyzyyo..",
+    "..oyyyo.......oyyyyyzyyyyyyzyyyyyyzyyo..",
+    ".oozzzo.......ozzzzzzzzzzzzzzzzzzzzzzoo.",
+    "oqqqqqoooooooooqqqqqqqqqqqqqqqqqqqqqqqqo",
+    "oAAAAAoooooooooAAAAAAAAAAAAAAAAAAAAAAAAo",
+    "oaaaaaoooooooooaaaaaaaaaaaaaaaaaaaaaaaao",
+    ".oottttoooooootttttttttttttttttttttttoo.",
+    "..ottttttttttttttttWWtttttttttttotttto..",
+    "..oLTTTTTTTTTTTTTTWWWWTTTTTTTTToTTTTto..",
+    "..oLTTooooooTTTTTTWWWWTTTTTTooooooTTto..",
+    "..oLoTooooooTTTTTTTWWTTTTTTToaaaaoTTto..",
+    "..oLToooooooTTTTTTTTTTTTTTTToaaaaoTTto..",
+    "..oLtooooooottttttttttttttttoooooottto..",
+    "..oLTTooooooTTTooooooooooTTToYYYYoTTto..",
+    "..oLTTooooooTTToddddddddoTTTooooooTTto..",
+    "..oLTTTaaaaTTTTodwdwdwddoTTTTaaaaTTTto..",
+    "..oLTTTTTTTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLTTTTTTTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLttttottttttodwdwdwddotttttttttttto..",
+    "..oLTTTTToTTTTTodwdwdwddoTTTTTTTTTTTto..",
+    "..oLTTTTToTTTTTodwdwdwddoToTTTTTTTTTto..",
+    "..oLTTTTTToTTTTodwdwdwYdoTToTTTTTTTTto..",
+    "..oLTTTTTToTTTTodwdwdwddoTToTTTTTTTTto..",
+    "..oLTTTTTTToTTTodwdwdwddoTTToTTTTTTTto..",
+    "..oLtttttttttttodwdwdwddtttttottttttto..",
+    "..oLTTTTTTTTtTTodwdwdwddotTToTTTTTTTto..",
+    "..oLTTTTTTTTTtTodwdwdwdtoTTTTTTTTTTTto..",
+    "oooLTTTTTTTtTTTodwdwdwddoTtTTTTTTTTTtooo",
+    "qqqqqqqqqqqqqqqAAAAAAAAAAqqqqqqqqqqqqqqq",
+    "aAAAAAAAaAAAAAAaaaaaaaaaaAAAAAAAaAAAAAAA",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "AAAAaAAAAAAAaAAaaaaaaaaaaAAAaAAAAAAAaAAA",
+    "AAAAaAAAAAAAaAAaaaaaaaaaaAAAaAAAAAAAaAAA",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+};
+
+static const char *const BASE_RUIN[] = {
+    ".....oMo................................",
+    ".....oMo................................",
+    "......oMo.................oo............",
+    "......oMo................oAAo...........",
+    ".......oMo...............oAAo...........",
+    "......ooMo.......ooo.....oAAo...........",
+    ".....oTTTTo.....odddo.ooooAAoo..........",
+    ".....oTTTTo.....odddootLLLLLLto..oo.....",
+    "...oooTTTTooo...odddootttttttto.oyyo....",
+    "..otTTTTTTTTtoooodddoottttttttoooyyoo...",
+    "..ottttttttttoyyyyyyyottttttttqqqqqqqo..",
+    "..ottttttttttoyyyyyyyottttttttAAAAAAAo..",
+    "..ottttttttttoyyyyyyyottttttttAAAAAAAo..",
+    ".oottttttttttozzzzzzzottttttttAAAAAAAoo.",
+    "oqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo",
+    "oaAAAAAAAaAAAAAAAaAAAAAAAaAAAAAAAaAAAAAo",
+    "oaAAAAAAAaAAAAAAAaAAAAAAAaAAAAAAAaAAAAAo",
+    "oaAAAAAAAaAAAAAAAaAAAAAAAaAAAAAAAaAAAAAo",
+    "oaAAAAAAAaAAAAAAAaAAAAAAAaAAAAAAAaAAAAAo",
+    "oaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaao",
+};
+
 static const Part PARTS[] = {
     PART(head, 14, HEAD),
     PART(head_striped, 14, HEAD_STRIPED),
@@ -317,6 +709,26 @@ static const Part PARTS[] = {
     PART(crate, 16, CRATE),
     PART(parachute, 20, PARACHUTE),
     PART(star, 5, STAR),
+    PART(dummy, 14, DUMMY),
+    PART(tank, 16, TANK),
+    PART(heavy_tank, 18, HEAVY_TANK),
+    PART(case, 12, CASE),
+    PART(flag0, 11, FLAG0),
+    PART(flag1, 11, FLAG1),
+    PART(dirt0, 16, DIRT0),
+    PART(dirt1, 16, DIRT1),
+    PART(dirt2, 16, DIRT2),
+    PART(grass_top0, 16, GRASS_TOP0),
+    PART(grass_top1, 16, GRASS_TOP1),
+    PART(plank, 16, PLANK),
+    PART(ladder, 16, LADDER),
+    PART(tuft, 7, TUFT),
+    PART(flower, 3, FLOWER),
+    PART(rock, 7, ROCK),
+    PART(base, 40, BASE),
+    PART(base_damaged, 40, BASE_DAMAGED),
+    PART(base_wrecked, 40, BASE_WRECKED),
+    PART(base_ruin, 40, BASE_RUIN),
 };
 
 enum {
@@ -344,6 +756,26 @@ enum {
     P_CRATE,
     P_PARACHUTE,
     P_STAR,
+    P_DUMMY,
+    P_TANK,
+    P_HEAVY_TANK,
+    P_CASE,
+    P_FLAG0,
+    P_FLAG1,
+    P_DIRT0,
+    P_DIRT1,
+    P_DIRT2,
+    P_GRASS_TOP0,
+    P_GRASS_TOP1,
+    P_PLANK,
+    P_LADDER,
+    P_TUFT,
+    P_FLOWER,
+    P_ROCK,
+    P_BASE,
+    P_BASE_DAMAGED,
+    P_BASE_WRECKED,
+    P_BASE_RUIN,
     P_COUNT
 };
 
@@ -366,11 +798,50 @@ i32 sprite_pose_bob(BodyPose pose) {
     return pose >= 0 && pose < POSE_COUNT ? POSE_BOB[pose] : 0;
 }
 
-// The single part a non-body sprite is made of.
+// How a non-body sprite is made: a part, optionally a second one stamped over it, and a color swap.
+typedef struct SpriteRecipe {
+    i32 part, overlay; // overlay < 0: none
+    const char *swap;
+} SpriteRecipe;
+
+static const SpriteRecipe RECIPES[SPR_COUNT - SPR_ARM] = {
+    [SPR_ARM - SPR_ARM] = {P_ARM, -1, NULL},
+    [SPR_PUNCH - SPR_ARM] = {P_PUNCH, -1, NULL},
+    [SPR_PISTOL - SPR_ARM] = {P_PISTOL, -1, NULL},
+    [SPR_UZI - SPR_ARM] = {P_UZI, -1, NULL},
+    [SPR_GRENADE - SPR_ARM] = {P_GRENADE, -1, NULL},
+    [SPR_ROCKET_LAUNCHER - SPR_ARM] = {P_ROCKET_LAUNCHER, -1, NULL},
+    [SPR_ROCKET - SPR_ARM] = {P_ROCKET, -1, NULL},
+    [SPR_CRATE_RED - SPR_ARM] = {P_CRATE, -1, NULL},
+    [SPR_CRATE_BLUE - SPR_ARM] = {P_CRATE, -1, "CUcu"},
+    [SPR_PARACHUTE - SPR_ARM] = {P_PARACHUTE, -1, NULL},
+    [SPR_STAR - SPR_ARM] = {P_STAR, -1, NULL},
+    [SPR_DUMMY - SPR_ARM] = {P_DUMMY, -1, NULL},
+    [SPR_TANK - SPR_ARM] = {P_TANK, -1, NULL},
+    [SPR_HEAVY_TANK - SPR_ARM] = {P_HEAVY_TANK, -1, NULL},
+    [SPR_CASE - SPR_ARM] = {P_CASE, -1, NULL},
+    [SPR_FLAG0 - SPR_ARM] = {P_FLAG0, -1, NULL},
+    [SPR_FLAG1 - SPR_ARM] = {P_FLAG1, -1, NULL},
+    [SPR_TILE_GRASS0 - SPR_ARM] = {P_DIRT0, P_GRASS_TOP0, NULL},
+    [SPR_TILE_GRASS1 - SPR_ARM] = {P_DIRT1, P_GRASS_TOP1, NULL},
+    [SPR_TILE_GRASS2 - SPR_ARM] = {P_DIRT2, P_GRASS_TOP0, "lg"},
+    [SPR_TILE_DIRT0 - SPR_ARM] = {P_DIRT0, -1, NULL},
+    [SPR_TILE_DIRT1 - SPR_ARM] = {P_DIRT1, -1, NULL},
+    [SPR_TILE_DIRT2 - SPR_ARM] = {P_DIRT2, -1, NULL},
+    [SPR_TILE_PLANK - SPR_ARM] = {P_PLANK, -1, NULL},
+    [SPR_TILE_LADDER - SPR_ARM] = {P_LADDER, -1, NULL},
+    [SPR_DECO_TUFT - SPR_ARM] = {P_TUFT, -1, NULL},
+    [SPR_DECO_FLOWER - SPR_ARM] = {P_FLOWER, -1, NULL},
+    [SPR_DECO_DAISY - SPR_ARM] = {P_FLOWER, -1, "FW"},
+    [SPR_DECO_ROCK - SPR_ARM] = {P_ROCK, -1, NULL},
+    [SPR_BASE - SPR_ARM] = {P_BASE, -1, NULL},
+    [SPR_BASE_DAMAGED - SPR_ARM] = {P_BASE_DAMAGED, -1, NULL},
+    [SPR_BASE_WRECKED - SPR_ARM] = {P_BASE_WRECKED, -1, NULL},
+    [SPR_BASE_RUIN - SPR_ARM] = {P_BASE_RUIN, -1, NULL},
+};
+
 static i32 sprite_part(SpriteId id) {
-    static const i32 parts[] = {P_ARM,    P_PUNCH, P_PISTOL, P_UZI,       P_GRENADE, P_ROCKET_LAUNCHER,
-                                P_ROCKET, P_CRATE, P_CRATE,  P_PARACHUTE, P_STAR};
-    return parts[id - SPR_ARM];
+    return RECIPES[id - SPR_ARM].part;
 }
 
 SpriteInfo sprite_info(SpriteId id) {
@@ -378,7 +849,8 @@ SpriteInfo sprite_info(SpriteId id) {
         return (SpriteInfo){SPRITE_BODY_W, SPRITE_BODY_H, {(f32)SPRITE_BODY_FEET_X, (f32)SPRITE_BODY_H}};
     }
     const Part *p = &PARTS[sprite_part(id)];
-    Vec2 pivot = vec2((f32)p->w * 0.5f, (f32)p->h * 0.5f);
+    const f32 w = (f32)p->w, h = (f32)p->h;
+    Vec2 pivot = vec2(w * 0.5f, h * 0.5f);
     switch (id) {
     case SPR_ARM:
         pivot = vec2(1.5f, 2.0f); // the shoulder
@@ -395,22 +867,67 @@ SpriteInfo sprite_info(SpriteId id) {
     case SPR_ROCKET_LAUNCHER:
         pivot = vec2(7.5f, 4.5f);
         break;
+    case SPR_FLAG0:
+    case SPR_FLAG1:
+        pivot = vec2(1.0f, h); // foot of the pole
+        break;
+    case SPR_TILE_GRASS0:
+    case SPR_TILE_GRASS1:
+    case SPR_TILE_GRASS2:
+    case SPR_TILE_DIRT0:
+    case SPR_TILE_DIRT1:
+    case SPR_TILE_DIRT2:
+    case SPR_TILE_PLANK:
+    case SPR_TILE_LADDER:
+        pivot = vec2(0.0f, 0.0f); // top left, on the tile grid
+        break;
+    case SPR_DUMMY:
+    case SPR_TANK:
+    case SPR_HEAVY_TANK:
+    case SPR_CASE:
+    case SPR_DECO_TUFT:
+    case SPR_DECO_FLOWER:
+    case SPR_DECO_DAISY:
+    case SPR_DECO_ROCK:
+    case SPR_BASE:
+    case SPR_BASE_DAMAGED:
+    case SPR_BASE_WRECKED:
+    case SPR_BASE_RUIN:
+        pivot = vec2(w * 0.5f, h); // standing on the ground
+        break;
     default:
         break;
     }
     return (SpriteInfo){p->w, p->h, pivot};
 }
 
+// Rows of small cells, then the big sprites two cells wide and tall.
+static i32 big_rows_start(void) {
+    return (SPR_BIG_FIRST + SPRITE_COLUMNS - 1) / SPRITE_COLUMNS;
+}
+
+static i32 cell_span(SpriteId id) {
+    return id >= SPR_BIG_FIRST ? 2 : 1;
+}
+
 Rect sprite_rect(SpriteId id) {
     const SpriteInfo info = sprite_info(id);
-    const i32 cell = (i32)id;
-    return (Rect){(f32)((cell % SPRITE_COLUMNS) * SPRITE_CELL), (f32)((cell / SPRITE_COLUMNS) * SPRITE_CELL), (f32)info.w,
-                  (f32)info.h};
+    i32 col, row;
+    if (id >= SPR_BIG_FIRST) {
+        const i32 k = (i32)(id - SPR_BIG_FIRST) * 2;
+        col = k % SPRITE_COLUMNS;
+        row = big_rows_start() + (k / SPRITE_COLUMNS) * 2;
+    } else {
+        col = (i32)id % SPRITE_COLUMNS;
+        row = (i32)id / SPRITE_COLUMNS;
+    }
+    return (Rect){(f32)(col * SPRITE_CELL), (f32)(row * SPRITE_CELL), (f32)info.w, (f32)info.h};
 }
 
 void sprites_atlas_size(i32 *w, i32 *h) {
+    const i32 big_cells = (SPR_COUNT - SPR_BIG_FIRST) * 2;
     *w = SPRITE_COLUMNS * SPRITE_CELL;
-    *h = ((SPR_COUNT + SPRITE_COLUMNS - 1) / SPRITE_COLUMNS) * SPRITE_CELL;
+    *h = (big_rows_start() + ((big_cells + SPRITE_COLUMNS - 1) / SPRITE_COLUMNS) * 2) * SPRITE_CELL;
 }
 
 // ---- Building ----------------------------------------------------------------------------------
@@ -464,11 +981,12 @@ static char swapped(char key, const char *swap) {
 static void stamp(const Painter *p, SpriteId id, i32 part, i32 x, i32 y, const char *swap) {
     const Part *pt = &PARTS[part];
     const Rect cell = sprite_rect(id);
+    const i32 span = cell_span(id) * SPRITE_CELL;
     for (i32 row = 0; row < pt->h; row++) {
         for (i32 col = 0; col < pt->w; col++) {
             const char key = swapped(pt->rows[row][col], swap);
             const i32 px = x + col, py = y + row;
-            if (key == '.' || px < 0 || py < 0 || px >= SPRITE_CELL || py >= SPRITE_CELL) {
+            if (key == '.' || px < 0 || py < 0 || px >= span || py >= span) {
                 continue;
             }
             u8 *dst = p->rgba + (((i32)cell.y + py) * p->stride + (i32)cell.x + px) * 4;
@@ -524,16 +1042,37 @@ void sprites_build_atlas(u8 *rgba, const u8 team[3], const u8 team_dark[3], bool
         }
     }
     for (i32 id = SPR_ARM; id < SPR_COUNT; id++) {
-        const char *swap = id == SPR_CRATE_BLUE ? "CUcu" : NULL;
-        stamp(&p, (SpriteId)id, sprite_part((SpriteId)id), 0, 0, swap);
+        const SpriteRecipe *rc = &RECIPES[id - SPR_ARM];
+        stamp(&p, (SpriteId)id, rc->part, 0, 0, rc->swap);
+        if (rc->overlay >= 0) {
+            stamp(&p, (SpriteId)id, rc->overlay, 0, 0, rc->swap);
+        }
     }
+}
+
+typedef struct RecipeCheck {
+    const char *problem; // NULL: fine
+} RecipeCheck;
+
+// Every sprite has a recipe, and its parts fit its cells.
+static RecipeCheck check_recipe(SpriteId id) {
+    const SpriteRecipe *rc = &RECIPES[id - SPR_ARM];
+    if (rc->part == P_HEAD && rc->overlay == 0 && !rc->swap) { // zero-filled entry: forgotten in RECIPES
+        return (RecipeCheck){"no recipe"};
+    }
+    const i32 span = cell_span(id) * SPRITE_CELL;
+    const Part *a = &PARTS[rc->part];
+    if (a->w > span || a->h > span || (rc->overlay >= 0 && (PARTS[rc->overlay].w > span || PARTS[rc->overlay].h > span))) {
+        return (RecipeCheck){"larger than its cells"};
+    }
+    return (RecipeCheck){NULL};
 }
 
 bool sprites_validate(char *err, usize err_len) {
     for (i32 i = 0; i < P_COUNT; i++) {
         const Part *p = &PARTS[i];
-        if (p->w > SPRITE_CELL || p->h > SPRITE_CELL) {
-            snprintf(err, err_len, "%s: larger than a cell", p->name);
+        if (p->w > 2 * SPRITE_CELL || p->h > 2 * SPRITE_CELL) {
+            snprintf(err, err_len, "%s: larger than a big sprite", p->name);
             return false;
         }
         for (i32 row = 0; row < p->h; row++) {
@@ -548,6 +1087,13 @@ bool sprites_validate(char *err, usize err_len) {
                     return false;
                 }
             }
+        }
+    }
+    for (i32 id = SPR_ARM; id < SPR_COUNT; id++) {
+        const RecipeCheck c = check_recipe((SpriteId)id);
+        if (c.problem) {
+            snprintf(err, err_len, "sprite %d: %s", (int)id, c.problem);
+            return false;
         }
     }
     return true;

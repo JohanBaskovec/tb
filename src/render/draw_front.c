@@ -44,9 +44,44 @@ static void falling_crates(Render *r, u32 ticks) {
     }
 }
 
+#define GROUND_Y 318.0f
+
+static void ground_sprite(Render *r, SpriteId id, i32 palette, Vec2 pos, bool flip) {
+    const SpriteDraw d = {.id = id, .palette = palette, .pos = pos, .flip_x = flip};
+    render_sprite(r, &d);
+}
+
+// A strip of grass and earth from the game's tileset along the bottom of the screen.
 static void ground(Render *r) {
-    render_fill_rect(r, (Rect){0.0f, 318.0f, (f32)LOGICAL_W, 42.0f}, (Color){74, 62, 92, 255});
-    render_fill_rect(r, (Rect){0.0f, 318.0f, (f32)LOGICAL_W, 3.0f}, (Color){118, 160, 90, 255});
+    for (i32 col = 0; col * 16 < LOGICAL_W; col++) {
+        const i32 v = (col * 7 + 3) % SPRITE_TILE_VARIANTS;
+        for (i32 row = 0; GROUND_Y + (f32)(row * 16) < (f32)LOGICAL_H; row++) {
+            const SpriteDraw d = {.id = (SpriteId)((row == 0 ? SPR_TILE_GRASS0 : SPR_TILE_DIRT0) + v),
+                                  .pos = vec2((f32)(col * 16), GROUND_Y + (f32)(row * 16)),
+                                  .darken = (u8)(row * 30)};
+            render_sprite(r, &d);
+        }
+        if (col % 5 == 2) {
+            ground_sprite(r, col % 3 ? SPR_DECO_TUFT : SPR_DECO_DAISY, 0, vec2((f32)(col * 16 + 8), GROUND_Y + 1.0f), false);
+        }
+    }
+}
+
+// Two camps facing each other on the title screen: base, flag, soldiers.
+static void camps(Render *r, u32 ticks) {
+    for (i32 side = 0; side < 2; side++) {
+        const i32 team = side; // red on the left, blue on the right
+        const f32 x = side == 0 ? 64.0f : (f32)LOGICAL_W - 64.0f;
+        const bool flip = side == 1;
+        const SpriteId flag = (ticks / 14 + (u32)side) % 2 ? SPR_FLAG1 : SPR_FLAG0;
+        ground_sprite(r, flag, team, vec2(x + 11.0f, GROUND_Y - 38.0f), false);
+        ground_sprite(r, SPR_BASE, team, vec2(x, GROUND_Y), false);
+        for (i32 k = 0; k < 2; k++) {
+            const BodyPose pose = (ticks / 30 + (u32)k) % 2 ? POSE_IDLE1 : POSE_IDLE0;
+            const f32 sx = x + (flip ? -1.0f : 1.0f) * (34.0f + (f32)k * 18.0f);
+            ground_sprite(r, sprite_body(k, pose), team, vec2(sx, GROUND_Y), flip);
+        }
+    }
 }
 
 static void dim(Render *r, u8 alpha) {
@@ -78,6 +113,7 @@ static void draw_title(Render *r, const Front *f) {
     sky(r);
     falling_crates(r, f->screen_ticks);
     ground(r);
+    camps(r, f->screen_ticks);
     const f32 cx = (f32)LOGICAL_W * 0.5f;
     const f32 bob = roundf(sinf((f32)f->screen_ticks * 0.05f) * 2.0f);
     ui_text_shadow(r, cx + 2.0f, 70.0f + bob + 2.0f, "CRATE SQUAD", (Color){90, 50, 30, 255}, 6, ALIGN_CENTER);

@@ -3,6 +3,8 @@
 #include "core/config.h"
 #include "game/base.h"
 #include "game/combat.h"
+#include "game/loot.h"
+#include "game/squad.h"
 #include "game/tuning.h"
 #include "render/draw_ui.h"
 
@@ -10,49 +12,21 @@
 
 #include <math.h>
 
-// Placeholder palette (final art comes later).
-static const Color COL_LADDER = {156, 116, 64, 255};
+// Colors of what is still drawn with shapes.
 static const Color COL_WATER = {36, 96, 190, 255};
 static const Color COL_WATER_TOP = {110, 170, 240, 255};
 static const Color COL_CRATE_RED = {208, 64, 56, 255};
 static const Color COL_CRATE_BLUE = {56, 112, 226, 255};
-static const Color COL_WOOD_DARK = {92, 60, 30, 255};
 
 static const Color COL_PAD_PLATE = {70, 190, 170, 255};
-static const Color COL_PAD_CELL = {56, 120, 118, 255};
 static const Color COL_MENU_BG = {20, 22, 36, 235};
 static const Color COL_MENU_BORDER = {120, 126, 160, 255};
 static const Color COL_MENU_SELECTED = {255, 224, 80, 255};
 
-// One placeholder color per product (final art comes later).
-static const Color PRODUCT_COLORS[PRODUCT_COUNT] = {
-    [PRODUCT_PISTOL] = {190, 190, 200, 255},
-    [PRODUCT_UZI] = {120, 120, 140, 255},
-    [PRODUCT_GRENADES] = {110, 170, 70, 255},
-    [PRODUCT_STRONG_GRENADES] = {190, 230, 60, 255},
-    [PRODUCT_COMPANION] = {240, 170, 120, 255},
-    [PRODUCT_STRONG_COMPANION] = {240, 120, 70, 255},
-    [PRODUCT_ROCKET_LAUNCHER] = {230, 90, 40, 255},
-    [PRODUCT_HEAVY_COMPANION] = {180, 90, 200, 255},
-    [PRODUCT_HEAVY_ARMORED_COMPANION] = {120, 60, 160, 255},
-    [PRODUCT_TANK] = {90, 140, 90, 255},
-    [PRODUCT_HEAVY_TANK] = {50, 90, 60, 255},
-};
-
-static const Color WEAPON_COLORS[WEAPON_COUNT] = {
-    [WEAPON_FISTS] = {240, 200, 170, 255},
-    [WEAPON_PISTOL] = {190, 190, 200, 255},
-    [WEAPON_UZI] = {120, 120, 140, 255},
-    [WEAPON_GRENADES] = {110, 170, 70, 255},
-    [WEAPON_STRONG_GRENADES] = {190, 230, 60, 255},
-    [WEAPON_ROCKET_LAUNCHER] = {230, 90, 40, 255},
-};
 static const Color COL_HP_BACK = {40, 20, 24, 255};
 static const Color COL_HP = {90, 220, 100, 255};
 static const Color COL_HP_LOW = {230, 70, 60, 255};
 static const Color COL_FLASH = {255, 255, 255, 255};
-static const Color COL_DUMMY = {196, 160, 104, 255};
-static const Color COL_DUMMY_DARK = {132, 104, 64, 255};
 static const Color COL_BULLET = {255, 236, 120, 255};
 
 static Rect rect_at(i32 ox, i32 oy, f32 x, f32 y, f32 w, f32 h) {
@@ -122,87 +96,139 @@ static void draw_background(Render *r, i32 ox, i32 oy) {
 
 static const Color COL_GRASS = {108, 178, 84, 255};
 static const Color COL_GRASS_DARK = {62, 120, 60, 255};
-static const Color COL_DIRT = {118, 84, 74, 255};
-static const Color COL_PEBBLE = {148, 112, 96, 255};
-static const Color COL_PLANK = {186, 140, 80, 255};
 static const Color COL_PLANK_DARK = {120, 84, 44, 255};
 
-static void draw_one_way_top(Render *r, f32 x, f32 y) {
-    const f32 t = (f32)TILE_SIZE;
-    render_fill_rect(r, (Rect){x, y, t, 5.0f}, COL_PLANK);
-    render_fill_rect(r, (Rect){x, y, t, 1.0f}, shade(COL_PLANK, 1.2f));
-    render_fill_rect(r, (Rect){x, y + 5.0f, t, 1.0f}, COL_PLANK_DARK);
-    render_fill_rect(r, (Rect){x + 7.0f, y + 1.0f, 1.0f, 4.0f}, COL_PLANK_DARK); // plank joint
-    render_fill_rect(r, (Rect){x + 2.0f, y + 2.0f, 1.0f, 1.0f}, COL_PLANK_DARK);  // nails
-    render_fill_rect(r, (Rect){x + 12.0f, y + 2.0f, 1.0f, 1.0f}, COL_PLANK_DARK);
+static void tile_sprite(Render *r, SpriteId id, f32 x, f32 y, u8 darken) {
+    const SpriteDraw d = {.id = id, .pos = vec2(x, y), .darken = darken};
+    render_sprite(r, &d);
 }
 
-// Earth: grass on the top layer, then dirt that darkens with depth, with a few pebbles.
+// Now and then a tuft, a flower or a stone on top of the grass (fixed per tile).
+static void draw_grass_deco(Render *r, u32 h, f32 x, f32 y) {
+    const u32 roll = (h >> 16) % 16;
+    const f32 at = x + 4.0f + (f32)((h >> 20) % 9);
+    SpriteId id = SPR_COUNT;
+    if (roll < 4) {
+        id = SPR_DECO_TUFT;
+    } else if (roll == 4) {
+        id = SPR_DECO_FLOWER;
+    } else if (roll == 5) {
+        id = SPR_DECO_DAISY;
+    } else if (roll == 6) {
+        id = SPR_DECO_ROCK;
+    }
+    if (id != SPR_COUNT) {
+        const SpriteDraw d = {.id = id, .pos = vec2(at, y + 1.0f), .flip_x = (h >> 25) & 1u};
+        render_sprite(r, &d);
+    }
+}
+
+// The ground right under a pad (kept clear of plants).
+static bool under_pad(const Level *lv, i32 tx, i32 ty) {
+    for (i32 t = 0; t < MAX_TEAMS; t++) {
+        const PadSite *p = &lv->pads[t];
+        if (p->present && ty == p->cell_y + 1 && tx >= p->cell_x && tx < p->cell_x + PAD_COLS) {
+            return true;
+        }
+    }
+    return false;
+}
+
+#define EARTH_DARK_DEPTH 6 // tiles below the surface where the earth stops darkening
+#define EARTH_DARK_STEP 16 // darkening per tile of depth (out of 255)
+
+// Earth: grass on the top layer, then dirt that darkens with depth. Light on the left faces, shade on the right and
+// under overhangs.
 static void draw_solid(Render *r, const Level *lv, i32 tx, i32 ty, f32 x, f32 y) {
     const f32 t = (f32)TILE_SIZE;
     i32 depth = 0;
-    while (depth < 4 && level_tile(lv, tx, ty - depth - 1) == TILE_SOLID) {
+    while (depth < EARTH_DARK_DEPTH && level_tile(lv, tx, ty - depth - 1) == TILE_SOLID) {
         depth++;
     }
-    const Color dirt = shade(COL_DIRT, 1.0f - 0.12f * (f32)depth);
-    render_fill_rect(r, (Rect){x, y, t, t}, dirt);
     const u32 h = tile_hash(tx, ty);
-    for (int k = 0; k < 2; k++) {
-        const u32 v = h >> (k * 8);
-        render_fill_rect(r, (Rect){x + (f32)(v % 13) + 1.0f, y + (f32)((v >> 4) % 11) + 3.0f, 2.0f, 1.0f},
-                         shade(COL_PEBBLE, 1.0f - 0.12f * (f32)depth));
+    const i32 variant = (i32)(h % SPRITE_TILE_VARIANTS);
+    const bool grass = depth == 0 && level_tile(lv, tx, ty - 1) != TILE_HAZARD;
+    tile_sprite(r, (SpriteId)((grass ? SPR_TILE_GRASS0 : SPR_TILE_DIRT0) + variant), x, y,
+                (u8)(depth * EARTH_DARK_STEP));
+    if (depth < EARTH_DARK_DEPTH) { // half a step more on the lower half: softer bands
+        render_fill_rect(r, (Rect){x, y + t * 0.5f, t, t * 0.5f}, (Color){0, 0, 0, EARTH_DARK_STEP / 2});
     }
+    const u8 edge = (u8)(70 - depth * 8);
     if (level_tile(lv, tx - 1, ty) != TILE_SOLID) {
-        render_fill_rect(r, (Rect){x, y, 1.0f, t}, shade(dirt, 1.25f));
+        render_fill_rect(r, (Rect){x, y, 1.0f, t}, (Color){255, 230, 210, edge});
     }
     if (level_tile(lv, tx + 1, ty) != TILE_SOLID) {
-        render_fill_rect(r, (Rect){x + t - 1.0f, y, 1.0f, t}, shade(dirt, 0.75f));
+        render_fill_rect(r, (Rect){x + t - 1.0f, y, 1.0f, t}, (Color){20, 10, 20, (u8)(edge + 40)});
     }
-    if (depth == 0 && level_tile(lv, tx, ty - 1) != TILE_HAZARD) {
-        render_fill_rect(r, (Rect){x, y, t, 4.0f}, COL_GRASS);
-        render_fill_rect(r, (Rect){x, y + 4.0f, t, 1.0f}, COL_GRASS_DARK);
-        render_fill_rect(r, (Rect){x + (f32)(h % 5), y + 5.0f, 2.0f, 1.0f}, COL_GRASS_DARK); // ragged edge
-        render_fill_rect(r, (Rect){x + 8.0f + (f32)((h >> 3) % 6), y + 5.0f, 3.0f, 1.0f}, COL_GRASS_DARK);
-        if (level_tile(lv, tx, ty - 1) == TILE_EMPTY) { // blades sticking out
-            render_fill_rect(r, (Rect){x + (f32)((h >> 6) % 14), y - 2.0f, 1.0f, 2.0f}, COL_GRASS);
-            render_fill_rect(r, (Rect){x + (f32)((h >> 10) % 14) + 1.0f, y - 1.0f, 1.0f, 1.0f}, COL_GRASS);
+    if (level_tile(lv, tx, ty + 1) == TILE_EMPTY) {
+        render_fill_rect(r, (Rect){x, y + t - 2.0f, t, 2.0f}, (Color){20, 10, 20, 90});
+    }
+    if (!grass) {
+        return;
+    }
+    if (level_tile(lv, tx - 1, ty) == TILE_EMPTY) { // the grass hangs a little over the edges
+        render_fill_rect(r, (Rect){x - 1.0f, y, 1.0f, 4.0f}, COL_GRASS);
+        render_fill_rect(r, (Rect){x - 1.0f, y + 4.0f, 1.0f, 2.0f}, COL_GRASS_DARK);
+    }
+    if (level_tile(lv, tx + 1, ty) == TILE_EMPTY) {
+        render_fill_rect(r, (Rect){x + t, y, 1.0f, 4.0f}, COL_GRASS);
+        render_fill_rect(r, (Rect){x + t, y + 4.0f, 1.0f, 2.0f}, COL_GRASS_DARK);
+    }
+    if (level_tile(lv, tx, ty - 1) == TILE_EMPTY && !under_pad(lv, tx, ty)) {
+        draw_grass_deco(r, h, x, y);
+    }
+}
+
+// Water darkens with depth; the surface rolls and glints, with foam against the shore.
+static void draw_water(Render *r, const Level *lv, i32 tx, i32 ty, f32 x, f32 y, u64 tick) {
+    const f32 t = (f32)TILE_SIZE;
+    i32 depth = 0;
+    while (depth < 3 && level_tile(lv, tx, ty - depth - 1) == TILE_HAZARD) {
+        depth++;
+    }
+    render_fill_rect(r, (Rect){x, y, t, t}, shade(COL_WATER, 1.0f - 0.12f * (f32)depth));
+    if (depth > 0) {
+        if ((tile_hash(tx, ty) + (u32)(tick / 20)) % 7 == 0) { // a bubble now and then
+            render_fill_rect(r, (Rect){x + 6.0f, y + 6.0f - (f32)((tick / 4) % 6), 2.0f, 2.0f}, COL_WATER_TOP);
+        }
+        return;
+    }
+    for (i32 sx = 0; sx < TILE_SIZE; sx += 2) { // a rolling surface line
+        const f32 wx = (f32)(tx * TILE_SIZE + sx);
+        const f32 wave = sinf(wx * 0.25f + (f32)tick * 0.07f) + 0.5f * sinf(wx * 0.11f - (f32)tick * 0.05f);
+        const f32 top = wave > 0.6f ? 0.0f : 1.0f;
+        render_fill_rect(r, (Rect){x + (f32)sx, y + top, 2.0f, 3.0f - top}, COL_WATER_TOP);
+    }
+    const f32 phase = (f32)tick * 0.08f + (f32)tx * 1.3f;
+    render_fill_rect(r, (Rect){x + 4.0f + roundf(sinf(phase) * 3.0f), y + 5.0f, 5.0f, 1.0f}, COL_WATER_TOP);
+    if (((u32)(tick / 12) + tile_hash(tx, ty)) % 9 == 0) { // a glint
+        render_fill_rect(r, (Rect){x + (f32)(tile_hash(tx, ty) % 12) + 2.0f, y + 8.0f, 2.0f, 1.0f}, COL_FLASH);
+    }
+    for (int side = -1; side <= 1; side += 2) { // foam where the water meets the ground
+        if (level_tile(lv, tx + side, ty) == TILE_SOLID) {
+            const f32 fx = side < 0 ? x : x + t - 3.0f;
+            const f32 bob = (f32)((tick / 10 + (u32)tx) % 2);
+            render_fill_rect(r, (Rect){fx, y - bob, 3.0f, 2.0f}, COL_FLASH);
         }
     }
 }
 
-static void draw_water(Render *r, const Level *lv, i32 tx, i32 ty, f32 x, f32 y, u64 tick) {
-    const f32 t = (f32)TILE_SIZE;
-    render_fill_rect(r, (Rect){x, y, t, t}, COL_WATER);
-    if (level_tile(lv, tx, ty - 1) != TILE_HAZARD) { // the surface ripples
-        const f32 phase = (f32)tick * 0.08f + (f32)tx * 1.3f;
-        render_fill_rect(r, (Rect){x, y, t, 2.0f}, COL_WATER_TOP);
-        render_fill_rect(r, (Rect){x + 4.0f + roundf(sinf(phase) * 3.0f), y + 4.0f, 5.0f, 1.0f}, COL_WATER_TOP);
-    } else if ((tile_hash(tx, ty) + (u32)(tick / 20)) % 7 == 0) { // a bubble now and then
-        render_fill_rect(r, (Rect){x + 6.0f, y + 6.0f, 2.0f, 2.0f}, COL_WATER_TOP);
-    }
-}
-
 static void draw_tile(Render *r, const Level *lv, i32 tx, i32 ty, f32 x, f32 y, u64 tick) {
-    const f32 t = (f32)TILE_SIZE;
     switch (level_tile(lv, tx, ty)) {
     case TILE_SOLID:
         draw_solid(r, lv, tx, ty, x, y);
         break;
     case TILE_PLATFORM:
-        draw_one_way_top(r, x, y);
+        tile_sprite(r, SPR_TILE_PLANK, x, y, 0);
         if (level_tile(lv, tx, ty + 1) == TILE_EMPTY && (level_tile(lv, tx - 1, ty) != TILE_PLATFORM ||
                                                          level_tile(lv, tx + 1, ty) != TILE_PLATFORM)) {
             render_fill_rect(r, (Rect){x + 6.0f, y + 6.0f, 3.0f, 4.0f}, COL_PLANK_DARK); // end bracket
         }
         break;
     case TILE_LADDER:
-        render_fill_rect(r, (Rect){x + 3.0f, y, 2.0f, t}, COL_LADDER);
-        render_fill_rect(r, (Rect){x + 11.0f, y, 2.0f, t}, COL_LADDER);
-        for (int i = 0; i < 4; i++) {
-            render_fill_rect(r, (Rect){x + 5.0f, y + 2.0f + (f32)(i * 4), 6.0f, 1.0f}, COL_LADDER);
-        }
+        tile_sprite(r, SPR_TILE_LADDER, x, y, 0);
         if (level_is_one_way(lv, tx, ty)) {
-            draw_one_way_top(r, x, y);
+            tile_sprite(r, SPR_TILE_PLANK, x, y, 0);
         }
         break;
     case TILE_HAZARD:
@@ -396,12 +422,7 @@ static void draw_crates(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 o
     }
 }
 
-static const Color COL_STONE = {96, 92, 110, 255};
-static const Color COL_STONE_DARK = {60, 56, 72, 255};
-static const Color COL_WINDOW = {255, 214, 110, 255};
-static const Color COL_POLE = {200, 200, 210, 255};
-
-// A bunker in the team colors with a flag on top; cracked when hurt, rubble once destroyed.
+// A bunker in the team colors with its flag; cracked when hurt, a heap of rubble once destroyed.
 static void draw_base(Render *r, const GameState *gs, i32 team, i32 ox, i32 oy) {
     const Team *t = &gs->teams[team];
     const Rect b = base_rect(gs, team);
@@ -409,34 +430,18 @@ static void draw_base(Render *r, const GameState *gs, i32 team, i32 ox, i32 oy) 
     if (x + w < 0.0f || x > (f32)LOGICAL_W || y + h + 8.0f < 0.0f || y - 16.0f > (f32)LOGICAL_H) {
         return;
     }
-    const Color body = ui_team_color(team), dark = ui_team_color_dark(team);
-    if (t->base_hp <= 0) { // ruin: a heap of blocks and a broken pole
-        render_fill_rect(r, (Rect){x + 2.0f, y + h - 8.0f, w - 4.0f, 8.0f}, COL_STONE_DARK);
-        render_fill_rect(r, (Rect){x + 5.0f, y + h - 13.0f, 10.0f, 6.0f}, dark);
-        render_fill_rect(r, (Rect){x + 18.0f, y + h - 11.0f, 8.0f, 4.0f}, COL_STONE);
-        render_fill_rect(r, (Rect){x + 27.0f, y + h - 15.0f, 7.0f, 8.0f}, dark);
-        render_line(r, vec2(x + 9.0f, y + h - 13.0f), vec2(x + 4.0f, y + h - 24.0f), COL_POLE);
+    const Vec2 foot = vec2(x + w * 0.5f, y + h);
+    if (t->base_hp <= 0) {
+        sprite_at(r, SPR_BASE_RUIN, team, foot, 0.0f, false, false);
         return;
     }
     const bool flash = t->base_hurt_ticks > SECONDS_TO_TICKS(TUNING_BASE_ALERT_S) - 6;
-    render_fill_rect(r, (Rect){x, y + h - 4.0f, w, 4.0f}, COL_STONE_DARK);              // foundation
-    render_fill_rect(r, (Rect){x + 3.0f, y + 14.0f, w - 6.0f, h - 18.0f}, flash ? COL_FLASH : dark); // walls
-    render_fill_rect(r, (Rect){x + 3.0f, y + 14.0f, w - 6.0f, 3.0f}, flash ? COL_FLASH : body);
-    render_fill_rect(r, (Rect){x, y + 9.0f, w, 5.0f}, COL_STONE);                       // roof
-    render_fill_rect(r, (Rect){x + 4.0f, y + 6.0f, w - 8.0f, 3.0f}, COL_STONE);
-    render_fill_rect(r, (Rect){x + w * 0.5f - 5.0f, y + h - 16.0f, 10.0f, 12.0f}, COL_STONE_DARK); // door
-    render_fill_rect(r, (Rect){x + 7.0f, y + 20.0f, 5.0f, 4.0f}, COL_WINDOW);
-    render_fill_rect(r, (Rect){x + w - 12.0f, y + 20.0f, 5.0f, 4.0f}, COL_WINDOW);
-    render_fill_rect(r, (Rect){x + w - 9.0f, y - 10.0f, 1.0f, 16.0f}, COL_POLE);         // flag
-    render_fill_rect(r, (Rect){x + w - 8.0f, y - 10.0f, 9.0f, 6.0f}, body);
-    if (t->base_hp * 2 < TUNING_BASE_HP) { // cracks
-        render_line(r, vec2(x + 6.0f, y + 15.0f), vec2(x + 11.0f, y + 26.0f), COL_STONE_DARK);
-        render_line(r, vec2(x + 11.0f, y + 26.0f), vec2(x + 9.0f, y + 33.0f), COL_STONE_DARK);
-        render_line(r, vec2(x + w - 5.0f, y + 16.0f), vec2(x + w - 13.0f, y + 30.0f), COL_STONE_DARK);
-    }
-    if (t->base_hp * 4 < TUNING_BASE_HP) {
-        render_fill_rect(r, (Rect){x + 4.0f, y + 6.0f, 9.0f, 4.0f}, (Color){24, 22, 30, 255}); // a hole in the roof
-    }
+    const SpriteId id = t->base_hp * 4 < TUNING_BASE_HP   ? SPR_BASE_WRECKED
+                        : t->base_hp * 2 < TUNING_BASE_HP ? SPR_BASE_DAMAGED
+                                                          : SPR_BASE;
+    const SpriteId flag = (gs->tick / 14 + (u64)team) % 2 ? SPR_FLAG1 : SPR_FLAG0;
+    sprite_at(r, flag, team, vec2(x + w - 9.0f, y + 2.0f), 0.0f, false, false);
+    sprite_at(r, id, flash ? SPRITE_PALETTE_FLASH : team, foot, 0.0f, false, false);
 }
 
 static void draw_bases(Render *r, const GameState *gs, i32 ox, i32 oy) {
@@ -447,24 +452,42 @@ static void draw_bases(Render *r, const GameState *gs, i32 ox, i32 oy) {
     }
 }
 
-// The 4x2 area of every pad: a plate under it and faint cell outlines.
+static const Color COL_STEEL = {150, 156, 172, 255};
+static const Color COL_STEEL_DARK = {84, 88, 104, 255};
+
+// The 4x2 area of every pad: a steel plate striped in the team color, and a bracket at the corners of every cell.
 static void draw_pads(Render *r, const GameState *gs, i32 ox, i32 oy) {
     for (i32 team = 0; team < MAX_TEAMS; team++) {
         if (!gs->level->pads[team].present) {
             continue;
         }
         const Rect pr = pad_rect(gs, team);
-        render_fill_rect(r, rect_at(ox, oy, pr.x - 2.0f, pr.y + pr.h, pr.w + 4.0f, 3.0f), ui_team_color(team));
-        render_fill_rect(r, rect_at(ox, oy, pr.x + 2.0f, pr.y + pr.h, pr.w - 4.0f, 1.0f), COL_PAD_PLATE);
-        for (i32 row = 0; row < PAD_ROWS; row++) {
-            for (i32 col = 0; col < PAD_COLS; col++) {
-                render_outline_rect(r, rect_at(ox, oy, pr.x + (f32)(col * TILE_SIZE), pr.y + (f32)(row * TILE_SIZE),
-                                               (f32)TILE_SIZE, (f32)TILE_SIZE), COL_PAD_CELL);
+        const f32 x = pr.x - (f32)ox, y = pr.y - (f32)oy, bottom = y + pr.h;
+        if (x + pr.w < -8.0f || x > (f32)LOGICAL_W + 8.0f || bottom < -8.0f || y > (f32)LOGICAL_H + 8.0f) {
+            continue;
+        }
+        render_fill_rect(r, (Rect){x, y, pr.w, pr.h}, (Color){COL_PAD_PLATE.r, COL_PAD_PLATE.g, COL_PAD_PLATE.b, 22});
+        render_fill_rect(r, (Rect){x - 2.0f, bottom, pr.w + 4.0f, 4.0f}, COL_STEEL_DARK);
+        render_fill_rect(r, (Rect){x - 2.0f, bottom, pr.w + 4.0f, 1.0f}, COL_STEEL);
+        const Color stripe = ui_team_color(team);
+        for (f32 sx = x; sx < x + pr.w - 2.0f; sx += 6.0f) { // hazard stripes
+            render_fill_rect(r, (Rect){sx + 1.0f, bottom + 1.0f, 3.0f, 2.0f}, stripe);
+        }
+        for (f32 sx = x; sx <= x + pr.w; sx += pr.w) { // end rivets
+            render_fill_rect(r, (Rect){sx - 1.0f, bottom + 1.0f, 1.0f, 1.0f}, COL_STEEL);
+        }
+        const Color mark = {COL_PAD_PLATE.r, COL_PAD_PLATE.g, COL_PAD_PLATE.b, 170};
+        for (i32 row = 0; row <= PAD_ROWS; row++) {
+            for (i32 col = 0; col <= PAD_COLS; col++) {
+                const f32 cx = x + (f32)(col * TILE_SIZE), cy = y + (f32)(row * TILE_SIZE);
+                render_fill_rect(r, (Rect){cx - 2.0f, cy, 5.0f, 1.0f}, mark); // a small cross at every corner
+                render_fill_rect(r, (Rect){cx, cy - 2.0f, 1.0f, 5.0f}, mark);
             }
         }
     }
 }
 
+// Vehicles are not in the game yet: what the pad makes is a tank model waiting on the ground.
 static void draw_products(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 oy) {
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
         const Entity *e = &gs->entities.slots[i];
@@ -473,9 +496,9 @@ static void draw_products(Render *r, const GameState *gs, f32 alpha, i32 ox, i32
         }
         const f32 x = roundf(lerpf(e->prev_pos.x, e->body.pos.x, alpha));
         const f32 y = roundf(lerpf(e->prev_pos.y, e->body.pos.y, alpha));
-        const Color c = PRODUCT_COLORS[e->as.product.kind];
-        render_fill_rect(r, rect_at(ox, oy, x, y, e->body.size.x, e->body.size.y), COL_WOOD_DARK);
-        render_fill_rect(r, rect_at(ox, oy, x + 1.0f, y + 1.0f, e->body.size.x - 2.0f, e->body.size.y - 2.0f), c);
+        const SpriteId id = e->as.product.kind == PRODUCT_HEAVY_TANK ? SPR_HEAVY_TANK : SPR_TANK;
+        const Vec2 foot = vec2(x + e->body.size.x * 0.5f - (f32)ox, y + e->body.size.y - (f32)oy);
+        sprite_at(r, id, e->as.product.team, foot, 0.0f, false, false);
     }
 }
 
@@ -488,10 +511,8 @@ static void draw_loot_weapons(Render *r, const GameState *gs, f32 alpha, i32 ox,
         }
         const f32 x = roundf(lerpf(e->prev_pos.x, e->body.pos.x, alpha));
         const f32 y = roundf(lerpf(e->prev_pos.y, e->body.pos.y, alpha));
-        const Color c = WEAPON_COLORS[e->as.weapon.kind];
         const f32 w = e->body.size.x, h = e->body.size.y;
-        render_fill_rect(r, rect_at(ox, oy, x, y + h - 4.0f, w, 4.0f), COL_WOOD_DARK);
-        render_fill_rect(r, rect_at(ox, oy, x + 1.0f, y + h - 3.0f, w - 2.0f, 2.0f), c);
+        sprite_at(r, SPR_CASE, 0, vec2(x + w * 0.5f - (f32)ox, y + h - (f32)oy), 0.0f, false, false);
         const SpriteId ws = weapon_sprite(e->as.weapon.kind);
         if (ws != SPR_COUNT) {
             const f32 hover = roundf(sinf((f32)gs->tick * 0.1f + (f32)i) * 1.5f);
@@ -511,10 +532,12 @@ static void draw_dummies(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 
         const f32 y = roundf(lerpf(e->prev_pos.y, e->body.pos.y, alpha));
         const f32 w = e->body.size.x, h = e->body.size.y;
         const bool flash = d->hurt_ticks > 0 && (d->hurt_ticks / 2) % 2 == 0;
-        render_fill_rect(r, rect_at(ox, oy, x + w * 0.5f - 1.0f, y + h - 4.0f, 2.0f, 4.0f), COL_WOOD_DARK); // post
-        render_fill_rect(r, rect_at(ox, oy, x, y + 6.0f, w, h - 12.0f), flash ? COL_FLASH : COL_DUMMY);
-        render_fill_rect(r, rect_at(ox, oy, x + 3.0f, y, w - 6.0f, 7.0f), flash ? COL_FLASH : COL_DUMMY_DARK);
-        render_outline_rect(r, rect_at(ox, oy, x + 4.0f, y + 9.0f, w - 8.0f, 5.0f), COL_DUMMY_DARK); // target ring
+        const f32 wobble = d->hurt_ticks > 0 ? sinf((f32)d->hurt_ticks * 1.3f) * 6.0f : 0.0f; // rocks when hit
+        const SpriteDraw sd = {.id = SPR_DUMMY,
+                               .palette = flash ? SPRITE_PALETTE_FLASH : 0,
+                               .pos = vec2(x + w * 0.5f - (f32)ox, y + h - (f32)oy),
+                               .angle = wobble};
+        render_sprite(r, &sd);
         if (d->hp < d->max_hp) {
             draw_hp_bar(r, rect_at(ox, oy, x, y - 5.0f, w, 3.0f), (f32)d->hp / (f32)d->max_hp);
         }
@@ -676,12 +699,19 @@ static void draw_soldier_panel(Render *r, const GameState *gs) {
     snprintf(line, sizeof(line), "%d", MAX(c->hp, 0));
     ui_text_shadow(r, 134.0f, 9.0f, line, COL_TEXT, 1, ALIGN_RIGHT);
 
-    render_fill_rect(r, (Rect){9.0f, 22.0f, 7.0f, 7.0f}, WEAPON_COLORS[c->weapon]);
+    const SpriteId ws = weapon_sprite(c->weapon);
+    const SpriteDraw icon = {.id = ws == SPR_COUNT ? SPR_PUNCH : ws,
+                             .palette = team,
+                             .pos = vec2(16.0f, 25.5f),
+                             .pivot_center = true,
+                             .scale_x = ws == SPR_ROCKET_LAUNCHER ? 0.75f : 1.0f,
+                             .scale_y = ws == SPR_ROCKET_LAUNCHER ? 0.75f : 1.0f};
+    render_sprite(r, &icon);
     if (c->weapon == WEAPON_FISTS) {
-        ui_text_shadow(r, 20.0f, 22.0f, ui_weapon_label(c->weapon), COL_TEXT, 1, ALIGN_LEFT);
+        ui_text_shadow(r, 26.0f, 22.0f, ui_weapon_label(c->weapon), COL_TEXT, 1, ALIGN_LEFT);
     } else {
         snprintf(line, sizeof(line), "%s", ui_weapon_label(c->weapon));
-        ui_text_shadow(r, 20.0f, 22.0f, line, COL_TEXT, 1, ALIGN_LEFT);
+        ui_text_shadow(r, 26.0f, 22.0f, line, COL_TEXT, 1, ALIGN_LEFT);
         snprintf(line, sizeof(line), "%d", c->ammo);
         ui_text_shadow(r, 134.0f, 22.0f, line, c->ammo * 4 <= weapon_def(c->weapon)->max_ammo ? COL_HP_LOW : COL_TEXT, 1,
                        ALIGN_RIGHT);
@@ -691,15 +721,20 @@ static void draw_soldier_panel(Render *r, const GameState *gs) {
     ui_text_shadow(r, 9.0f, 35.0f, "ORDRE", COL_TEXT_DIM, 1, ALIGN_LEFT);
     ui_text_shadow(r, 44.0f, 35.0f, ui_order_label(order), ORDER_COLORS[order], 1, ALIGN_LEFT);
 
-    // One pip per living soldier of the team (the controlled one is outlined), and their number.
+    // One figure per living soldier of the team, and their number.
     i32 n = 0;
     for (i32 i = 0; i < MAX_SOLDIERS; i++) {
         if (gs->soldiers[i].alive && gs->soldiers[i].team == team) {
-            if (n < 16) {
-                const Rect pip = {10.0f + (f32)(n * 6), 49.0f, 4.0f, 7.0f};
-                render_fill_rect(r, pip, ui_team_color(team));
+            if (n < 12) { // a small figure per soldier, the controlled one underlined
+                const f32 px = 13.0f + (f32)(n * 9);
+                const SpriteDraw d = {.id = sprite_body((i32)gs->soldiers[i].variant, POSE_IDLE0),
+                                      .palette = team,
+                                      .pos = vec2(px, 58.0f),
+                                      .scale_x = 0.5f,
+                                      .scale_y = 0.5f};
+                render_sprite(r, &d);
                 if (i == gs->controlled) {
-                    render_outline_rect(r, (Rect){pip.x - 1.0f, pip.y - 1.0f, 6.0f, 9.0f}, COL_MARKER);
+                    render_fill_rect(r, (Rect){px - 4.0f, 59.0f, 8.0f, 1.0f}, COL_MARKER);
                 }
             }
             n++;
@@ -859,6 +894,23 @@ static void draw_hud(Render *r, const GameState *gs, i32 ox, i32 oy) {
     draw_match_banner(r, gs);
 }
 
+// What a construction gives, standing on `foot`: the weapon, the soldier (small) or the tank.
+static void draw_product_icon(Render *r, PadProduct product, i32 team, Vec2 foot) {
+    WeaponKind weapon;
+    SoldierVariant variant;
+    if (weapon_from_product(product, &weapon)) {
+        const SpriteId ws = weapon_sprite(weapon);
+        const SpriteDraw d = {.id = ws, .palette = team, .pos = vec2(foot.x, foot.y - 6.0f), .pivot_center = true};
+        render_sprite(r, &d);
+    } else if (soldier_from_product(product, &variant)) {
+        const SpriteDraw d = {.id = sprite_body((i32)variant, POSE_IDLE0), .palette = team, .pos = foot,
+                              .scale_x = 0.625f, .scale_y = 0.625f};
+        render_sprite(r, &d);
+    } else {
+        sprite_at(r, product == PRODUCT_HEAVY_TANK ? SPR_HEAVY_TANK : SPR_TANK, team, foot, 0.0f, false, false);
+    }
+}
+
 // Mini picture of the shape: one 5 px square per consumed crate, in that crate's color.
 static void draw_menu_entry(Render *r, const PadMenu *m, i32 index, i32 ox, i32 oy) {
     const PadOption *o = &m->options.items[index];
@@ -878,10 +930,7 @@ static void draw_menu_entry(Render *r, const PadMenu *m, i32 index, i32 ox, i32 
         render_fill_rect(r, (Rect){ix + (f32)c.col * cell, iy + (f32)c.row * cell, cell - 1.0f, cell - 1.0f},
                          blue ? COL_CRATE_BLUE : COL_CRATE_RED);
     }
-    const Color pc = PRODUCT_COLORS[o->product];
-    const Rect sw = {box.x + box.w - 15.0f, box.y + 3.0f, 12.0f, box.h - 6.0f};
-    render_fill_rect(r, sw, pc);
-    render_outline_rect(r, sw, COL_WOOD_DARK);
+    draw_product_icon(r, o->product, m->team, vec2(box.x + box.w - 12.0f, box.y + box.h - 3.0f));
 }
 
 static void draw_pad_menu(Render *r, const PadMenu *m, i32 ox, i32 oy) {

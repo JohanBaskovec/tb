@@ -390,3 +390,11 @@ Tout ce qui est visuel et que le jeu ne suit pas reste dans `FxList` (sans SDL, 
 sur le terrain, étoiles, ondes de choc, soldat éliminé qui tournoie), l'état d'animation de chaque soldat (distance parcourue pour le cycle de course, distance grimpée, écrasement après
 un atterrissage) et l'amplitude du tremblement (atténuée loin de la caméra). Les particules tirent leur hasard d'un RNG à elles, jamais de celui du jeu. Le jeu émet `EV_JUMP` /
 `EV_LANDED` et `EV_PROJECTILE_HIT` dit s'il a touché un mur ; le reste vient des événements existants et d'un coup d'œil à l'état (roquettes en vol, soldat qui vient de mourir).
+
+### D065 — Tileset et décor dans l'atlas des sprites
+**Statut :** Acceptée
+Le terrain, le décor (touffes, fleurs, cailloux), la base, le drapeau, le mannequin, les tanks et la mallette rejoignent les sprites en texte de `render/sprites.c` plutôt qu'un
+fichier image : un seul format, validé par les tests, aucune dépendance de chargement. Les tuiles n'utilisent que des couleurs fixes (identiques dans chaque atlas), la base et le
+drapeau prennent celles de l'équipe. Les sprites de plus de 32 px (la base, 40 × 40) occupent 2 × 2 cases, rangées après les autres. Une tuile peut en superposer une autre
+(herbe sur terre) et changer des couleurs (pâquerette = fleur en blanc). La profondeur assombrit la terre par `SpriteDraw.darken` (modulation de couleur de la texture) plus un demi-pas
+sur la moitié basse, pour des dégradés sans bandes nettes ; arêtes, débord de l'herbe, eau et écume restent tracés au dessin car ils dépendent des voisins.

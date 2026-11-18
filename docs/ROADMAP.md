@@ -93,6 +93,8 @@ Après le point d'étape (demandé par l'utilisateur) :
 - [x] Porteur de caisse plus rapide (×0,9 au lieu de ×0,75)
 - [x] Sprites pixel art des soldats (4 variantes × 10 poses, assemblés à partir de parties), bras qui visent, armes, roquettes, caisses, parachute (`render/sprites.c`, D063)
 - [x] Particules, animations (course, saut, chute, échelle, portage, coup de poing, écrasement à l'atterrissage), tremblement d'écran (`app/fx.c`, D064)
+- [x] Tileset (herbe, terre en profondeur, planches, échelles, décor de touffes, fleurs et cailloux), eau animée, base en 3 états + ruine, drapeau, mannequin, tanks en maquette,
+  mallette d'arme, pad en acier, icônes du HUD et du menu du pad, camps sur l'écran titre (D065)
 - [x] Sons manquants — grosse explosion, ricochet, saut et atterrissage (du soldat suivi seulement, D060), caisse qui se pose, mannequin brisé, arme lâchée, changement de soldat, équipe éliminée,
   alarme de base attaquée, ouverture du menu du pad
 
@@ -108,7 +110,7 @@ Après le point d'étape (demandé par l'utilisateur) :
 - [ ] Équipes mixtes humains + IA, jusqu'à 4 équipes
 
 ## M9 — Contenu
-- [ ] Direction artistique : personnages originaux, tilesets, animations — premiers sprites et animations faits après M6 (D063, D064) ; tilesets, nom de l'espèce à faire
+- [ ] Direction artistique : personnages originaux, tilesets, animations — premiers sprites, animations et tileset faits après M6 (D063, D064, D065) ; nom de l'espèce, autres décors (par niveau) à faire
 - [ ] Musique et effets sonores originaux — une première version synthétisée existe (D055, D059) ; à enrichir ou remplacer
 - [ ] 6–10 niveaux d'escarmouche
 - [ ] Campagne : structure, objectifs de mission, progression sauvegardée

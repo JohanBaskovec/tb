@@ -361,8 +361,10 @@ Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont l
 - **Sprites** (D063) : `render/sprites.c` (sans SDL) décrit chaque sprite en texte et remplit un atlas RGBA par palette (`SPRITE_PALETTE_TEAM0..3`,
   `SPRITE_PALETTE_FLASH`) ; `render_create` en fait des textures (filtrage au plus proche). `render_sprite(SpriteDraw)` place un sprite par son pivot
   (pieds du soldat, épaule du bras, poignée de l'arme…) avec rotation, miroir, échelle, transparence. `draw_game` assemble un soldat : bras arrière,
-  corps (pose donnée par `fx_pose`, écrasé par `fx_squash`), bras avant tourné vers la visée, arme au bout de la main. Le décor (terrain, bases, HUD)
-  reste dessiné en rectangles.
+  corps (pose donnée par `fx_pose`, écrasé par `fx_squash`), bras avant tourné vers la visée, arme au bout de la main. Le terrain (D065) est fait de
+  tuiles de l'atlas (variante choisie par un hachage de la case, terre assombrie par `SpriteDraw.darken` selon la profondeur) ; arêtes, débord de l'herbe, décor posé sur l'herbe,
+  eau et écume sont ajoutés au dessin selon les cases voisines. Base, drapeau, mannequin, tanks et mallette sont aussi des sprites ; les gros sprites (base 40 × 40) prennent 2 × 2 cases.
+  Le HUD et le menu du pad réutilisent les sprites comme icônes.
 - Le tremblement d'écran (`fx_shake_offset`) décale la caméra au dessin, jamais dans la simulation.
 - Le mélange alpha est actif (`SDL_BLENDMODE_BLEND`) : panneaux et voiles translucides.
 - Tout est dessiné dans une texture cible 640×360 (`SDL_TEXTUREACCESS_TARGET`), puis copiée à l'écran
@@ -490,7 +492,8 @@ Les touches F1–F4 sont testées en injectant des événements (`SDL_PushEvent`
 - Musique et sons ajoutés : `music` (chaque morceau s'analyse, a une boucle de plus de 10 s, sonne sans saturer ; rendu déterministe ; retour à la boucle sans rejouer l'intro ; fondu au changement ;
   même morceau = seul le volume change ; musique de chaque écran et de chaque niveau), `sfx` (nouveaux sons, alarme pour la seule base du joueur, élimination muette quand elle finit le match,
   une minute d'IA contre IA reste lisible), `events` (sauts et atterrissages), `rules` (une alerte par attaque de base) ; fumée `smoke_export_audio`, `bad_export_dir`.
-- Visuels et caisses : `sprites` (données valides, chaque sprite a des pixels et tient dans sa case, soldats posés sur leurs pieds, seule la couleur d'équipe change d'un atlas à
+- Visuels et caisses : `sprites` (données valides, chaque sprite a des pixels et tient dans sa case, deux sprites ne se chevauchent jamais dans l'atlas, tuiles de terrain
+  pleines et identiques dans chaque atlas alors que la base prend la couleur d'équipe, soldats posés sur leurs pieds, seule la couleur d'équipe change d'un atlas à
   l'autre, silhouette blanche), `fx` (explosion → débris, fumée, étincelles, onde, tremblement seulement près de la caméra ; débris qui retombent sur le sol sans le traverser puis
   disparaissent ; soldat éliminé projeté dans ses couleurs ; gerbe d'eau ou éclats de bois ; douilles et fumée de roquette ; poses de course, saut, chute et écrasement ; pool plein
   sans débordement), `crate` (une caisse s'étale à côté plutôt que sur une autre), `front` (effectif choisi dans le menu).
