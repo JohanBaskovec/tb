@@ -62,6 +62,30 @@ static const SoundDef SOUNDS[SFX_COUNT] = {
     [SFX_MENU_MOVE] = {"menu_move", {{SQ, 0, 0.035f, 880, 880, 0.25f, 1, 0}}},
     [SFX_MENU_OK] = {"menu_ok", {{SQ, 0, 0.09f, 660, 990, 0.3f, 1, 0}}},
     [SFX_MENU_BACK] = {"menu_back", {{SQ, 0, 0.09f, 660, 440, 0.3f, 1, 0}}},
+    [SFX_EXPLOSION_BIG] = {"explosion_big",
+                           {{NZ, 0, 1.2f, 4000, 300, 1.0f, 0.2f, 0},
+                            {SQ, 0, 0.7f, 70, 25, 0.5f, 1, 0},
+                            {NZ, 0.05f, 0.5f, 9000, 3000, 0.35f, 0.5f, 0}}},
+    [SFX_RICOCHET] = {"ricochet", {{SQ, 0, 0.12f, 2400, 3600, 0.18f, 1, 0.02f}, {NZ, 0, 0.03f, 9000, 6000, 0.3f, 0.7f, 0}}},
+    [SFX_JUMP] = {"jump", {{SQ, 0, 0.08f, 300, 620, 0.28f, 0.6f, 0}}},
+    [SFX_LAND] = {"land", {{NZ, 0, 0.06f, 1800, 500, 0.5f, 0.3f, 0}, {TR, 0, 0.06f, 140, 70, 0.5f, 1, 0}}},
+    [SFX_CRATE_LAND] = {"crate_land", {{TR, 0, 0.14f, 120, 55, 0.7f, 1, 0}, {NZ, 0, 0.08f, 2200, 600, 0.45f, 0.35f, 0}}},
+    [SFX_DUMMY_BREAK] = {"dummy_break",
+                         {{NZ, 0, 0.25f, 3500, 900, 0.6f, 0.4f, 0},
+                          {SQ, 0, 0.05f, 700, 300, 0.3f, 1, 0},
+                          {TR, 0.05f, 0.2f, 300, 90, 0.4f, 1, 0}}},
+    [SFX_WEAPON_DROP] = {"weapon_drop", {{SQ, 0, 0.05f, 1400, 900, 0.2f, 0.5f, 0}, {SQ, 0.05f, 0.06f, 1100, 800, 0.15f, 0.5f, 0}}},
+    [SFX_SWITCH] = {"switch", {{TR, 0, 0.05f, 500, 500, 0.4f, 1, 0}, {TR, 0.04f, 0.08f, 750, 750, 0.4f, 1, 0}}},
+    [SFX_ELIMINATED] = {"eliminated",
+                        {{SW, 0, 0.2f, 330, 330, 0.25f, 0.5f, 0},
+                         {SW, 0.2f, 0.2f, 311, 311, 0.25f, 0.5f, 0},
+                         {SW, 0.4f, 0.5f, 294, 280, 0.25f, 0.5f, 0.02f}}},
+    [SFX_ALARM] = {"alarm",
+                   {{SQ, 0, 0.16f, 740, 740, 0.22f, 0.6f, 0},
+                    {SQ, 0.16f, 0.16f, 554, 554, 0.22f, 0.6f, 0},
+                    {SQ, 0.32f, 0.16f, 740, 740, 0.22f, 0.6f, 0},
+                    {SQ, 0.48f, 0.2f, 554, 554, 0.22f, 0.6f, 0}}},
+    [SFX_PAD_OPEN] = {"pad_open", {{TR, 0, 0.07f, 440, 660, 0.35f, 1, 0}, {TR, 0.05f, 0.07f, 660, 880, 0.3f, 1, 0}}},
 };
 
 const char *sfx_name(SfxId id) {
@@ -156,8 +180,14 @@ static const CueRule RULES[SFX_COUNT] = {
     [SFX_DEATH] = {6, 0.7f, true},        [SFX_SPLASH] = {6, 0.6f, true},      [SFX_WEAPON_PICKUP] = {4, 0.6f, true},
     [SFX_EMPTY] = {6, 0.5f, true},        [SFX_ORDER] = {4, 0.6f, false},      [SFX_BASE_DESTROYED] = {30, 1.0f, false},
     [SFX_VICTORY] = {60, 0.8f, false},    [SFX_DEFEAT] = {60, 0.8f, false},    [SFX_MENU_MOVE] = {1, 0.5f, false},
-    [SFX_MENU_OK] = {1, 0.6f, false},     [SFX_MENU_BACK] = {1, 0.6f, false},
+    [SFX_MENU_OK] = {1, 0.6f, false},     [SFX_MENU_BACK] = {1, 0.6f, false},  [SFX_EXPLOSION_BIG] = {3, 1.0f, true},
+    [SFX_RICOCHET] = {5, 0.35f, true},    [SFX_JUMP] = {4, 0.3f, true},        [SFX_LAND] = {4, 0.35f, true},
+    [SFX_CRATE_LAND] = {4, 0.5f, true},   [SFX_DUMMY_BREAK] = {6, 0.7f, true}, [SFX_WEAPON_DROP] = {4, 0.4f, true},
+    [SFX_SWITCH] = {4, 0.5f, false},      [SFX_ELIMINATED] = {30, 0.8f, false}, [SFX_ALARM] = {60, 0.55f, false},
+    [SFX_PAD_OPEN] = {6, 0.45f, false},
 };
+
+#define BIG_EXPLOSION_RADIUS 48 // px: rockets and strong grenades sound bigger
 
 #define HEAR_FULL 220.0f  // closer than this: full volume
 #define HEAR_RANGE 760.0f // fades out until this distance
@@ -192,14 +222,16 @@ static SfxId shot_sound(i32 weapon) {
 }
 
 // The sound of an event, or SFX_COUNT for none.
-static SfxId event_sound(const SfxState *state, const GameEvent *e) {
+static SfxId event_sound(const SfxState *state, const EventQueue *events, const GameEvent *e) {
     switch (e->type) {
     case EV_SHOT:
         return shot_sound(e->a);
     case EV_PUNCH:
         return SFX_PUNCH;
     case EV_EXPLOSION:
-        return SFX_EXPLOSION;
+        return e->a >= BIG_EXPLOSION_RADIUS ? SFX_EXPLOSION_BIG : SFX_EXPLOSION;
+    case EV_PROJECTILE_HIT:
+        return e->b == 1 ? SFX_RICOCHET : SFX_COUNT; // on a target, the hit sound plays
     case EV_DAMAGE:
         return SFX_HIT;
     case EV_CRATE_PICKED_UP:
@@ -210,6 +242,8 @@ static SfxId event_sound(const SfxState *state, const GameEvent *e) {
         return SFX_THROW;
     case EV_CRATE_SPAWNED:
         return SFX_CRATE_DROP;
+    case EV_CRATE_SETTLED:
+        return SFX_CRATE_LAND;
     case EV_CRATE_DESTROYED:
     case EV_PLAYER_RESPAWNED:
         return SFX_SPLASH;
@@ -223,6 +257,20 @@ static SfxId event_sound(const SfxState *state, const GameEvent *e) {
         return SFX_WEAPON_PICKUP;
     case EV_WEAPON_EMPTY:
         return SFX_EMPTY;
+    case EV_WEAPON_DROPPED:
+        return SFX_WEAPON_DROP;
+    case EV_DUMMY_DESTROYED:
+        return SFX_DUMMY_BREAK;
+    case EV_JUMP: // footwork of the whole squad would drown the fight: only the followed soldier's
+        return e->b == state->focus_soldier ? SFX_JUMP : SFX_COUNT;
+    case EV_LANDED:
+        return e->b == state->focus_soldier ? SFX_LAND : SFX_COUNT;
+    case EV_CONTROL_CHANGED:
+        return SFX_SWITCH;
+    case EV_BASE_ATTACKED:
+        return state->human_team >= 0 && e->a == state->human_team ? SFX_ALARM : SFX_COUNT;
+    case EV_TEAM_ELIMINATED: // the end of the match has its own sound
+        return events_count_of(events, EV_MATCH_OVER) == 0 ? SFX_ELIMINATED : SFX_COUNT;
     case EV_ORDER_CHANGED:
         return SFX_ORDER;
     case EV_BASE_DESTROYED:
@@ -234,6 +282,14 @@ static SfxId event_sound(const SfxState *state, const GameEvent *e) {
     }
 }
 
+void sfx_play_ui(SfxState *state, SfxId id, SfxCueList *out) {
+    if (id < 0 || id >= SFX_COUNT || state->cooldown[id] > 0) {
+        return;
+    }
+    sfx_push(out, id, RULES[id].volume, 0.0f);
+    state->cooldown[id] = RULES[id].gap;
+}
+
 void sfx_consume(SfxState *state, const EventQueue *events, Vec2 listener, SfxCueList *out) {
     for (int id = 0; id < SFX_COUNT; id++) {
         if (state->cooldown[id] > 0) {
@@ -242,7 +298,7 @@ void sfx_consume(SfxState *state, const EventQueue *events, Vec2 listener, SfxCu
     }
     for (u32 i = 0; i < events->count; i++) {
         const GameEvent *e = &events->items[i];
-        const SfxId id = event_sound(state, e);
+        const SfxId id = event_sound(state, events, e);
         if (id == SFX_COUNT || state->cooldown[id] > 0) {
             continue;
         }

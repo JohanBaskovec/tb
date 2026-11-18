@@ -226,6 +226,22 @@ static u32 crate_actions(const GameState *gs) {
     return gs->crate_stats.picked_up + gs->crate_stats.placed + gs->crate_stats.thrown;
 }
 
+// Below this fall speed a landing is a step, not worth an event (px/s; a hop lands at about 200).
+#define LANDING_EVENT_MIN_SPEED 160.0f
+
+// Jumps and landings, for the sound (presentation only: nothing reads them back).
+static void movement_events(GameState *gs, i32 index, bool was_jumping, bool was_on_ground, f32 fall_speed) {
+    const Soldier *s = &gs->soldiers[index];
+    const Body *b = &s->c.body;
+    const Vec2 feet = vec2(b->pos.x + b->size.x * 0.5f, b->pos.y + b->size.y);
+    if (s->c.is_jumping && !was_jumping) {
+        events_push(&gs->events, EV_JUMP, feet, s->team, index);
+    }
+    if (b->on_ground && !was_on_ground && fall_speed >= LANDING_EVENT_MIN_SPEED) {
+        events_push(&gs->events, EV_LANDED, feet, s->team, index);
+    }
+}
+
 void squad_update(GameState *gs, const InputFrame *human) {
     for (i32 i = 0; i < MAX_SOLDIERS; i++) {
         Soldier *s = &gs->soldiers[i];
@@ -239,7 +255,10 @@ void squad_update(GameState *gs, const InputFrame *human) {
         }
         const bool was_carrying = entity_id_valid(s->c.carrying);
         const u32 actions_before = crate_actions(gs);
+        const bool was_jumping = s->c.is_jumping, was_on_ground = s->c.body.on_ground;
+        const f32 fall_speed = s->c.body.vel.y;
         companion_update(&s->c, gs->level, in);
+        movement_events(gs, i, was_jumping, was_on_ground, fall_speed);
         crate_carry_update(gs, &s->c, in);
         // A key a crate action used is not also a shot or a weapon pickup.
         combat_soldier_update(gs, s, in, was_carrying || crate_actions(gs) != actions_before);

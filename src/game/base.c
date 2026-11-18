@@ -40,12 +40,15 @@ i32 base_damage(GameState *gs, i32 team, i32 amount, i32 source_team) {
     Team *t = &gs->teams[team];
     const i32 done = MIN(amount, t->base_hp);
     t->base_hp -= done;
+    const Rect r = base_rect(gs, team);
+    const Vec2 c = vec2(r.x + r.w * 0.5f, r.y + r.h * 0.5f);
+    if (t->base_hurt_ticks == 0) {
+        events_push(&gs->events, EV_BASE_ATTACKED, c, team, source_team);
+    }
     t->base_hurt_ticks = ALERT_TICKS;
     if (source_team >= 0 && source_team < MAX_TEAMS) {
         gs->teams[source_team].stats.base_damage += (u32)done;
     }
-    const Rect r = base_rect(gs, team);
-    const Vec2 c = vec2(r.x + r.w * 0.5f, r.y + r.h * 0.5f);
     events_push(&gs->events, EV_DAMAGE, c, done, 2);
     if (t->base_hp == 0) {
         events_push(&gs->events, EV_BASE_DESTROYED, c, team, source_team);

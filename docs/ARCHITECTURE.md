@@ -50,6 +50,7 @@ tb/
 │   │   ├── pad_menu.h/.c   # Menu de construction du pad
 │   │   ├── fx.h/.c         # Effets visuels tirés des événements
 │   │   ├── sfx.h/.c        # Sons placeholders : synthèse, événements → « cues » (volume, panoramique)
+│   │   ├── music.h/.c      # Musique placeholder : morceaux en texte + séquenceur chiptune 4 canaux
 │   │   └── front.h/.c      # Écrans : titre, configuration, partie, pause, résultats (possède le Sim)
 │   ├── core/
 │   │   ├── types.h         # u8..u64, i8..i64, f32, f64, usize, macros (ARRAY_LEN, MIN, MAX)
@@ -60,6 +61,7 @@ tb/
 │   │   ├── pool.h          # Pool d'objets avec handles générationnels (à venir)
 │   │   ├── rng.h/.c        # PCG32
 │   │   ├── png.h/.c        # Écriture PNG minimale (captures headless)
+│   │   ├── wav.h/.c        # Écriture WAV minimale (--export-audio)
 │   │   └── log.h/.c        # Log niveaux + assert
 │   ├── platform/
 │   │   ├── platform.h/.c   # Fenêtre, renderer SDL, boucle d'événements
@@ -212,7 +214,7 @@ typedef struct GameState {
 La simulation ne joue pas de son et ne crée pas de particules. Elle pousse des
 événements dans `GameState.events` (`game/events.h` : `EV_CRATE_SPAWNED`, `EV_CRATE_SETTLED`, `EV_CRATE_PICKED_UP`,
 `EV_CRATE_PLACED`, `EV_CRATE_THROWN`, `EV_CRATE_DESTROYED`, `EV_CRATE_CONSUMED`, `EV_PAD_BUILT`, `EV_PLAYER_RESPAWNED` (un soldat est tombé à l'eau) ; escouade : `EV_SOLDIER_SPAWNED`, `EV_SOLDIER_DIED`, `EV_CONTROL_CHANGED`, `EV_ORDER_CHANGED`, `EV_TEAM_ELIMINATED` ; combat : `EV_SHOT`, `EV_PUNCH`, `EV_PROJECTILE_HIT`, `EV_EXPLOSION`, `EV_DAMAGE`, `EV_DUMMY_DESTROYED`,
-`EV_WEAPON_PICKED_UP`, `EV_WEAPON_DROPPED`, `EV_WEAPON_EMPTY` ; M6 : `EV_BASE_DESTROYED`, `EV_MATCH_OVER`), que `audio/`, `render/` (effets) et `ui/` lisent après l'update.
+`EV_WEAPON_PICKED_UP`, `EV_WEAPON_DROPPED`, `EV_WEAPON_EMPTY` ; M6 : `EV_BASE_DESTROYED`, `EV_MATCH_OVER`, puis `EV_BASE_ATTACKED` (une fois par alerte), `EV_JUMP`, `EV_LANDED` (pour le son)), que `audio/`, `render/` (effets) et `ui/` lisent après l'update.
 Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont le sens dépend du type.
 
 - La file est **vidée au début de chaque `game_update`** : elle contient les événements du dernier tick seulement.
@@ -344,7 +346,11 @@ Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont l
 - **Dessin** : `render/draw_front.c` (titre animé, aperçu du niveau en minicarte, panneaux, tableau des résultats) ; `render/draw_game.c` dessine aussi le HUD (panneau du soldat, PV des bases,
   chrono, flèches hors écran, bannière de fin) et les bases. Texte : `render/font.c` (glyphes 5 × 7, UTF-8, accents) + `ui_text` dans `render/draw_ui.c`.
 - **Son** : `app/sfx.c` synthétise chaque son (voix carré / triangle / dent de scie / bruit, glissement, filtre, décroissance) et choisit les cues ; `audio/audio.c` (SDL) ouvre le périphérique,
-  synthétise la banque une fois et lit sur 12 voix. Jamais en headless ; sous les tests, seulement avec `SDL_AUDIODRIVER=dummy`.
+  synthétise la banque une fois et lit sur 12 voix. Jamais en headless ; sous les tests, seulement avec `SDL_AUDIODRIVER=dummy`. Sauts et atterrissages : seulement ceux du soldat suivi
+  (`SfxState.focus_soldier`, D060) ; le menu du pad sonne via `sfx_play_ui` (ouverture, changement d'entrée).
+- **Musique** (D059) : `app/music.c` analyse au démarrage les morceaux écrits en texte (accords, mélodie, plan de batterie) en un `MusicSong` par double-croche, puis `music_render` synthétise
+  4 canaux (pulsée, accompagnement, triangle, bruit) en stéréo, sans allocation. `audio/audio.c` lui donne un flux SDL à part, rempli sur le thread audio par un callback ;
+  `audio_music(track, volume)` (chaque image, sous le verrou du flux) demande le morceau voulu : `front_music` dans les écrans, `front_match_music` avec `--play`. Changement de morceau = fondu de 0,5 s.
 
 ## Rendu
 
@@ -400,6 +406,8 @@ RGBA 640×360 via le renderer logiciel de SDL. Aucun display n'est requis.
 | `--front` | Headless : fait tourner les écrans (titre d'abord), pilotés par `--script` ; la capture montre l'écran courant ; affiche `front ticks=… screen=…` puis le résumé de la partie s'il y en a une |
 | `--play` | Fenêtré : directement une partie avec les options ci-dessous (sans `--play`, la fenêtre s'ouvre sur l'écran titre) |
 | `--mute` | Pas de son (fenêtré) |
+| `--no-music` | Les bruitages sans la musique (fenêtré) |
+| `--export-audio DIR` | Écrit chaque son (`sfx_*.wav`) et chaque morceau (`music_*.wav` : intro, deux boucles, fondu) dans DIR puis quitte ; ni SDL ni fenêtre |
 | `--squad N` | Chaque équipe en jeu commence avec N soldats (1 par défaut ; 3 depuis le menu) |
 | `--frames N` | Nombre de ticks à simuler (défaut 600, ou la longueur du script) |
 | `--bot` | Bot aléatoire (marche, saute, échelles, traverse les plateformes) |
@@ -468,6 +476,9 @@ Les touches F1–F4 sont testées en injectant des événements (`SDL_PushEvent`
   `sfx` (chaque son audible et sans clic final, déterminisme, événements → sons, distance et panoramique, rafales, victoire / défaite, file de cues, sons des menus et d'une partie),
   `nav` (La Crique traversable dans les deux sens, caisses rapportables de chaque zone aux deux pads, trajets aléatoires).
 - Fumée M6 : `smoke_front_title`, `smoke_front_setup`, `smoke_front_to_pause`, `smoke_front_quit`, `smoke_front_windowed_dummy` (écrans sous le pilote `dummy`, son sur le pilote audio `dummy`).
+- Musique et sons ajoutés : `music` (chaque morceau s'analyse, a une boucle de plus de 10 s, sonne sans saturer ; rendu déterministe ; retour à la boucle sans rejouer l'intro ; fondu au changement ;
+  même morceau = seul le volume change ; musique de chaque écran et de chaque niveau), `sfx` (nouveaux sons, alarme pour la seule base du joueur, élimination muette quand elle finit le match,
+  une minute d'IA contre IA reste lisible), `events` (sauts et atterrissages), `rules` (une alerte par attaque de base) ; fumée `smoke_export_audio`, `bad_export_dir`.
 
 ## Cibles CMake
 
@@ -475,7 +486,7 @@ Les touches F1–F4 sont testées en injectant des événements (`SDL_PushEvent`
 |-------|------|---------|
 | `cs_core` | static lib | `src/core` |
 | `cs_game` | static lib | `src/game` (dépend de `cs_core`) |
-| `cs_app` | static lib | `src/render/camera.c`, `src/render/font.c`, `src/app/*.c` (sans SDL ; dépend de `cs_game`) |
+| `cs_app` | static lib | `src/render/camera.c`, `src/render/font.c`, `src/app/*.c` dont `music.c` (sans SDL ; dépend de `cs_game`) |
 | `cs_platform` | static lib | `src/platform` + SDL3 |
 | `cratesquad` | exécutable | `main.c`, `src/render` (SDL), `src/audio` ; lie `cs_app`, `cs_platform` |
 | `test_*` | exécutables | `tests/` |

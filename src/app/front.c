@@ -7,9 +7,9 @@
 #include <string.h>
 
 const FrontLevel FRONT_LEVELS[FRONT_LEVEL_COUNT] = {
-    {"beach.lvl", "LA CRIQUE"},
-    {"ai_arena.lvl", "L'ARÈNE"},
-    {"test_arena.lvl", "TERRAIN D'ESSAI"},
+    {"beach.lvl", "LA CRIQUE", MUSIC_COVE},
+    {"ai_arena.lvl", "L'ARÈNE", MUSIC_ARENA},
+    {"test_arena.lvl", "TERRAIN D'ESSAI", MUSIC_ARENA},
 };
 
 #define RESULTS_DELAY SECONDS_TO_TICKS(TUNING_RESULTS_DELAY_S)
@@ -80,6 +80,41 @@ Sim *front_sim(Front *f) {
 
 const Sim *front_sim_const(const Front *f) {
     return f->sim_ready && f->screen != SCREEN_TITLE && f->screen != SCREEN_SETUP ? &f->sim : NULL;
+}
+
+// ---- Music -------------------------------------------------------------------------------------
+
+MusicTrack front_level_music(const char *path) {
+    const char *slash = path ? strrchr(path, '/') : NULL;
+    const char *file = slash ? slash + 1 : (path ? path : "");
+    for (int i = 0; i < FRONT_LEVEL_COUNT; i++) {
+        if (strcmp(file, FRONT_LEVELS[i].file) == 0) {
+            return FRONT_LEVELS[i].music;
+        }
+    }
+    return MUSIC_COVE;
+}
+
+MusicTrack front_match_music(const Sim *sim, const char *level_path) {
+    return sim->gs.match.over ? MUSIC_NONE : front_level_music(level_path);
+}
+
+MusicTrack front_music(const Front *f, f32 *volume) {
+    *volume = 1.0f;
+    switch (f->screen) {
+    case SCREEN_TITLE:
+    case SCREEN_SETUP:
+        return MUSIC_TITLE;
+    case SCREEN_PLAY:
+        return f->sim.gs.match.over ? MUSIC_NONE : FRONT_LEVELS[f->level_index].music;
+    case SCREEN_PAUSE:
+        *volume = MUSIC_PAUSE_VOLUME;
+        return f->sim.gs.match.over ? MUSIC_NONE : FRONT_LEVELS[f->level_index].music;
+    case SCREEN_RESULTS:
+        return MUSIC_RESULTS;
+    default:
+        return MUSIC_NONE;
+    }
 }
 
 // ---- Layout ------------------------------------------------------------------------------------

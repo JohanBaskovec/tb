@@ -181,14 +181,14 @@ EntityId projectile_spawn(GameState *gs, WeaponKind weapon, i32 team, Vec2 cente
 }
 
 // The projectile is over: bullets vanish, rockets and grenades blow up. `victim` (may be NULL) is the
-// target a bullet hit.
-static void projectile_end(GameState *gs, u16 slot, const Target *victim) {
+// target a bullet hit; `wall`: it ran into a solid tile.
+static void projectile_end(GameState *gs, u16 slot, const Target *victim, bool wall) {
     Entity *e = &gs->entities.slots[slot];
     const WeaponDef *def = weapon_def(e->as.projectile.weapon);
     if (def->radius > 0.0f) {
         combat_explode_by(gs, body_center(&e->body), e->as.projectile.weapon, e->as.projectile.team);
     } else {
-        events_push(&gs->events, EV_PROJECTILE_HIT, body_center(&e->body), (i32)e->as.projectile.weapon, 0);
+        events_push(&gs->events, EV_PROJECTILE_HIT, body_center(&e->body), (i32)e->as.projectile.weapon, wall ? 1 : 0);
         if (victim) {
             const f32 dir = e->body.vel.x >= 0.0f ? 1.0f : -1.0f;
             hurt(gs, victim, def->damage, vec2(dir * def->knockback, 0.0f), e->as.projectile.team);
@@ -234,14 +234,14 @@ static void projectile_update(GameState *gs, u16 slot, const Target *targets, u3
         e->body.pos = vec2_add(e->body.pos, vec2_scale(e->body.vel, TICK_DT));
         if (rect_hits_solid(gs->level, body_rect(&e->body))) {
             e->body.pos = e->prev_pos; // end the flight where it last was free
-            projectile_end(gs, slot, NULL);
+            projectile_end(gs, slot, NULL, true);
             return;
         }
     }
 
     const Target *victim = hostile_hit(targets, n, body_rect(&e->body), e->as.projectile.team);
     if (victim || e->as.projectile.ttl == 0) {
-        projectile_end(gs, slot, victim);
+        projectile_end(gs, slot, victim, false);
     }
 }
 

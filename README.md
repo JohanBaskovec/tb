@@ -15,7 +15,8 @@ les ramènent à leur base et les empilent pour obtenir des armes, des recrues e
 Jalons M0 à M6 faits : socle technique, niveau et déplacement, caisses et pad de construction, combat (armes, projectiles,
 explosions, santé, mannequins), escouade (compagnons, équipes, ordres), navigation et IA d'équipe (graphe de navigation, A*, commandant qui
 construit et distribue des rôles, vol de caisses), et **tranche verticale** : escarmouche 1 contre l'IA sur *La Crique*, bases destructibles,
-élimination et écran de résultats, HUD, écran titre, configuration de partie, pause, sons placeholders synthétisés.
+élimination et écran de résultats, HUD, écran titre, configuration de partie, pause, sons placeholders et **musique chiptune**
+synthétisés dans le code (aucun fichier audio).
 Avancement détaillé : [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Prérequis
@@ -52,6 +53,13 @@ Sans écran (CI, captures, bots) :
     --screenshot build/screenshots/front.png                                    # les écrans, pilotés par script
 ```
 
+Écouter les sons et la musique sans lancer le jeu (fichiers WAV) :
+
+```sh
+mkdir -p build/audio && ./build/cratesquad --export-audio build/audio
+```
+
+`--mute` coupe le son, `--no-music` garde les bruitages sans la musique.
 Toutes les options : `docs/ARCHITECTURE.md` § Exécution headless.
 
 Options CMake prévues :

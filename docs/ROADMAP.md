@@ -85,6 +85,12 @@ La police de caractères est arrivée avec le HUD (M6) ; l'overlay de debug gard
 
 **Fin :** une partie complète du menu à l'écran de victoire. ✅ **Point d'étape avec l'utilisateur.**
 
+Après le point d'étape (demandé par l'utilisateur) :
+- [x] Musique placeholder — séquenceur chiptune sans fichier (`app/music.c`, D059) : 4 morceaux originaux (titre, La Crique, L'Arène, résultats), fondus entre écrans, baissée en pause, coupée à la fin
+  du match pour la fanfare ; `--no-music`, `--export-audio DIR` pour les écouter en WAV
+- [x] Sons manquants — grosse explosion, ricochet, saut et atterrissage (du soldat suivi seulement, D060), caisse qui se pose, mannequin brisé, arme lâchée, changement de soldat, équipe éliminée,
+  alarme de base attaquée, ouverture du menu du pad
+
 ## M7 — Véhicules et armes lourdes
 - [ ] Pad plein 4×2 → tank (rouge) / tank lourd (avec bleue)
 - [ ] Monter / descendre, PV, destruction
@@ -98,7 +104,7 @@ La police de caractères est arrivée avec le HUD (M6) ; l'overlay de debug gard
 
 ## M9 — Contenu
 - [ ] Direction artistique : personnages originaux, tilesets, animations
-- [ ] Musique et effets sonores originaux
+- [ ] Musique et effets sonores originaux — une première version synthétisée existe (D055, D059) ; à enrichir ou remplacer
 - [ ] 6–10 niveaux d'escarmouche
 - [ ] Campagne : structure, objectifs de mission, progression sauvegardée
 - [ ] Options (volume, plein écran, échelle, difficulté)

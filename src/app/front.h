@@ -5,6 +5,7 @@
 // (Space) validates, pause (Escape) goes back. In a match, pause (Escape) opens the pause menu.
 #pragma once
 
+#include "app/music.h"
 #include "app/sim.h"
 
 typedef enum Screen {
@@ -20,6 +21,7 @@ typedef enum Screen {
 typedef struct FrontLevel {
     const char *file;
     const char *title;
+    MusicTrack music; // played during its matches
 } FrontLevel;
 
 #define FRONT_LEVEL_COUNT 3
@@ -67,6 +69,13 @@ void front_point(Front *f, Vec2 logical);
 // A click at `logical`: on a menu entry, selects and validates it (on a setting, changes it); while playing,
 // it goes to the match (pad menu, shooting). Returns true if a menu entry took it.
 bool front_click(Front *f, Vec2 logical);
+// What should be heard now: the title music in the menus, the level's music during a match (quieter in the
+// pause menu), silence once the match is over (the victory or defeat jingle plays), calm music on the results.
+MusicTrack front_music(const Front *f, f32 *volume);
+// The music of a level file (matched by name against FRONT_LEVELS; the cove's music for any other level).
+MusicTrack front_level_music(const char *path);
+// The music of a match run without the front (`--play`): silence once it is over.
+MusicTrack front_match_music(const Sim *sim, const char *level_path);
 // The match in progress, or NULL on the title and setup screens.
 Sim *front_sim(Front *f);
 const Sim *front_sim_const(const Front *f);

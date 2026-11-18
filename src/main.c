@@ -3,6 +3,7 @@
 #include "audio/audio.h"
 #include "core/config.h"
 #include "core/log.h"
+#include "core/wav.h"
 #include "game/combat.h"
 #include "game/crate.h"
 #include "game/pad.h"
@@ -28,6 +29,8 @@ typedef struct Options {
     bool front; // headless: run the menus (title, setup...) instead of a match
     bool seed_set;
     bool mute;
+    bool no_music;
+    const char *export_audio; // directory: write every sound and song as WAV files, then quit
     u32 squad;  // soldiers each team starts with
     bool bot;
     bool frames_set;
@@ -73,6 +76,8 @@ static void print_usage(const char *prog) {
             "  --play                  windowed: start a match at once (with the options below) instead of the title screen\n"
             "  --front                 headless: run the menus (title screen first), driven by --script\n"
             "  --mute                  no sound\n"
+            "  --no-music              sound effects only\n"
+            "  --export-audio DIR      write every sound effect and song to DIR as WAV files, then quit\n"
             "  --squad N               every team in the match starts with N soldiers (default 1; 3 from the menus)\n"
             "  --frames N              headless: ticks to simulate (default 600, or the script length)\n"
             "  --max-ticks N           windowed: quit after N ticks\n"
@@ -117,6 +122,10 @@ static bool parse_args(int argc, char **argv, Options *o) {
             o->front = true;
         } else if (strcmp(a, "--mute") == 0) {
             o->mute = true;
+        } else if (strcmp(a, "--no-music") == 0) {
+            o->no_music = true;
+        } else if (strcmp(a, "--export-audio") == 0 && has_val) {
+            o->export_audio = argv[++i];
         } else if (strcmp(a, "--squad") == 0 && has_val) {
             o->squad = (u32)strtoul(argv[++i], NULL, 10);
             if (o->squad < 1 || o->squad > 8) {
@@ -288,7 +297,49 @@ static Audio *open_audio(const Options *o) {
         LOG_INFO("tests: no sound unless SDL_AUDIODRIVER=dummy");
         return NULL;
     }
-    return audio_create();
+    return audio_create(!o->no_music);
+}
+
+// --export-audio: no SDL, no window, just files to listen to.
+static int export_audio(const char *dir) {
+    static i16 sound[SFX_MAX_SAMPLES];
+    char path[1024];
+    int failures = 0;
+    for (int id = 0; id < SFX_COUNT; id++) {
+        const u32 n = sfx_synthesize((SfxId)id, sound, SFX_MAX_SAMPLES);
+        snprintf(path, sizeof(path), "%s/sfx_%s.wav", dir, sfx_name((SfxId)id));
+        failures += wav_write_i16(path, sound, n, 1, SFX_RATE) ? 0 : 1;
+    }
+    MusicPlayer *player = (MusicPlayer *)calloc(1, sizeof(*player));
+    if (!player || !music_init(player)) {
+        LOG_ERROR("music: %s", player ? player->error : "out of memory");
+        free(player);
+        return 1;
+    }
+    for (int t = MUSIC_TITLE; t < MUSIC_COUNT; t++) {
+        // The intro, the loop twice (to hear it join), and the fade-out of a switch to silence.
+        const u32 song = music_intro_samples(player, (MusicTrack)t) + 2u * music_loop_samples(player, (MusicTrack)t);
+        const u32 frames = song + SFX_RATE;
+        i16 *buf = (i16 *)malloc((usize)frames * 2u * sizeof(i16));
+        if (!buf) {
+            failures++;
+            continue;
+        }
+        music_start(player, (MusicTrack)t, 1.0f);
+        music_render(player, buf, song);
+        music_play(player, MUSIC_NONE, 1.0f);
+        music_render(player, buf + (usize)song * 2u, SFX_RATE);
+        snprintf(path, sizeof(path), "%s/music_%s.wav", dir, music_name((MusicTrack)t));
+        failures += wav_write_i16(path, buf, frames, 2, SFX_RATE) ? 0 : 1;
+        free(buf);
+    }
+    free(player);
+    if (failures > 0) {
+        LOG_ERROR("--export-audio: %d file(s) could not be written in %s", failures, dir);
+        return 1;
+    }
+    printf("exported %d sounds and %d songs to %s\n", SFX_COUNT, MUSIC_COUNT - 1, dir);
+    return 0;
 }
 
 static void print_trace(const Sim *sim) {
@@ -368,7 +419,7 @@ static int run_headless(const Options *o, Sim *sim) {
 }
 
 // Interactive loop. With --expect-video-driver dummy it runs without any real window.
-static int run_windowed(const Options *o, Sim *sim) {
+static int run_windowed(const Options *o, Sim *sim, const char *level_path) {
     Render *render = render_create(false, "Crate Squad");
     if (!render) {
         return 1;
@@ -441,6 +492,7 @@ static int run_windowed(const Options *o, Sim *sim) {
             ticks++;
         }
         audio_play_all(audio, &sim->cues);
+        audio_music(audio, front_match_music(sim, level_path), paused ? MUSIC_PAUSE_VOLUME : 1.0f);
 
         const bool last = o->max_ticks > 0 && sim->gs.tick >= o->max_ticks;
         const f32 alpha = paused ? 1.0f : (f32)(acc / (f64)TICK_DT);
@@ -596,6 +648,9 @@ static int run_front_windowed(const Options *o, Front *f, Script *script, bool u
         if (front_sim(f)) {
             audio_play_all(audio, &front_sim(f)->cues);
         }
+        f32 music_volume;
+        const MusicTrack track = front_music(f, &music_volume);
+        audio_music(audio, track, music_volume);
         if (f->screen == SCREEN_QUIT) {
             break;
         }
@@ -659,6 +714,9 @@ int main(int argc, char **argv) {
     Options o;
     if (!parse_args(argc, argv, &o)) {
         return 2;
+    }
+    if (o.export_audio) {
+        return export_audio(o.export_audio);
     }
     if (!platform_init(o.headless)) {
         return 1;
@@ -730,7 +788,7 @@ int main(int argc, char **argv) {
     }
     pad_menu_refresh(&sim.menu, &sim.gs, 0);
 
-    int rc = o.headless ? run_headless(&o, &sim) : run_windowed(&o, &sim);
+    int rc = o.headless ? run_headless(&o, &sim) : run_windowed(&o, &sim, level_path);
     sim_free(&sim);
     platform_shutdown();
     return rc;

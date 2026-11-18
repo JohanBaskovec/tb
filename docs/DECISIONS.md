@@ -349,3 +349,17 @@ différente, et l'IA n'est plus un tireur d'élite.
 2 tuiles), et un plateau central à marches d'une tuile où tombent les caisses bleues. Cinq zones de largage plafonnées (rouges aux bases et sur les plages, bleue au centre). `test_nav` vérifie que
 toute place est atteignable depuis les deux départs et qu'une caisse peut être portée de chaque zone jusqu'aux deux pads, et y fait des trajets aléatoires. C'est le niveau proposé en premier par le menu.
 L'habillage du terrain (herbe, terre qui fonce en profondeur, planches, eau animée, ciel du soir, collines en parallaxe) est dessiné pour tous les niveaux par `draw_game.c`.
+
+### D059 — Musique : un petit séquenceur chiptune écrit dans le code
+**Statut :** Acceptée (les morceaux sont des placeholders)
+Comme les sons (D055), la musique ne vient d'aucun fichier et d'aucune bibliothèque : `app/music.c` (sans SDL) contient quatre morceaux originaux écrits en texte (accords par mesure, mélodie à la
+double-croche, plan de batterie) et un synthétiseur à quatre canaux façon console 8 bits (mélodie en onde pulsée, accompagnement tiré des accords — arpège ou accords à contretemps —, basse en
+triangle, batterie en bruit et sinus). Chaque morceau a une intro jouée une fois puis une boucle. `music_render` est déterministe et n'alloue rien : SDL l'appelle sur son thread audio par un
+callback de flux (`SDL_SetAudioStreamGetCallback`) ; le thread principal ne fait que demander un morceau et un volume sous le verrou du flux. Changer de morceau fait un fondu de 0,5 s. Le choix du
+morceau vient des écrans (`front_music`, testé) : titre et configuration → thème du titre ; match → morceau du niveau (baissé en pause) ; fin du match → silence pour la fanfare ; résultats →
+morceau calme. `--export-audio DIR` écrit tous les sons et morceaux en WAV pour les écouter sans lancer le jeu.
+
+### D060 — Les pas (sauts, atterrissages) : seulement ceux du soldat suivi
+**Statut :** Acceptée
+Les événements `EV_JUMP` et `EV_LANDED` (au-dessus de 160 px/s de chute) sont émis pour tous les soldats, mais les entendre tous noyait le combat : sur une minute d'IA contre IA, ils faisaient
+60 % des sons. Seuls ceux du soldat que suit la caméra jouent (`SfxState.focus_soldier`) ; `test_sfx` vérifie qu'une partie reste lisible (pas plus de 30 sons dans la seconde la plus chargée).

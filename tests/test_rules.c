@@ -161,6 +161,22 @@ static void test_a_base_without_defenders_falls_to_an_attacker(void) {
     sim_free(&e.sim);
 }
 
+static void test_a_base_raises_one_alert_per_attack(void) {
+    Env e;
+    CHECK(env_init(&e, false, false));
+    GameState *gs = gs_of(&e);
+    events_clear(&gs->events);
+    base_damage(gs, 1, 10, 0);
+    base_damage(gs, 1, 10, 0);
+    CHECK(events_count_of(&gs->events, EV_BASE_ATTACKED) == 1);
+    CHECK(gs->events.items[0].type == EV_BASE_ATTACKED && gs->events.items[0].a == 1 && gs->events.items[0].b == 0);
+    tick_n(&e, (u32)SECONDS_TO_TICKS(TUNING_BASE_ALERT_S) + 2); // the alert is over
+    events_clear(&gs->events);
+    base_damage(gs, 1, 10, 0);
+    CHECK(events_count_of(&gs->events, EV_BASE_ATTACKED) == 1);
+    sim_free(&e.sim);
+}
+
 static void test_the_hash_sees_the_base(void) {
     Env e;
     CHECK(env_init(&e, false, false));
@@ -336,6 +352,7 @@ int main(void) {
     RUN_TEST(test_explosions_spare_their_own_base_only);
     RUN_TEST(test_a_destroyed_base_locks_its_pad);
     RUN_TEST(test_a_base_without_defenders_falls_to_an_attacker);
+    RUN_TEST(test_a_base_raises_one_alert_per_attack);
     RUN_TEST(test_the_hash_sees_the_base);
     RUN_TEST(test_kills_losses_and_constructions_are_counted_per_team);
     RUN_TEST(test_a_soldier_killed_by_its_own_grenade_credits_nobody);

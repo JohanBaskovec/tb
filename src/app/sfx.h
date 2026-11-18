@@ -32,6 +32,17 @@ typedef enum SfxId {
     SFX_MENU_MOVE,
     SFX_MENU_OK,
     SFX_MENU_BACK,
+    SFX_EXPLOSION_BIG, // rockets, strong grenades
+    SFX_RICOCHET,      // a bullet hits a wall
+    SFX_JUMP,
+    SFX_LAND,          // after a real fall
+    SFX_CRATE_LAND,    // a crate settles
+    SFX_DUMMY_BREAK,
+    SFX_WEAPON_DROP,
+    SFX_SWITCH,        // the player takes control of another soldier
+    SFX_ELIMINATED,    // a team is out (while the match goes on)
+    SFX_ALARM,         // the player's base is under attack
+    SFX_PAD_OPEN,      // the pad menu appears
     SFX_COUNT
 } SfxId;
 
@@ -55,6 +66,7 @@ typedef struct SfxCueList {
 typedef struct SfxState {
     u32 cooldown[SFX_COUNT]; // ticks before the sound may play again
     i32 human_team;          // the team whose victory is a victory (-1: nobody, AI against AI)
+    i32 focus_soldier;       // the soldier the camera follows: only its jumps and landings are heard (-1: none)
 } SfxState;
 
 // Mono 16-bit samples of a sound at SFX_RATE; returns their number (at most `cap`). Deterministic.
@@ -64,3 +76,5 @@ const char *sfx_name(SfxId id);
 void sfx_push(SfxCueList *list, SfxId id, f32 volume, f32 pan);
 // The events of one tick -> cues, heard from `listener` (world pixels). Call once per tick.
 void sfx_consume(SfxState *state, const EventQueue *events, Vec2 listener, SfxCueList *out);
+// A sound that does not come from an event (the pad menu...): its usual volume, centered, gap respected.
+void sfx_play_ui(SfxState *state, SfxId id, SfxCueList *out);

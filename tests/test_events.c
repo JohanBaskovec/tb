@@ -135,6 +135,26 @@ static void test_destroyed_in_water_and_respawn_events(void) {
     sim_free(&e.sim);
 }
 
+static void test_jump_and_landing_events(void) {
+    Env e;
+    CHECK(env_init(&e));
+    ticks(&e, 0, 30); // standing still: no event
+    memset(e.seen, 0, sizeof(e.seen));
+    ticks(&e, 0, 10);
+    CHECK_EQ_U64(e.seen[EV_JUMP] + e.seen[EV_LANDED], 0);
+    tick(&e, KEY(ACT_JUMP));
+    CHECK_EQ_U64(e.seen[EV_JUMP], 1);
+    ticks(&e, KEY(ACT_JUMP), 20); // held: a full jump, still one event
+    ticks(&e, 0, 60);
+    CHECK_EQ_U64(e.seen[EV_JUMP], 1);
+    CHECK_EQ_U64(e.seen[EV_LANDED], 1);
+    // Walking along the floor never "lands".
+    memset(e.seen, 0, sizeof(e.seen));
+    ticks(&e, KEY(ACT_RIGHT), 30);
+    CHECK_EQ_U64(e.seen[EV_LANDED], 0);
+    sim_free(&e.sim);
+}
+
 static void test_events_do_not_change_the_hash(void) {
     // Same simulation, but one run drains/reads the queue and the other pokes at it: same state hash.
     u64 h[2];
@@ -219,6 +239,7 @@ int main(void) {
     RUN_TEST(test_queue_holds_one_tick_only);
     RUN_TEST(test_carry_events_and_payload);
     RUN_TEST(test_destroyed_in_water_and_respawn_events);
+    RUN_TEST(test_jump_and_landing_events);
     RUN_TEST(test_events_do_not_change_the_hash);
     RUN_TEST(test_fx_follow_the_events);
     RUN_TEST(test_sim_drains_events_into_fx_every_tick);

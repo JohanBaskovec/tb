@@ -7,6 +7,8 @@
 
 #define VOICES 12
 #define MASTER_VOLUME 0.6f
+#define MUSIC_VOLUME 0.45f   // under the sound effects
+#define MUSIC_CHUNK 1024     // frames rendered at a time on the audio thread
 
 typedef struct Sound {
     i16 *samples; // mono
@@ -20,14 +22,50 @@ struct Audio {
     Sound sounds[SFX_COUNT];
     i16 *bank;    // all the sounds, one after the other
     i16 *scratch; // stereo copy of the sound being started (2 * SFX_MAX_SAMPLES)
+    SDL_AudioStream *music_stream; // NULL without music
+    MusicPlayer *music;            // touched by the audio thread: only under the stream's lock
+    i16 music_buf[MUSIC_CHUNK * 2];
 };
+
+// SDL asks for more music (audio thread, the stream is locked).
+static void SDLCALL feed_music(void *userdata, SDL_AudioStream *stream, int additional, int total) {
+    (void)total;
+    Audio *a = (Audio *)userdata;
+    const int frame_bytes = (int)(2 * sizeof(i16));
+    while (additional > 0) {
+        const int frames = MIN(MUSIC_CHUNK, (additional + frame_bytes - 1) / frame_bytes);
+        music_render(a->music, a->music_buf, (u32)frames);
+        SDL_PutAudioStreamData(stream, a->music_buf, frames * frame_bytes);
+        additional -= frames * frame_bytes;
+    }
+}
+
+static bool open_music(Audio *a, const SDL_AudioSpec *spec) {
+    a->music = (MusicPlayer *)calloc(1, sizeof(*a->music));
+    if (!a->music) {
+        return false;
+    }
+    if (!music_init(a->music)) {
+        LOG_WARN("no music: %s", a->music->error);
+        free(a->music);
+        a->music = NULL;
+        return true; // the sound effects still play
+    }
+    a->music_stream = SDL_CreateAudioStream(spec, spec);
+    if (!a->music_stream || !SDL_SetAudioStreamGetCallback(a->music_stream, feed_music, a) ||
+        !SDL_SetAudioStreamGain(a->music_stream, MUSIC_VOLUME) || !SDL_BindAudioStream(a->device, a->music_stream)) {
+        LOG_WARN("no music: %s", SDL_GetError());
+        return false;
+    }
+    return true;
+}
 
 const char *audio_driver(void) {
     const char *name = SDL_GetCurrentAudioDriver();
     return name ? name : "";
 }
 
-Audio *audio_create(void) {
+Audio *audio_create(bool music) {
     if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
         LOG_WARN("no audio: %s", SDL_GetError());
         return NULL;
@@ -54,12 +92,16 @@ Audio *audio_create(void) {
             return NULL;
         }
     }
+    if (music && !open_music(a, &spec)) {
+        audio_destroy(a);
+        return NULL;
+    }
     for (int id = 0; id < SFX_COUNT; id++) {
         Sound *s = &a->sounds[id];
         s->samples = a->bank + (usize)id * SFX_MAX_SAMPLES;
         s->count = sfx_synthesize((SfxId)id, s->samples, SFX_MAX_SAMPLES);
     }
-    LOG_INFO("audio: %s, %d voices", audio_driver(), VOICES);
+    LOG_INFO("audio: %s, %d voices, music %s", audio_driver(), VOICES, a->music_stream ? "on" : "off");
     return a;
 }
 
@@ -72,6 +114,10 @@ void audio_destroy(Audio *a) {
             SDL_DestroyAudioStream(a->voices[v]);
         }
     }
+    if (a->music_stream) {
+        SDL_DestroyAudioStream(a->music_stream); // stops the callback before the player goes
+    }
+    free(a->music);
     if (a->device) {
         SDL_CloseAudioDevice(a->device);
     }
@@ -116,6 +162,15 @@ void audio_play(Audio *a, const SfxCue *cue) {
     SDL_AudioStream *voice = pick_voice(a);
     SDL_ClearAudioStream(voice);
     SDL_PutAudioStreamData(voice, a->scratch, (int)(s->count * 2 * sizeof(i16)));
+}
+
+void audio_music(Audio *a, MusicTrack track, f32 volume) {
+    if (!a || !a->music_stream) {
+        return;
+    }
+    SDL_LockAudioStream(a->music_stream);
+    music_play(a->music, track, volume);
+    SDL_UnlockAudioStream(a->music_stream);
 }
 
 void audio_play_all(Audio *a, SfxCueList *cues) {

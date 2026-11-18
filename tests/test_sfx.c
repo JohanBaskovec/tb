@@ -59,8 +59,31 @@ static void test_events_make_the_matching_sounds(void) {
     CHECK(out.count == 1 && out.items[0].id == SFX_BUILD);
     out = consume_one(&st, EV_CRATE_DESTROYED, here, 0, 0, here);
     CHECK(out.count == 1 && out.items[0].id == SFX_SPLASH);
-    out = consume_one(&st, EV_CRATE_SETTLED, here, 0, 0, here); // silent
+    out = consume_one(&st, EV_CRATE_SETTLED, here, 0, 0, here);
+    CHECK(out.count == 1 && out.items[0].id == SFX_CRATE_LAND);
+    out = consume_one(&st, EV_CRATE_CONSUMED, here, 0, 0, here); // the build sound covers it
     CHECK(out.count == 0);
+    out = consume_one(&st, EV_EXPLOSION, here, 64, WEAPON_STRONG_GRENADES, here);
+    CHECK(out.count == 1 && out.items[0].id == SFX_EXPLOSION_BIG);
+    out = consume_one(&st, EV_PROJECTILE_HIT, here, WEAPON_PISTOL, 1, here); // into a wall
+    CHECK(out.count == 1 && out.items[0].id == SFX_RICOCHET);
+    out = consume_one(&st, EV_PROJECTILE_HIT, here, WEAPON_PISTOL, 0, here); // into a target: its hit sound
+    CHECK(out.count == 0);
+    out = consume_one(&st, EV_JUMP, here, 0, 0, here); // soldier 0: the followed one
+    CHECK(out.count == 1 && out.items[0].id == SFX_JUMP);
+    out = consume_one(&st, EV_LANDED, here, 0, 0, here);
+    CHECK(out.count == 1 && out.items[0].id == SFX_LAND);
+    out = consume_one(&st, EV_JUMP, here, 0, 3, here); // another soldier: not heard
+    CHECK(out.count == 0);
+    st.focus_soldier = -1;
+    out = consume_one(&st, EV_LANDED, here, 0, 0, here);
+    CHECK(out.count == 0);
+    out = consume_one(&st, EV_DUMMY_DESTROYED, here, 0, 0, here);
+    CHECK(out.count == 1 && out.items[0].id == SFX_DUMMY_BREAK);
+    out = consume_one(&st, EV_WEAPON_DROPPED, here, WEAPON_UZI, 0, here);
+    CHECK(out.count == 1 && out.items[0].id == SFX_WEAPON_DROP);
+    out = consume_one(&st, EV_CONTROL_CHANGED, here, 1, 0, here);
+    CHECK(out.count == 1 && out.items[0].id == SFX_SWITCH);
 }
 
 static void test_far_events_are_quieter_then_silent_and_panned(void) {
@@ -115,6 +138,39 @@ static void test_the_end_of_a_match_sounds_like_its_result(void) {
     CHECK(consume_one(&st, EV_MATCH_OVER, here, 1, 0, here).items[0].id == SFX_VICTORY);
 }
 
+static void test_only_the_players_base_sounds_the_alarm(void) {
+    const Vec2 here = vec2(0.0f, 0.0f);
+    SfxState st = {.human_team = 0};
+    CHECK(consume_one(&st, EV_BASE_ATTACKED, here, 0, 1, here).items[0].id == SFX_ALARM);
+    st = (SfxState){.human_team = 0};
+    CHECK(consume_one(&st, EV_BASE_ATTACKED, here, 1, 0, here).count == 0);
+    st = (SfxState){.human_team = -1}; // spectator: no base of its own
+    CHECK(consume_one(&st, EV_BASE_ATTACKED, here, 0, 1, here).count == 0);
+}
+
+static void test_an_elimination_sounds_unless_it_ends_the_match(void) {
+    const Vec2 here = vec2(0.0f, 0.0f);
+    SfxState st = {.human_team = 0};
+    CHECK(consume_one(&st, EV_TEAM_ELIMINATED, here, 2, 0, here).items[0].id == SFX_ELIMINATED);
+    st = (SfxState){.human_team = 0};
+    EventQueue q = {0};
+    events_push(&q, EV_TEAM_ELIMINATED, here, 1, 0);
+    events_push(&q, EV_MATCH_OVER, here, 0, 0);
+    SfxCueList out = {0};
+    sfx_consume(&st, &q, here, &out);
+    CHECK(out.count == 1 && out.items[0].id == SFX_VICTORY);
+}
+
+static void test_ui_sounds_keep_their_gap(void) {
+    SfxState st = {0};
+    SfxCueList out = {0};
+    sfx_play_ui(&st, SFX_PAD_OPEN, &out);
+    sfx_play_ui(&st, SFX_PAD_OPEN, &out);
+    CHECK(out.count == 1 && out.items[0].id == SFX_PAD_OPEN && out.items[0].pan == 0.0f);
+    sfx_play_ui(&st, SFX_COUNT, &out);
+    CHECK(out.count == 1);
+}
+
 static void test_the_cue_list_merges_and_caps(void) {
     SfxCueList list = {0};
     sfx_push(&list, SFX_HIT, 0.2f, 0.0f);
@@ -167,6 +223,37 @@ static void test_menus_and_matches_queue_their_sounds(void) {
     front_free(&g_front);
 }
 
+static Sim g_sim;
+
+// AI against AI on La Crique for a minute, heard from the camera: busy, but not a wall of noise.
+static void test_a_match_is_not_a_wall_of_noise(void) {
+    const SimConfig cfg = {.level_path = CS_ASSET_DIR "/levels/beach.lvl", .seed = 7, .ai_teams = 1, .ai_opponents = true,
+                           .start_squad = 3};
+    char err[256] = "";
+    CHECK(sim_init(&g_sim, &cfg, err, sizeof(err)));
+    u32 per_sound[SFX_COUNT] = {0}, total = 0, busiest = 0;
+    InputFrame in = {0};
+    for (int second = 0; second < 60; second++) {
+        u32 this_second = 0;
+        for (int t = 0; t < 60; t++) {
+            sim_tick(&g_sim, &in);
+            for (u32 i = 0; i < g_sim.cues.count; i++) {
+                per_sound[g_sim.cues.items[i].id]++;
+            }
+            this_second += g_sim.cues.count;
+            g_sim.cues.count = 0;
+        }
+        total += this_second;
+        busiest = MAX(busiest, this_second);
+    }
+    fprintf(stderr, "  cues: %u in 60 s, busiest second %u (jump %u, land %u, crate_land %u)\n", total, busiest,
+            per_sound[SFX_JUMP], per_sound[SFX_LAND], per_sound[SFX_CRATE_LAND]);
+    CHECK(total > 30);          // something is heard
+    CHECK(busiest <= 30);       // the gaps keep it readable
+    CHECK(per_sound[SFX_JUMP] + per_sound[SFX_LAND] <= total / 2); // footwork does not drown the fight
+    sim_free(&g_sim);
+}
+
 int main(void) {
     RUN_TEST(test_every_sound_is_synthesized_audible_and_ends_quietly);
     RUN_TEST(test_synthesis_is_deterministic_and_respects_the_buffer);
@@ -174,7 +261,11 @@ int main(void) {
     RUN_TEST(test_far_events_are_quieter_then_silent_and_panned);
     RUN_TEST(test_a_burst_makes_one_sound_and_the_gap_is_kept);
     RUN_TEST(test_the_end_of_a_match_sounds_like_its_result);
+    RUN_TEST(test_only_the_players_base_sounds_the_alarm);
+    RUN_TEST(test_an_elimination_sounds_unless_it_ends_the_match);
+    RUN_TEST(test_ui_sounds_keep_their_gap);
     RUN_TEST(test_the_cue_list_merges_and_caps);
     RUN_TEST(test_menus_and_matches_queue_their_sounds);
+    RUN_TEST(test_a_match_is_not_a_wall_of_noise);
     TEST_MAIN_END();
 }

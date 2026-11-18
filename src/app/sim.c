@@ -164,6 +164,8 @@ void sim_tick(Sim *sim, const InputFrame *human) {
         game_input.released &= ~tab;
     }
     pad_menu_handle_input(&sim->menu, &sim->gs, &sim->input);
+    const bool menu_was_visible = sim->menu.visible;
+    const i32 menu_selected = sim->menu.selected;
     const u32 respawns_before = sim->gs.respawns;
     const i32 controlled_before = sim->gs.controlled;
     game_update(&sim->gs, &game_input);
@@ -171,7 +173,13 @@ void sim_tick(Sim *sim, const InputFrame *human) {
     fx_consume(&sim->fx, &sim->gs.events); // the queue holds one tick only: drain it every tick
     fx_step(&sim->fx);
     const Vec2 listener = vec2(sim->cam.pos.x + (f32)LOGICAL_W * 0.5f, sim->cam.pos.y + (f32)LOGICAL_H * 0.5f);
+    sim->sfx.focus_soldier = sim->gs.controlled;
     sfx_consume(&sim->sfx, &sim->gs.events, listener, &sim->cues);
+    if (sim->menu.visible && !menu_was_visible) {
+        sfx_play_ui(&sim->sfx, SFX_PAD_OPEN, &sim->cues);
+    } else if (sim->menu.visible && sim->menu.selected != menu_selected) {
+        sfx_play_ui(&sim->sfx, SFX_MENU_MOVE, &sim->cues);
+    }
     // A respawn is a jump; a change of controlled soldier is a smooth pan.
     const bool teleported = sim->gs.respawns != respawns_before && sim->gs.controlled == controlled_before;
     camera_follow(&sim->cam, follow_target(sim), game_player_const(&sim->gs)->facing, &sim->level, teleported);

@@ -307,8 +307,11 @@ Idées non confirmées, **non planifiées** : jeep, mini-hélico.
 - Personnages à inventer (forme, nom de l'espèce, ton humoristique).
 - Placeholders au début : rectangles colorés + police bitmap. 🟡 (M6) Terrain habillé : herbe, terre, planches, eau animée, ciel du soir et collines en parallaxe ;
   bases en forme de bunker aux couleurs de l'équipe, avec un drapeau (fissurées sous 50 % de PV, en ruine une fois détruites).
-- Sons courts et cartoon ; musique chiptune originale. 🟡 (M6) Sons placeholders synthétisés (aucun fichier) pour les événements : tirs, explosions, coups, caisses, constructions,
-  apparitions, morts, plouf, victoire / défaite, menus ; atténués avec la distance à la caméra. Pas encore de musique.
+- Sons courts et cartoon ; musique chiptune originale. 🟡 (M6) Sons placeholders synthétisés (aucun fichier) pour les événements : tirs, explosions (plus grosses pour roquettes et
+  grenades fortes), coups, ricochets, caisses (prise, pose, chute du ciel, arrivée au sol), constructions, apparitions, morts, plouf, mannequin brisé, arme ramassée / lâchée, changement de soldat,
+  sauts et atterrissages du soldat suivi, équipe éliminée, **alarme quand la base du joueur est attaquée**, victoire / défaite, menus ; atténués avec la distance à la caméra.
+- 🟡 Musique placeholder chiptune (synthétisée, 4 morceaux originaux) : thème du titre (enjoué, fa majeur), « La Crique » (sautillant, sol majeur, accords à contretemps), « L'Arène » (la mineur,
+  plus tendu), résultats (calme). Fondu entre les écrans, volume réduit en pause, silence à la fin du match le temps de la fanfare.
 
 ## 14. Hors périmètre (pour l'instant)
 

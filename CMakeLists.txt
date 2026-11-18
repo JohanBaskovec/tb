@@ -24,6 +24,7 @@ add_library(cs_core STATIC
     src/core/arena.c
     src/core/rng.c
     src/core/png.c
+    src/core/wav.c
 )
 target_include_directories(cs_core PUBLIC src)
 target_link_libraries(cs_core PUBLIC cs_project_options)
@@ -63,6 +64,7 @@ add_library(cs_app STATIC
     src/app/fx.c
     src/app/front.c
     src/app/sfx.c
+    src/app/music.c
 )
 target_link_libraries(cs_app PUBLIC cs_game)
 
