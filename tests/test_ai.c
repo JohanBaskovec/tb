@@ -4,6 +4,7 @@
 
 #include "app/sim.h"
 #include "game/ai.h"
+#include "game/base.h"
 #include "game/combat.h"
 #include "game/commander.h"
 #include "game/crate.h"
@@ -387,13 +388,15 @@ static void test_follow_climbs_after_the_leader(void) {
     sim_free(&e.sim);
 }
 
-static void test_attack_crosses_the_level_to_the_enemy_pad(void) {
+static void test_attack_crosses_the_level_to_the_enemy_base(void) {
     Env e;
     CHECK(env_init(&e, MAP_LEDGE));
     const i32 a = spawn(&e, 0, SOLDIER_NORMAL, 100.0f);
     gs_of(&e)->teams[0].order = ORDER_ATTACK;
     tick_n(&e, 1500);
-    CHECK(fabsf(cx(&e, a) - 800.0f) <= 60.0f); // over the plateau, then down to the pad at x = 800
+    const Rect base = base_rect(gs_of(&e), 1); // at x = 920: over the plateau, then down and on to it
+    CHECK(cx(&e, a) >= base.x - 4.0f * TILE_SIZE && cx(&e, a) <= base.x + base.w);
+    CHECK(gs_of(&e)->teams[1].base_hp < TUNING_BASE_HP);
     sim_free(&e.sim);
 }
 
@@ -523,7 +526,7 @@ int main(void) {
     RUN_TEST(test_a_hurt_soldier_runs_for_its_base);
     RUN_TEST(test_a_healthy_soldier_does_not_flee);
     RUN_TEST(test_follow_climbs_after_the_leader);
-    RUN_TEST(test_attack_crosses_the_level_to_the_enemy_pad);
+    RUN_TEST(test_attack_crosses_the_level_to_the_enemy_base);
     RUN_TEST(test_two_ai_teams_play_a_coherent_match);
     RUN_TEST(test_a_match_is_deterministic);
     RUN_TEST(test_the_heavies_of_two_ai_teams_fight);

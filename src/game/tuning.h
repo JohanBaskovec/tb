@@ -65,6 +65,18 @@
 #define TUNING_LOOT_W 12.0f           // pad products and weapons lying on the ground
 #define TUNING_LOOT_H 12.0f
 
+// Bases (one per team with a spawn and a pad): a building standing on the spawn, behind the soldiers.
+#define TUNING_BASE_HP 1000
+#define TUNING_BASE_W 40.0f
+#define TUNING_BASE_H 40.0f
+#define TUNING_BASE_ALERT_S 3.0f // after a hit, the team's commander keeps everybody home this long
+
+// Skirmish started from the menus: soldiers every team starts with (matches started otherwise start with one).
+#define TUNING_SKIRMISH_START_SQUAD 3
+
+// End of a match: the result shows up this long after the last enemy fell.
+#define TUNING_RESULTS_DELAY_S 2.5f
+
 // AI soldiers. They travel over the navigation graph (game/nav.c) and press keys like a human.
 #define TUNING_AI_RANGE 200.0f        // sees and shoots enemies this close
 #define TUNING_AI_RANGE_Y 90.0f       // ... and no more than this far above / below
@@ -78,6 +90,7 @@
 #define TUNING_AI_FLEE_HP_PERCENT 30  // a soldier below this share of its hit points runs from enemies
 #define TUNING_AI_FLEE_RANGE 110.0f   // ... when one is this close
 #define TUNING_AI_ARM_RANGE_Y 60.0f   // a weapon this much higher / lower is still worth a trip
+#define TUNING_AI_AIM_ERROR 7.0f      // an AI soldier aims up to this many pixels off its target (drawn every tick)
 
 // Team commander (AI teams): looks at the situation every COMMANDER_PERIOD ticks.
 #define TUNING_COMMANDER_PERIOD_S 0.5f

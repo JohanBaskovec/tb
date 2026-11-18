@@ -88,12 +88,25 @@ typedef struct Soldier {
     InputFrame input; // last frame (AI soldiers): edges are derived from it
 } Soldier;
 
+// What a team did during the match (results screen).
+typedef struct TeamStats {
+    u32 kills;       // enemy soldiers it finished off
+    u32 losses;      // soldiers it lost (the water does not count: they come back)
+    u32 built;       // pad constructions
+    u32 base_damage; // hit points it took from enemy bases
+} TeamStats;
+
 typedef struct Team {
     bool active; // has a spawn in the level
+    bool playing; // took part in the match: had at least one soldier
     bool eliminated;
     bool ai;     // run by a commander (game/commander.c): builds, gives roles; no human behind it
     Order order;
     Vec2 spawn;  // bottom-center, pixels
+    bool has_base; // a team with a spawn and a pad has a base (game/base.h)
+    i32 base_hp;   // 0 once destroyed: the pad cannot be used any more
+    u32 base_hurt_ticks; // > 0: the base was just hit (flash; the commander defends)
     u32 stagnant_ticks; // commander: how long the pad has been waiting without a new crate
     u32 pad_crates;     // commander: crates on the pad when it last looked
+    TeamStats stats;
 } Team;

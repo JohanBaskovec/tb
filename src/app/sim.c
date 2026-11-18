@@ -1,6 +1,7 @@
 #include "app/sim.h"
 
 #include "core/config.h"
+#include "game/squad.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -24,6 +25,20 @@ static void apply_ai_teams(Sim *sim) {
             game_set_team_ai(&sim->gs, t, true);
         }
     }
+    // Every team in the match gets its starting squad, side by side at its spawn.
+    for (i32 t = 0; t < MAX_TEAMS; t++) {
+        if (!sim->gs.teams[t].playing) {
+            continue;
+        }
+        const Vec2 spawn = sim->gs.teams[t].spawn;
+        for (u32 k = 1; k < sim->start_squad; k++) {
+            const f32 dx = (f32)((k + 1) / 2) * 14.0f * ((k % 2) ? 1.0f : -1.0f);
+            if (soldier_spawn(&sim->gs, t, SOLDIER_NORMAL, vec2(spawn.x + dx, spawn.y)) < 0) {
+                soldier_spawn_at_start(&sim->gs, t, SOLDIER_NORMAL, spawn);
+            }
+        }
+    }
+    events_clear(&sim->gs.events);
 }
 
 bool sim_init(Sim *sim, const SimConfig *cfg, char *err, usize err_len) {
@@ -48,6 +63,7 @@ bool sim_init(Sim *sim, const SimConfig *cfg, char *err, usize err_len) {
         return false;
     }
     sim->ai_teams = cfg->ai_teams;
+    sim->start_squad = cfg->start_squad;
     if (cfg->ai_opponents) {
         for (i32 t = 1; t < MAX_TEAMS; t++) {
             if (sim->level.has_spawn[t] && sim->level.pads[t].present) {
@@ -56,6 +72,7 @@ bool sim_init(Sim *sim, const SimConfig *cfg, char *err, usize err_len) {
         }
     }
     apply_ai_teams(sim);
+    sim->sfx.human_team = (sim->ai_teams & 1u) ? -1 : 0;
     if (cfg->script) {
         if (!script_parse(&sim->script, cfg->script, err, err_len)) {
             arena_free(&sim->arena);
@@ -86,6 +103,8 @@ void sim_restart(Sim *sim) {
     }
     sim->menu = (PadMenu){0};
     sim->fx = (FxList){0};
+    sim->sfx = (SfxState){.human_team = (sim->ai_teams & 1u) ? -1 : 0};
+    sim->cues = (SfxCueList){0};
     pad_menu_refresh(&sim->menu, &sim->gs, 0);
     camera_follow(&sim->cam, follow_target(sim), game_player_const(&sim->gs)->facing, &sim->level, true);
 }
@@ -151,6 +170,8 @@ void sim_tick(Sim *sim, const InputFrame *human) {
     pad_menu_refresh(&sim->menu, &sim->gs, 0);
     fx_consume(&sim->fx, &sim->gs.events); // the queue holds one tick only: drain it every tick
     fx_step(&sim->fx);
+    const Vec2 listener = vec2(sim->cam.pos.x + (f32)LOGICAL_W * 0.5f, sim->cam.pos.y + (f32)LOGICAL_H * 0.5f);
+    sfx_consume(&sim->sfx, &sim->gs.events, listener, &sim->cues);
     // A respawn is a jump; a change of controlled soldier is a smooth pan.
     const bool teleported = sim->gs.respawns != respawns_before && sim->gs.controlled == controlled_before;
     camera_follow(&sim->cam, follow_target(sim), game_player_const(&sim->gs)->facing, &sim->level, teleported);

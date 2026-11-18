@@ -34,7 +34,7 @@ que lorsque les critères de fin sont remplis. Cases : `[ ]` à faire, `[x]` fai
 **Fin :** on parcourt agréablement un niveau test avec un soldat. ✅ techniquement (tout le niveau est traversable,
 vérifié par bots et scénarios). **Le « agréablement » reste à valider à la manette/au clavier par l'utilisateur** :
 les valeurs de `tuning.h` (vitesse, hauteur de saut, gravité…) sont des réglages de départ.
-Pas encore de police de caractères : l'overlay de debug utilise des pastilles de couleur (la police arrive avec le HUD, M6).
+La police de caractères est arrivée avec le HUD (M6) ; l'overlay de debug garde ses pastilles de couleur.
 
 ## M2 — Caisses et pad (cœur du jeu)
 - [x] Pool d'entités avec `EntityId` générationnels (seules les caisses y vivent pour l'instant ; le joueur y entre en M4)
@@ -76,14 +76,14 @@ Pas encore de police de caractères : l'overlay de debug utilise des pastilles d
 **Fin :** une équipe IA joue une partie cohérente seule. ✅ (`cratesquad --headless --level assets/levels/ai_arena.lvl --ai-team 1,2 …`)
 
 ## M6 — Tranche verticale : escarmouche 1 vs IA
-- [ ] Règles d'escarmouche, élimination, écran de résultats
-- [ ] Bases destructibles : 1000 PV, dégâts de n'importe quelle arme, pad inutilisable une fois détruite (l'équipe continue à jouer)
-- [ ] HUD (PV, arme, munitions, effectif, ordre, indicateurs hors écran)
-- [ ] Écran titre, configuration de partie, pause
-- [ ] Premier niveau soigné
-- [ ] Sons placeholders (événements)
+- [x] Règles d'escarmouche, élimination, écran de résultats — `game/rules.c` : une équipe est éliminée avec son dernier soldat, la dernière debout gagne (match nul possible) ; résultats 2,5 s après (fabriqués, éliminés, pertes, soldats, base) ; une escarmouche lancée du menu commence à 3 soldats par équipe (D052, D056)
+- [x] Bases destructibles : 1000 PV, dégâts de n'importe quelle arme, pad inutilisable une fois détruite (l'équipe continue à jouer) — `game/base.c`, bâtiment sur le point de départ ; l'IA attaque la base adverse quand personne ne la défend (D051)
+- [x] HUD (PV, arme, munitions, effectif, ordre, indicateurs hors écran) — police bitmap maison (`render/font.c`, D054), PV des bases, chrono, flèches vers les bases et les caisses proches, nom de la construction choisie dans le menu du pad
+- [x] Écran titre, configuration de partie, pause — `app/front.c` sans SDL (D053) : titre, niveau + mode (contre l'IA / IA contre IA) avec aperçu, pause (reprendre, recommencer, abandonner) ; clavier et souris
+- [x] Premier niveau soigné — « La Crique » (`beach.lvl`, D058) : symétrique, falaises, plages, chenal et son pont, plateau central ; habillage du terrain (herbe, terre, planches, eau animée, collines en parallaxe)
+- [x] Sons placeholders (événements) — synthétisés au démarrage (`app/sfx.c`), joués par `audio/audio.c` (SDL_AudioStream), atténués avec la distance (D055)
 
-**Fin :** une partie complète du menu à l'écran de victoire. **Point d'étape avec l'utilisateur.**
+**Fin :** une partie complète du menu à l'écran de victoire. ✅ **Point d'étape avec l'utilisateur.**
 
 ## M7 — Véhicules et armes lourdes
 - [ ] Pad plein 4×2 → tank (rouge) / tank lourd (avec bleue)

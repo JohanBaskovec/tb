@@ -27,11 +27,13 @@ typedef enum EventType {
     EV_PUNCH,            // pos = fist, a = number of targets hit
     EV_PROJECTILE_HIT,   // a bullet ended (impact or end of range); pos, a = WeaponKind
     EV_EXPLOSION,        // pos = center, a = radius (px), b = WeaponKind
-    EV_DAMAGE,           // pos = target center, a = amount, b = 1 if the target is a soldier, 0 for a dummy
+    EV_DAMAGE,           // pos = target center, a = amount, b = 1 for a soldier, 0 for a dummy, 2 for a base
     EV_DUMMY_DESTROYED,  // pos
     EV_WEAPON_PICKED_UP, // pos, a = WeaponKind
     EV_WEAPON_DROPPED,   // pos, a = WeaponKind (swapped for another, or dropped on death)
     EV_WEAPON_EMPTY,     // pos: the last shot was fired, the soldier is back to fists
+    EV_BASE_DESTROYED,   // pos = base center, a = team, b = team that destroyed it (-1: nobody)
+    EV_MATCH_OVER,       // a = winning team (-1: nobody, a draw)
     EV_TYPE_COUNT
 } EventType;
 

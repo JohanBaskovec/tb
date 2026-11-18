@@ -114,6 +114,7 @@ static Situation look(const GameState *gs, i32 team) {
             s.free_crates++;
         }
     }
+    s.threatened = gs->teams[team].base_hurt_ticks > 0; // the base is under fire
     const Vec2 home = base_of(gs, team);
     for (i32 i = 0; i < MAX_SOLDIERS; i++) {
         const Soldier *o = &gs->soldiers[i];

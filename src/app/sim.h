@@ -4,6 +4,7 @@
 
 #include "app/fx.h"
 #include "app/pad_menu.h"
+#include "app/sfx.h"
 #include "core/arena.h"
 #include "game/bot.h"
 #include "game/game.h"
@@ -20,6 +21,7 @@ typedef struct SimConfig {
     Vec2 start_feet;    // bottom-center of the body, in pixels
     u32 ai_teams;       // bit per team index run by the AI (a commander; for team 0 this means no human at all)
     bool ai_opponents;  // also the AI for every other team that has a spawn and a pad
+    u32 start_squad;    // soldiers each team in the match starts with (0 or 1: just one)
 } SimConfig;
 
 typedef struct Sim {
@@ -28,6 +30,8 @@ typedef struct Sim {
     GameState gs;
     PadMenu menu; // construction menu of the pad of the controlled team (team 0)
     FxList fx; // visual effects of the recent events
+    SfxState sfx;    // which sounds the recent events make...
+    SfxCueList cues; // ... waiting for the window loop to play them (it empties the list)
     Camera cam;
     Bot bot;
     Script script;
@@ -37,6 +41,7 @@ typedef struct Sim {
     bool use_bot;
     bool use_script;
     u32 ai_teams; // teams run by the AI, once ai_opponents is resolved
+    u32 start_squad;
     InputFrame input; // last frame fed to the game
     // Mouse (window loop only): once it has moved, the soldier aims at it and the left button fires.
     bool mouse_active;

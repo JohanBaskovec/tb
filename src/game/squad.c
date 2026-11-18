@@ -116,6 +116,7 @@ static i32 spawn_soldier(GameState *gs, i32 team, SoldierVariant variant, Vec2 f
         s->alive = true;
         s->ai.walker.target_x = body_center(&s->c.body).x;
         gs->teams[team].eliminated = false;
+        gs->teams[team].playing = true;
         events_push(&gs->events, EV_SOLDIER_SPAWNED, body_center(&s->c.body), (i32)variant, team);
         if (gs->controlled < 0 && team == PLAYER_TEAM && !gs->teams[team].ai) {
             gs->controlled = i; // the human has nobody: the newcomer is theirs
@@ -189,6 +190,7 @@ void soldier_kill(GameState *gs, i32 index) {
         return;
     }
     gs->combat_stats.deaths++;
+    gs->teams[s->team].stats.losses++;
     events_push(&gs->events, EV_SOLDIER_DIED, body_center(&s->c.body), s->team, index);
     combat_drop_loot(gs, &s->c);
     s->alive = false;

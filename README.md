@@ -12,9 +12,10 @@ les ramènent à leur base et les empilent pour obtenir des armes, des recrues e
 
 ## État du projet
 
-Jalons M0 à M5 faits : socle technique, niveau et déplacement, caisses et pad de construction, combat (armes, projectiles,
+Jalons M0 à M6 faits : socle technique, niveau et déplacement, caisses et pad de construction, combat (armes, projectiles,
 explosions, santé, mannequins), escouade (compagnons, équipes, ordres), navigation et IA d'équipe (graphe de navigation, A*, commandant qui
-construit et distribue des rôles, vol de caisses). Par défaut, chaque équipe adverse ayant un pad est jouée par l'IA (`--ai-team` pour choisir).
+construit et distribue des rôles, vol de caisses), et **tranche verticale** : escarmouche 1 contre l'IA sur *La Crique*, bases destructibles,
+élimination et écran de résultats, HUD, écran titre, configuration de partie, pause, sons placeholders synthétisés.
 Avancement détaillé : [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Prérequis
@@ -37,7 +38,8 @@ Avancement détaillé : [docs/ROADMAP.md](docs/ROADMAP.md).
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build -j
-./build/cratesquad                      # jeu interactif (fenêtre) : niveau de test, caisses, pad, armes, mannequins
+./build/cratesquad                      # jeu (fenêtre) : écran titre → configuration (niveau, mode) → escarmouche
+./build/cratesquad --play --squad 3     # directement une partie (niveau de test par défaut, `--level` pour un autre)
 ```
 
 Sans écran (CI, captures, bots) :
@@ -46,6 +48,8 @@ Sans écran (CI, captures, bots) :
 ./build/cratesquad --headless --bot --frames 3000 --screenshot build/screenshots/bot.png --debug-overlay
 ./build/cratesquad --headless --start 984,432 --script "U:75" --trace 25      # monter l'échelle
 ./build/cratesquad --headless --walk-to 250 --frames 400                      # bot « marcheur »
+./build/cratesquad --headless --front --script ".:3 C:1 .:20" \
+    --screenshot build/screenshots/front.png                                    # les écrans, pilotés par script
 ```
 
 Toutes les options : `docs/ARCHITECTURE.md` § Exécution headless.
@@ -79,7 +83,8 @@ cmake --build build -j && ctest --test-dir build --output-on-failure
 | Changer de soldat (sans menu de pad ouvert) | Tab | RB / R1 |
 | Menu du pad : entrée suivante / valider | Tab / Entrée (ou clic gauche sur l'entrée) | — |
 | Ordre de l'équipe suivant (suivre → garder → ramasser → attaquer → voler) | touche à la position de Q (étiquetée A en AZERTY) | LB / L1 |
-| Pause               | Échap         | Start            |
+| Pause (et retour dans les menus) | Échap | Start |
+| Menus : choisir / changer un réglage / valider | ↑ ↓ / ← → / Entrée ou Espace (ou souris) | — |
 | Debug overlay       | F1            | —                |
 | Pause / pas-à-pas / ralenti ×0,25 (debug) | F2 / F3 / F4 | — |
 | Recommencer la partie (debug) | F5 | — |

@@ -36,6 +36,8 @@ add_library(cs_game STATIC
     src/game/loot.c
     src/game/weapon.c
     src/game/combat.c
+    src/game/base.c
+    src/game/rules.c
     src/game/nav.c
     src/game/commander.c
     src/game/squad.c
@@ -55,9 +57,12 @@ endif()
 # Camera and the headless-capable simulation wrapper (still no SDL).
 add_library(cs_app STATIC
     src/render/camera.c
+    src/render/font.c
     src/app/sim.c
     src/app/pad_menu.c
     src/app/fx.c
+    src/app/front.c
+    src/app/sfx.c
 )
 target_link_libraries(cs_app PUBLIC cs_game)
 
@@ -69,6 +74,9 @@ add_executable(cratesquad
     src/main.c
     src/render/render.c
     src/render/draw_game.c
+    src/render/draw_ui.c
+    src/render/draw_front.c
+    src/audio/audio.c
 )
 target_link_libraries(cratesquad PRIVATE cs_app cs_platform cs_sdl)
 # Development default; override at run time with --assets DIR.

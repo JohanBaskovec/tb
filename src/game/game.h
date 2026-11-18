@@ -20,6 +20,13 @@ typedef struct CombatStats {
     u32 shots, hits, explosions, kills, deaths;
 } CombatStats;
 
+// Outcome of the match (game/rules.h).
+typedef struct MatchResult {
+    bool over;
+    i32 winner;   // team index, -1 for a draw (only meaningful once over)
+    u64 end_tick; // tick at which it ended
+} MatchResult;
+
 typedef struct GameState {
     u64 tick;
     Rng rng;
@@ -34,6 +41,7 @@ typedef struct GameState {
     CrateStats crate_stats;
     u32 products_built;
     CombatStats combat_stats;
+    MatchResult match;
     Nav nav;           // graph of the level for the AI; built on first use, derived from the level only (not hashed)
     EventQueue events; // what happened during the last tick (presentation only, not hashed)
 } GameState;

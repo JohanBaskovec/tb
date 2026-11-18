@@ -76,7 +76,7 @@ Rect pad_rect(const GameState *gs, i32 team);
 bool pad_holds_crate(const GameState *gs, i32 team, const Entity *crate);
 // Number of crates resting on the pad of `team`.
 u32 pad_crate_count(const GameState *gs, i32 team);
-// True if the pad exists and its owner can still use it (a destroyed base cannot: M3).
+// True if the pad exists and its owner can still use it (not once the team's base is destroyed).
 bool pad_usable(const GameState *gs, i32 team);
 
 // Builds `shape` (red or blue version): consumes the chosen crates and spawns the product next to

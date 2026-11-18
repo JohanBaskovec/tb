@@ -4,6 +4,7 @@
 #include "core/arena.h"
 #include "core/rng.h"
 #include "game/nav.h"
+#include "game/pad.h"
 #include "game/tuning.h"
 #include "test_helpers.h"
 
@@ -368,6 +369,47 @@ static void test_the_arena_is_connected_and_a_trip_across_it_works(void) {
     arena_free(&arena);
 }
 
+// The first real level: every standing place can be reached from both spawns, and a crate can be carried
+// from where each drop zone's crates land to both pads.
+static void test_the_beach_can_be_crossed_both_ways_with_a_crate(void) {
+    Arena arena;
+    Level lv;
+    CHECK(arena_init(&arena, 1u << 20));
+    char err[128];
+    CHECK(level_load_file(&lv, &arena, CS_ASSET_DIR "/levels/beach.lvl", err, sizeof(err)));
+    nav_build(&g_nav, &lv);
+    CHECK(g_nav.ok);
+    u16 path[NAV_PATH_MAX];
+    for (i32 team = 0; team < 2; team++) {
+        const i32 start = nav_nearest(&g_nav, lv.spawns[team]);
+        for (i32 i = 0; i < (i32)g_nav.node_count; i++) {
+            if (nav_path(&g_nav, start, i, false, -1, path, NAV_PATH_MAX) < 0) {
+                fprintf(stderr, "  unreachable from spawn %d: %d,%d\n", team + 1, g_nav.nodes[i].tx, g_nav.nodes[i].ty);
+                g_failures++;
+            }
+        }
+    }
+    for (i32 z = 0; z < lv.drop_zone_count; z++) {
+        // Where the crates land: the first standing place under the drop marker.
+        const i32 tx = level_px_to_tile(lv.drop_zones[z].x);
+        i32 land = -1;
+        for (i32 ty = level_px_to_tile(lv.drop_zones[z].y); ty < lv.height && land < 0; ty++) {
+            land = nav_find(&g_nav, tx, ty, NAV_GROUND);
+        }
+        CHECK(land >= 0);
+        for (i32 team = 0; team < 2; team++) {
+            const PadSite *pad = &lv.pads[team];
+            const i32 beside = nav_find(&g_nav, team == 0 ? pad->cell_x + PAD_COLS : pad->cell_x - 1, pad->cell_y, NAV_GROUND);
+            CHECK(beside >= 0);
+            if (land >= 0 && beside >= 0 && nav_path(&g_nav, land, beside, true, -1, path, NAV_PATH_MAX) < 0) {
+                fprintf(stderr, "  no way to carry a crate from zone %d to pad %d\n", z + 1, team + 1);
+                g_failures++;
+            }
+        }
+    }
+    arena_free(&arena);
+}
+
 // Random trips between reachable standing places of both levels, free and carrying a crate: all must arrive.
 static u32 stress_level(const char *path, u64 seed, u32 trips, bool carrying, u32 *failed) {
     Arena arena;
@@ -412,6 +454,8 @@ static void test_random_trips_all_arrive(void) {
     done += stress_level(CS_ASSET_DIR "/levels/ai_arena.lvl", 2, 60, true, &failed);
     done += stress_level(CS_ASSET_DIR "/levels/test_arena.lvl", 3, 60, false, &failed);
     done += stress_level(CS_ASSET_DIR "/levels/test_arena.lvl", 4, 60, true, &failed);
+    done += stress_level(CS_ASSET_DIR "/levels/beach.lvl", 5, 60, false, &failed);
+    done += stress_level(CS_ASSET_DIR "/levels/beach.lvl", 6, 60, true, &failed);
     CHECK(done >= 100);
     CHECK_EQ_U64(failed, 0);
 }
@@ -432,6 +476,7 @@ int main(void) {
     RUN_TEST(test_a_soldier_carrying_a_crate_takes_a_route_it_can_walk);
     RUN_TEST(test_the_follower_recovers_when_it_is_pushed_off_its_path);
     RUN_TEST(test_the_arena_is_connected_and_a_trip_across_it_works);
+    RUN_TEST(test_the_beach_can_be_crossed_both_ways_with_a_crate);
     RUN_TEST(test_random_trips_all_arrive);
     TEST_MAIN_END();
 }

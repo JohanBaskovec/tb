@@ -1,5 +1,6 @@
 #include "game/ai.h"
 
+#include "game/base.h"
 #include "game/combat.h"
 #include "game/pad.h"
 #include "game/tuning.h"
@@ -19,7 +20,8 @@ static Vec2 shoulder_of(const Companion *c) {
 
 typedef struct Enemy {
     bool found;
-    bool soldier; // a soldier (not a dummy)
+    bool soldier; // a soldier (not a dummy, not a base)
+    bool base;
     Vec2 pos;    // center of the target
     f32 feet_y;
     f32 dist;
@@ -36,12 +38,12 @@ static void consider(const GameState *gs, const Companion *c, Rect rect, bool so
     if (!combat_line_clear(gs->level, sh, t)) {
         return;
     }
-    *best = (Enemy){true, soldier, t, rect.y + rect.h, dist};
+    *best = (Enemy){true, soldier, false, t, rect.y + rect.h, dist};
 }
 
-// The closest enemy in range and in sight: soldiers of other teams, and dummies.
+// The closest enemy in range and in sight: soldiers of other teams, and dummies; else an enemy base.
 static Enemy find_enemy(const GameState *gs, const Soldier *me) {
-    Enemy best = {false, false, vec2(0, 0), 0.0f, 0.0f};
+    Enemy best = {false, false, false, vec2(0, 0), 0.0f, 0.0f};
     for (i32 i = 0; i < MAX_SOLDIERS; i++) {
         const Soldier *s = &gs->soldiers[i];
         if (s->alive && s->team != me->team && s->c.hp > 0) {
@@ -52,6 +54,12 @@ static Enemy find_enemy(const GameState *gs, const Soldier *me) {
         const Entity *e = &gs->entities.slots[i];
         if (e->type == ENT_DUMMY && !e->pending_destroy && e->as.dummy.hp > 0) {
             consider(gs, &me->c, body_rect(&e->body), false, &best);
+        }
+    }
+    for (i32 t = 0; t < MAX_TEAMS && !best.found; t++) { // buildings only when nobody fights back
+        if (t != me->team && base_alive(gs, t)) {
+            consider(gs, &me->c, base_rect(gs, t), false, &best);
+            best.base = best.found;
         }
     }
     return best;
@@ -71,6 +79,12 @@ static Vec2 home_feet(const GameState *gs, i32 team) {
         const Rect r = pad_rect(gs, team);
         return vec2(r.x + r.w * 0.5f, r.y + r.h);
     }
+    return gs->teams[team].spawn;
+}
+
+// Where a soldier with nothing else to do stands: in front of its base (the spawn), not on the pad, where it
+// would keep the crates from settling.
+static Vec2 guard_post(const GameState *gs, i32 team) {
     return gs->teams[team].spawn;
 }
 
@@ -339,7 +353,7 @@ static u32 collect_think(GameState *gs, Soldier *s, bool steal, AiMode *mode) {
     }
     *mode = AI_GUARD;
     if (!gs->level->pads[s->team].present) {
-        return go_to(gs, s, home, TUNING_AI_GUARD_BAND).mask;
+        return go_to(gs, s, guard_post(gs, s->team), TUNING_AI_GUARD_BAND).mask;
     }
     if (!gs->nav.built) {
         nav_build(&gs->nav, gs->level);
@@ -363,7 +377,7 @@ static u32 collect_think(GameState *gs, Soldier *s, bool steal, AiMode *mode) {
                 return 0;
             }
         }
-        return go_to(gs, s, home, TUNING_AI_GUARD_BAND).mask; // nothing to do: wait at the pad
+        return go_to(gs, s, guard_post(gs, s->team), TUNING_AI_GUARD_BAND).mask; // nothing to do: wait at the base
     }
     case COLLECT_FETCH: {
         const Entity *e = pool_get_const(&gs->entities, ai->crate);
@@ -440,15 +454,22 @@ static bool want_weapon(const GameState *gs, const Soldier *s, Vec2 *feet) {
     return found;
 }
 
-// The nearest base of another team still in the game.
+// Where to attack the nearest other team still in the game: its base while it stands, else its pad
+// (where its soldiers gather).
 static bool enemy_base(const GameState *gs, const Soldier *s, Vec2 *feet) {
     bool found = false;
     f32 best = 0.0f;
     for (i32 t = 0; t < MAX_TEAMS; t++) {
-        if (t == s->team || !gs->teams[t].active || gs->teams[t].eliminated) {
+        const Team *team = &gs->teams[t];
+        if (t == s->team || !team->active || team->eliminated || (!team->playing && !base_alive(gs, t))) {
             continue;
         }
-        const Vec2 h = home_feet(gs, t);
+        Vec2 h = home_feet(gs, t);
+        if (base_alive(gs, t)) { // in front of the building, on the side the attacker comes from
+            const Rect r = base_rect(gs, t);
+            const f32 side = center_x(&s->c) < r.x + r.w * 0.5f ? -1.0f : 1.0f;
+            h = vec2(r.x + r.w * 0.5f + side * (r.w * 0.5f + 3.0f * TILE_SIZE), r.y + r.h);
+        }
         const f32 score = fabsf(h.x - center_x(&s->c)) + 3.0f * fabsf(h.y - feet_y(&s->c));
         if (!found || score < best) {
             best = score;
@@ -460,7 +481,7 @@ static bool enemy_base(const GameState *gs, const Soldier *s, Vec2 *feet) {
 }
 
 static AiMode order_think(GameState *gs, Soldier *s, Order order, u32 *mask) {
-    const Vec2 home = home_feet(gs, s->team);
+    const Vec2 home = guard_post(gs, s->team);
     switch (order) {
     case ORDER_FOLLOW: {
         const Soldier *leader = leader_of(gs, s->team);
@@ -500,7 +521,7 @@ void ai_think(GameState *gs, i32 index, InputFrame *out) {
     const Order order = team->ai ? s->ai.role : team->order;
     const bool carrying = entity_id_valid(c->carrying);
     const Enemy enemy = find_enemy(gs, s);
-    const Vec2 home = home_feet(gs, s->team);
+    const Vec2 home = guard_post(gs, s->team); // a hurt soldier runs back there
 
     AiMode mode = AI_IDLE;
     u32 mask = 0;
@@ -540,4 +561,8 @@ void ai_think(GameState *gs, i32 index, InputFrame *out) {
     input_frame_update(out, mask);
     out->aim_active = aim;
     out->aim = enemy.pos;
+    if (aim) { // nobody aims perfectly (and two AI teams do not replay the same match for every seed)
+        out->aim.x += (rng_f32(&gs->rng) * 2.0f - 1.0f) * TUNING_AI_AIM_ERROR;
+        out->aim.y += (rng_f32(&gs->rng) * 2.0f - 1.0f) * TUNING_AI_AIM_ERROR;
+    }
 }

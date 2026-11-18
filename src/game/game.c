@@ -1,11 +1,13 @@
 #include "game/game.h"
 
 #include "core/log.h"
+#include "game/base.h"
 #include "game/combat.h"
 #include "game/commander.h"
 #include "game/crate.h"
 #include "game/loot.h"
 #include "game/pad.h"
+#include "game/rules.h"
 #include "game/squad.h"
 
 #include <string.h>
@@ -19,12 +21,14 @@ bool game_init(GameState *gs, u64 seed, Level *level) {
     rng_seed(&gs->rng, seed, 1);
     gs->level = level;
     gs->controlled = -1;
+    gs->match.winner = -1;
     pool_init(&gs->entities);
     for (i32 t = 0; t < MAX_TEAMS; t++) {
         gs->teams[t].active = level->has_spawn[t];
         gs->teams[t].spawn = level->spawns[t];
         gs->teams[t].order = t == PLAYER_TEAM ? ORDER_FOLLOW : ORDER_GUARD;
     }
+    bases_init(gs);
     for (i32 z = 0; z < level->drop_zone_count; z++) {
         gs->drop_timers[z] = (u32)level->drop_cfg[z].interval_s * TICK_HZ;
     }
@@ -70,6 +74,8 @@ void game_update(GameState *gs, const InputFrame *input) {
     crate_carried_follow(gs);
     loot_update(gs);
     squad_resolve(gs);
+    bases_update(gs);
+    rules_update(gs);
     pool_flush(&gs->entities);
     gs->tick++;
 }
@@ -132,8 +138,16 @@ u64 game_hash(const GameState *gs) {
     h = fnv_mix(h, &gs->controlled, sizeof(gs->controlled));
     h = hash_companion(h, game_player_const(gs));
     for (i32 t = 0; t < MAX_TEAMS; t++) {
-        const u32 flags = (u32)gs->teams[t].eliminated | ((u32)gs->teams[t].order << 1) | ((u32)gs->teams[t].ai << 5);
+        const Team *team = &gs->teams[t];
+        const u32 flags = (u32)team->eliminated | ((u32)team->order << 1) | ((u32)team->ai << 5) | ((u32)team->playing << 6) |
+                          ((u32)team->has_base << 7);
         h = fnv_mix(h, &flags, sizeof(flags));
+        h = fnv_mix(h, &team->base_hp, sizeof(team->base_hp));
+        h = fnv_mix(h, &team->base_hurt_ticks, sizeof(team->base_hurt_ticks));
+        h = fnv_mix(h, &team->stats.kills, sizeof(u32));
+        h = fnv_mix(h, &team->stats.losses, sizeof(u32));
+        h = fnv_mix(h, &team->stats.built, sizeof(u32));
+        h = fnv_mix(h, &team->stats.base_damage, sizeof(u32));
         h = fnv_mix(h, &gs->teams[t].stagnant_ticks, sizeof(u32));
         h = fnv_mix(h, &gs->teams[t].pad_crates, sizeof(u32));
     }
@@ -160,6 +174,9 @@ u64 game_hash(const GameState *gs) {
         h = fnv_mix(h, &s->ai.mode, sizeof(s->ai.mode));
         h = hash_nav_agent(h, &s->ai.nav);
     }
+    const u32 match = (u32)gs->match.over | ((u32)(gs->match.winner + 1) << 1);
+    h = fnv_mix(h, &match, sizeof(match));
+    h = fnv_mix(h, &gs->match.end_tick, sizeof(gs->match.end_tick));
     h = fnv_mix(h, gs->drop_timers, sizeof(gs->drop_timers));
     h = fnv_mix(h, &gs->products_built, sizeof(gs->products_built));
     h = fnv_mix(h, &gs->combat_stats.shots, sizeof(u32));

@@ -30,7 +30,8 @@
 | `game/` | `core/` | ❌ | Toute la simulation : déterministe, testable sans fenêtre |
 | `render/`, `audio/` | `core/`, `game/` (lecture seule) | ✅ | Affichage et son |
 | `ui/` | `core/`, `game/`, `render/` | ✅ (via render) | HUD, menus |
-| `scenes/` | tout sauf `platform/` interne | ✅ | Enchaînement des écrans |
+| `scenes/` | tout sauf `platform/` interne | ✅ | Enchaînement des écrans (M6 : remplacé par `app/front.c`, sans SDL, D053) |
+| `app/` | `core/`, `game/`, `render/camera` | ❌ | `Sim`, menu du pad, écrans (`front`), effets et sons à jouer : logique de présentation testable |
 | `platform/` | `core/` | ✅ | Seul point de contact avec l'OS |
 
 Conséquence : `game/` reçoit une structure `InputFrame` neutre (actions booléennes + axes)
@@ -44,8 +45,12 @@ tb/
 ├── cmake/                  # Modules CMake (warnings, sanitizers, fetch SDL3)
 ├── src/
 │   ├── main.c              # Options CLI, boucles headless et fenêtrée, shutdown
-│   ├── app/
-│   │   └── sim.h/.c        # Sim : niveau + GameState + caméra + source d'entrées (sans SDL)
+│   ├── app/                # (sans SDL)
+│   │   ├── sim.h/.c        # Sim : niveau + GameState + caméra + source d'entrées + effets et sons à jouer
+│   │   ├── pad_menu.h/.c   # Menu de construction du pad
+│   │   ├── fx.h/.c         # Effets visuels tirés des événements
+│   │   ├── sfx.h/.c        # Sons placeholders : synthèse, événements → « cues » (volume, panoramique)
+│   │   └── front.h/.c      # Écrans : titre, configuration, partie, pause, résultats (possède le Sim)
 │   ├── core/
 │   │   ├── types.h         # u8..u64, i8..i64, f32, f64, usize, macros (ARRAY_LEN, MIN, MAX)
 │   │   ├── config.h        # Constantes moteur : LOGICAL_W/H, TILE_SIZE, TICK_HZ/TICK_DT
@@ -65,10 +70,13 @@ tb/
 │   │   ├── texture.h/.c    # Chargement (stb_image), atlas
 │   │   ├── sprite.h/.c     # Sprites et animations
 │   │   ├── camera.h/.c     # Suivi, zone morte, anticipation, bornes (sans SDL) ; viewports écran partagé à venir
-│   │   ├── font.h/.c       # Police bitmap
+│   │   ├── font.h/.c       # Police bitmap 5×7 maison (données + mesure, sans SDL)
+│   │   ├── draw_ui.h/.c    # Texte, panneaux, couleurs et noms d'équipe / d'ordre / d'arme affichés
+│   │   ├── draw_game.h/.c  # Le monde (terrain habillé, bases, caisses, soldats…) et le HUD
+│   │   ├── draw_front.h/.c # Les écrans autour de la partie
 │   │   └── debug_draw.h/.c # Hitboxes, graphe de navigation, états IA
 │   ├── audio/
-│   │   └── audio.h/.c      # SDL_AudioStream, mixage simple d'effets + musique
+│   │   └── audio.h/.c      # Périphérique + 12 voix SDL_AudioStream ; joue les cues de app/sfx (pas encore de musique)
 │   ├── game/
 │   │   ├── game.h/.c       # GameState, game_init / game_update
 │   │   ├── tuning.h        # Toutes les constantes de gameplay
@@ -90,7 +98,8 @@ tb/
 │   │   ├── ai.h/.c         # IA de soldat : modes (fuir, s'armer, foncer, ordre / rôle) ; se déplace par `go_to` (navigation)
 │   │   ├── nav.h/.c        # Graphe de navigation construit en simulant la physique, A*, suiveur de chemin (`NavAgent`)
 │   │   ├── commander.h/.c  # Commandant d'équipe IA : construit sur le pad, distribue les rôles
-│   │   ├── rules.h/.c      # Modes de jeu, conditions de victoire
+│   │   ├── base.h/.c       # Bases : PV, dégâts, ruine (pad inutilisable)
+│   │   ├── rules.h/.c      # Escarmouche : équipes en jeu, élimination, fin de partie
 │   │   └── events.h        # File d'événements (son, particules, HUD)
 │   ├── ui/
 │   │   ├── hud.h/.c
@@ -194,7 +203,7 @@ typedef struct GameState {
     Rng      rng;
     u64      tick;
     EventQueue events;             // consommée par audio / render / ui
-    MatchRules rules;
+    MatchResult match;             // fini ? gagnant, tick de fin (game/rules.h)
 } GameState;
 ```
 
@@ -203,7 +212,7 @@ typedef struct GameState {
 La simulation ne joue pas de son et ne crée pas de particules. Elle pousse des
 événements dans `GameState.events` (`game/events.h` : `EV_CRATE_SPAWNED`, `EV_CRATE_SETTLED`, `EV_CRATE_PICKED_UP`,
 `EV_CRATE_PLACED`, `EV_CRATE_THROWN`, `EV_CRATE_DESTROYED`, `EV_CRATE_CONSUMED`, `EV_PAD_BUILT`, `EV_PLAYER_RESPAWNED` (un soldat est tombé à l'eau) ; escouade : `EV_SOLDIER_SPAWNED`, `EV_SOLDIER_DIED`, `EV_CONTROL_CHANGED`, `EV_ORDER_CHANGED`, `EV_TEAM_ELIMINATED` ; combat : `EV_SHOT`, `EV_PUNCH`, `EV_PROJECTILE_HIT`, `EV_EXPLOSION`, `EV_DAMAGE`, `EV_DUMMY_DESTROYED`,
-`EV_WEAPON_PICKED_UP`, `EV_WEAPON_DROPPED`, `EV_WEAPON_EMPTY`), que `audio/`, `render/` (effets) et `ui/` lisent après l'update.
+`EV_WEAPON_PICKED_UP`, `EV_WEAPON_DROPPED`, `EV_WEAPON_EMPTY` ; M6 : `EV_BASE_DESTROYED`, `EV_MATCH_OVER`), que `audio/`, `render/` (effets) et `ui/` lisent après l'update.
 Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont le sens dépend du type.
 
 - La file est **vidée au début de chaque `game_update`** : elle contient les événements du dernier tick seulement.
@@ -212,6 +221,7 @@ Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont l
 - Elle n'est **pas dans le hash d'état** et la simulation ne la relit jamais : la présentation ne peut pas influencer le jeu.
 - Premier consommateur : `app/fx.h/.c` (sans SDL), qui en tire de courts effets visuels (explosions, étincelles, flash de bouche) tenus par
   `Sim.fx` et dessinés par `draw_game`. `sim_tick` la vide à chaque tick.
+- Deuxième : `app/sfx.h/.c` (`sfx_consume`, appelé par `sim_tick`), qui en tire des sons à jouer (`Sim.cues`) ; la boucle fenêtrée les passe à `audio/` après chaque image.
 
 ## Physique
 
@@ -267,6 +277,18 @@ Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont l
 - **Ramassage** (`loot.c`) : armes et produits non-armes tombent et reposent comme le produit du pad en M2 ; une caisse qui se pose dessus les remonte.
 - Ordre dans `game_update` : changer de soldat / d'ordre → commandants des équipes IA → tous les soldats (entrée → déplacement → caisses → combat) → projectiles / mannequins → caisses → caisses portées → objets au sol → mort / eau → `pool_flush`.
 
+## Bases et règles d'escarmouche (M6)
+
+- **Bases** (`base.c`) : `bases_init` (dans `game_init`) donne une base à chaque équipe qui a un point de départ et un pad : `Team.has_base`, `base_hp` (1000), `base_hurt_ticks`.
+  `base_rect` = 40 × 40 px posés sur le point de départ. `base_damage(gs, équipe, dégâts, équipe_source)` est la seule façon de lui retirer des PV (crédite `TeamStats.base_damage`,
+  émet `EV_DAMAGE` avec `b = 2`, puis `EV_BASE_DESTROYED`). `pad_usable` exige une base debout quand l'équipe en a une.
+- **Cibles** : `combat.c` collecte les soldats, les mannequins **et les bases debout** (`TargetKind`) ; `hurt` reçoit l'équipe source (projectile, poing, explosion via `combat_explode_by`)
+  pour créditer les éliminations (`TeamStats.kills`) et épargner la base de l'équipe qui fait exploser.
+- **Règles** (`rules.c`, en fin de `game_update`) : `Team.playing` passe à vrai au premier soldat (`spawn_soldier`) ; `Team.eliminated` au dernier mort (`soldier_kill`) ;
+  `rules_update` verrouille `GameState.match` (fini, gagnant ou −1, tick de fin) quand il reste ≤ 1 équipe parmi ≥ 2 qui ont joué, et émet `EV_MATCH_OVER`.
+  Bases, statistiques et résultat sont hachés.
+- **Effectif de départ** : `SimConfig.start_squad` (1 par défaut ; 3 depuis le menu, `--squad N`) : `Sim` ajoute des soldats normaux à côté du point de départ de chaque équipe en jeu.
+
 ## Escouades
 
 - **`Soldier`** = `Companion` (corps, saut, échelles, portage, arme, PV) + équipe + variante + mémoire d'IA (`SoldierAi`) + dernière `InputFrame`.
@@ -313,8 +335,20 @@ Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont l
 - Debug : `--debug-nav` dessine le graphe (bleu : marcher, orange : sauter, rose : traverser, jaune : échelle), le chemin de chaque soldat IA et, au-dessus de sa tête, un carré à la couleur de son mode.
 - FSM par soldat + commandant par équipe : voir « Escouades ».
 
+## Écrans, HUD et son (M6)
+
+- **Écrans** (`app/front.c`, sans SDL) : `Front` = écran courant (`SCREEN_TITLE / SETUP / PLAY / PAUSE / RESULTS / QUIT`), entrée sélectionnée, niveau (`FRONT_LEVELS` : `beach.lvl`, `ai_arena.lvl`,
+  `test_arena.lvl`), mode spectateur, graine de la prochaine partie (+1 à chaque partie), aperçu du niveau (son arène à lui), et le `Sim` de la partie en cours. `front_tick` lit une `InputFrame`
+  (menus) ou la passe à `sim_tick` (partie) ; Échap en partie ouvre la pause ; la fin de partie mène aux résultats après `TUNING_RESULTS_DELAY_S`. `front_menu_rect` sert au dessin et à la souris
+  (`front_point`, `front_click`). Les sons de menu vont dans `Front.cues`.
+- **Dessin** : `render/draw_front.c` (titre animé, aperçu du niveau en minicarte, panneaux, tableau des résultats) ; `render/draw_game.c` dessine aussi le HUD (panneau du soldat, PV des bases,
+  chrono, flèches hors écran, bannière de fin) et les bases. Texte : `render/font.c` (glyphes 5 × 7, UTF-8, accents) + `ui_text` dans `render/draw_ui.c`.
+- **Son** : `app/sfx.c` synthétise chaque son (voix carré / triangle / dent de scie / bruit, glissement, filtre, décroissance) et choisit les cues ; `audio/audio.c` (SDL) ouvre le périphérique,
+  synthétise la banque une fois et lit sur 12 voix. Jamais en headless ; sous les tests, seulement avec `SDL_AUDIODRIVER=dummy`.
+
 ## Rendu
 
+- Le mélange alpha est actif (`SDL_BLENDMODE_BLEND`) : panneaux et voiles translucides.
 - Tout est dessiné dans une texture cible 640×360 (`SDL_TEXTUREACCESS_TARGET`), puis copiée à l'écran
   avec une mise à l'échelle entière (`SDL_SetRenderLogicalPresentation` en mode intégral).
 - Écran partagé : un viewport et une caméra par joueur local ; le monde est rendu une fois par viewport.
@@ -362,7 +396,11 @@ RGBA 640×360 via le renderer logiciel de SDL. Aucun display n'est requis.
 
 | Option | Rôle |
 |--------|------|
-| `--headless` | Simule puis quitte, sans fenêtre |
+| `--headless` | Simule puis quitte, sans fenêtre (directement une partie, sans menus) |
+| `--front` | Headless : fait tourner les écrans (titre d'abord), pilotés par `--script` ; la capture montre l'écran courant ; affiche `front ticks=… screen=…` puis le résumé de la partie s'il y en a une |
+| `--play` | Fenêtré : directement une partie avec les options ci-dessous (sans `--play`, la fenêtre s'ouvre sur l'écran titre) |
+| `--mute` | Pas de son (fenêtré) |
+| `--squad N` | Chaque équipe en jeu commence avec N soldats (1 par défaut ; 3 depuis le menu) |
 | `--frames N` | Nombre de ticks à simuler (défaut 600, ou la longueur du script) |
 | `--bot` | Bot aléatoire (marche, saute, échelles, traverse les plateformes) |
 | `--script "R:60 RJ:12"` | Script d'entrées (syntaxe dans `game/script.h`) ; `F@488/420:1` tire en visant le point (488, 420) du monde |
@@ -382,7 +420,7 @@ RGBA 640×360 via le renderer logiciel de SDL. Aucun display n'est requis.
 | `--debug-overlay` | Grille, hitboxes, vitesse, pastilles d'état, spawns et zones de largage |
 | `--trace N` | Affiche l'état du joueur tous les N ticks |
 
-La dernière ligne affichée (`ticks=… respawns=… products=… soldiers=… order=… hp=… weapon=… ammo=… shots=… hits=… kills=… deaths=… squads=a/b/c/d picked=… placed=… hash=…`) sert aux tests de déterminisme.
+La dernière ligne affichée (`ticks=… respawns=… products=… soldiers=… order=… hp=… weapon=… ammo=… shots=… hits=… kills=… deaths=… squads=a/b/c/d picked=… placed=… bases=a/b/c/d match=on|over winner=N stats=fab:élim:pertes/… hash=…`) sert aux tests de déterminisme.
 
 ### Boucle fenêtrée testée sans fenêtre
 
@@ -424,7 +462,12 @@ Les touches F1–F4 sont testées en injectant des événements (`SDL_PushEvent`
   véhicule, effectif maximal, rôles, défense sous la menace, équipe humaine sans commandant ; fuite ; suivre à l'étage ; attaquer à travers le niveau ; **partie IA contre IA de 7000 ticks** avec
   invariants, déterminisme, affrontement de deux lourds ; adversaires par défaut).
 - Fumée : `smoke_ai_match` (deux équipes IA, graphe affiché), `smoke_ai_opponent_vs_bot`, `smoke_ai_on_the_test_arena`.
-- À venir : tests de l'écran de résultats, des règles d'escarmouche (M6).
+- M6 : `rules` (bases : qui en a une, balles ennemies / amies, explosions qui épargnent leur base, base détruite ⇒ pad verrouillé et ruine traversée, base tombée sous les coups d'un attaquant ;
+  statistiques par équipe ; fin de partie : seul ne finit jamais, dernière équipe debout, défaite du joueur, match nul, trois équipes, résultat verrouillé ; commandant : base attaquée ⇒ défense,
+  sans base ⇒ pas de ramassage), `front` (niveaux proposés, titre, configuration, partie contre l'IA à 3 soldats, spectateur, pause, résultats puis nouvelle partie, souris, niveau absent),
+  `sfx` (chaque son audible et sans clic final, déterminisme, événements → sons, distance et panoramique, rafales, victoire / défaite, file de cues, sons des menus et d'une partie),
+  `nav` (La Crique traversable dans les deux sens, caisses rapportables de chaque zone aux deux pads, trajets aléatoires).
+- Fumée M6 : `smoke_front_title`, `smoke_front_setup`, `smoke_front_to_pause`, `smoke_front_quit`, `smoke_front_windowed_dummy` (écrans sous le pilote `dummy`, son sur le pilote audio `dummy`).
 
 ## Cibles CMake
 
@@ -432,7 +475,7 @@ Les touches F1–F4 sont testées en injectant des événements (`SDL_PushEvent`
 |-------|------|---------|
 | `cs_core` | static lib | `src/core` |
 | `cs_game` | static lib | `src/game` (dépend de `cs_core`) |
-| `cs_app` | static lib | `src/render/camera.c`, `src/app/sim.c` (sans SDL ; dépend de `cs_game`) |
+| `cs_app` | static lib | `src/render/camera.c`, `src/render/font.c`, `src/app/*.c` (sans SDL ; dépend de `cs_game`) |
 | `cs_platform` | static lib | `src/platform` + SDL3 |
-| `cratesquad` | exécutable | `main.c`, `src/render` (SDL) ; lie `cs_app`, `cs_platform` |
+| `cratesquad` | exécutable | `main.c`, `src/render` (SDL), `src/audio` ; lie `cs_app`, `cs_platform` |
 | `test_*` | exécutables | `tests/` |

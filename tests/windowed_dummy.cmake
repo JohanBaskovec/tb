@@ -6,7 +6,7 @@
 file(REMOVE ${SHOT})
 execute_process(
     COMMAND ${CMAKE_COMMAND} -E env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy
-            ${EXE} --expect-video-driver dummy --max-ticks 150
+            ${EXE} --play --expect-video-driver dummy --max-ticks 150
             --script "R:100 RJ:10 .:40" --debug-overlay --screenshot ${SHOT}
     OUTPUT_VARIABLE out
     ERROR_VARIABLE err

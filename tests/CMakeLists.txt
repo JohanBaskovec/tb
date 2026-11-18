@@ -28,6 +28,9 @@ cs_test(combat cs_app)
 cs_test(squad cs_app)
 cs_test(nav cs_game)
 cs_test(ai cs_app)
+cs_test(rules cs_app)
+cs_test(front cs_app)
+cs_test(sfx cs_app)
 cs_test(scenarios cs_app)
 cs_test(platform cs_platform cs_game)
 
@@ -95,6 +98,25 @@ add_test(NAME smoke_ai_opponent_vs_bot
 set_tests_properties(smoke_ai_opponent_vs_bot PROPERTIES PASS_REGULAR_EXPRESSION "squads=[0-9]+/[1-9][0-9]*/0/0")
 add_test(NAME smoke_ai_on_the_test_arena
     COMMAND cratesquad --headless --ai-team 1,2 --frames 4000 --seed 3)
+
+# Menus: the title screen; the way from it to a match and its pause menu; quitting from the title screen.
+add_test(NAME smoke_front_title
+    COMMAND cratesquad --headless --front --frames 90 --screenshot ${SHOTS}/front_title.png)
+set_tests_properties(smoke_front_title PROPERTIES PASS_REGULAR_EXPRESSION "screen=title ")
+add_test(NAME smoke_front_setup
+    COMMAND cratesquad --headless --front --script ".:3 C:1 .:20" --screenshot ${SHOTS}/front_setup.png)
+set_tests_properties(smoke_front_setup PROPERTIES PASS_REGULAR_EXPRESSION "screen=setup level=beach.lvl")
+add_test(NAME smoke_front_to_pause
+    COMMAND cratesquad --headless --front --script ".:3 C:1 .:3 C:1 R:90 P:1 .:5" --screenshot ${SHOTS}/front_pause.png)
+set_tests_properties(smoke_front_to_pause PROPERTIES PASS_REGULAR_EXPRESSION "screen=pause .*ticks=9[0-9] ")
+add_test(NAME smoke_front_quit
+    COMMAND cratesquad --headless --front --script ".:2 D:1 .:1 C:1 .:5")
+set_tests_properties(smoke_front_quit PROPERTIES PASS_REGULAR_EXPRESSION "screen=quit")
+add_test(NAME smoke_front_windowed_dummy
+    COMMAND ${CMAKE_COMMAND} -E env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy
+            ${EXE} --expect-video-driver dummy --max-ticks 200 --script ".:3 C:1 .:3 C:1 R:150"
+            --screenshot ${SHOTS}/front_windowed.png)
+set_tests_properties(smoke_front_windowed_dummy PROPERTIES PASS_REGULAR_EXPRESSION "audio=dummy.*screen=play")
 
 # Bad input must fail cleanly (non-zero exit), never crash.
 foreach(case bad_args bad_level bad_script bad_fill_pad bad_give bad_aim bad_soldier bad_order bad_ai_team)

@@ -4,6 +4,7 @@
 
 #include "app/sim.h"
 #include "game/ai.h"
+#include "game/base.h"
 #include "game/combat.h"
 #include "game/crate.h"
 #include "game/loot.h"
@@ -273,11 +274,11 @@ static void test_the_controlled_soldier_is_the_one_that_obeys_the_keys(void) {
     CHECK(fabsf(cx(&e, 1) - x1) < 60.0f);   // soldier 1 follows its own AI, not the keys
     tick(&e, KEY(ACT_SWITCH));
     tick(&e, 0);
-    const f32 y0 = cx(&e, 0);
+    const f32 y0 = cx(&e, 0), y1 = cx(&e, 1);
     for (int i = 0; i < 30; i++) {
         tick(&e, KEY(ACT_RIGHT));
     }
-    CHECK(cx(&e, 1) > x1 + 20.0f);
+    CHECK(cx(&e, 1) > y1 + 20.0f);
     CHECK(fabsf(cx(&e, 0) - y0) < 100.0f); // the other one is now AI-driven
     sim_free(&e.sim);
 }
@@ -397,27 +398,31 @@ static void test_follow_keeps_close_to_the_controlled_soldier(void) {
     sim_free(&e.sim);
 }
 
-static void test_guard_stays_near_the_pad(void) {
+static void test_guard_stays_near_the_base(void) {
     Env e;
     CHECK(env_init(&e, false));
     const i32 a = spawn(&e, 0, SOLDIER_NORMAL, 600.0f);
     gs_of(&e)->teams[0].order = ORDER_GUARD;
     move_soldier(&e, 0, 800.0f); // the leader is elsewhere: guarding does not follow it
     tick_n(&e, 700);
-    const Rect pad = pad_rect(gs_of(&e), 0);
-    const f32 home = pad.x + pad.w * 0.5f;
+    const f32 home = gs_of(&e)->teams[0].spawn.x; // in front of the base, off the pad (crates must settle there)
     CHECK(fabsf(cx(&e, a) - home) <= TUNING_AI_GUARD_BAND + 6.0f);
+    const Rect pad = pad_rect(gs_of(&e), 0);
+    const Rect body = body_rect(&soldier(&e, a)->body);
+    CHECK(body.x + body.w <= pad.x || body.x >= pad.x + pad.w);
     sim_free(&e.sim);
 }
 
-static void test_attack_goes_to_the_enemy_pad(void) {
+static void test_attack_goes_to_the_enemy_base_and_hits_it(void) {
     Env e;
     CHECK(env_init(&e, false));
     const i32 a = spawn(&e, 0, SOLDIER_NORMAL, 200.0f);
     gs_of(&e)->teams[0].order = ORDER_ATTACK;
     tick_n(&e, 900);
-    const Rect pad = pad_rect(gs_of(&e), 1);
-    CHECK(fabsf(cx(&e, a) - (pad.x + pad.w * 0.5f)) <= TUNING_AI_GUARD_BAND + 6.0f);
+    const Rect base = base_rect(gs_of(&e), 1);
+    CHECK(cx(&e, a) >= base.x - 4.0f * TILE_SIZE && cx(&e, a) <= base.x + base.w); // at the building, from the left
+    CHECK(gs_of(&e)->teams[1].base_hp < TUNING_BASE_HP); // punching it
+    CHECK(gs_of(&e)->teams[0].stats.base_damage == (u32)(TUNING_BASE_HP - gs_of(&e)->teams[1].base_hp));
     sim_free(&e.sim);
 }
 
@@ -753,8 +758,8 @@ int main(void) {
     RUN_TEST(test_water_sends_any_soldier_back_to_its_spawn);
     RUN_TEST(test_the_order_key_cycles_the_team_order);
     RUN_TEST(test_follow_keeps_close_to_the_controlled_soldier);
-    RUN_TEST(test_guard_stays_near_the_pad);
-    RUN_TEST(test_attack_goes_to_the_enemy_pad);
+    RUN_TEST(test_guard_stays_near_the_base);
+    RUN_TEST(test_attack_goes_to_the_enemy_base_and_hits_it);
     RUN_TEST(test_ai_soldiers_shoot_enemies_in_range);
     RUN_TEST(test_ai_does_not_shoot_through_walls);
     RUN_TEST(test_ai_does_not_shoot_out_of_range);

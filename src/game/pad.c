@@ -1,6 +1,7 @@
 #include "game/pad.h"
 
 #include "core/log.h"
+#include "game/base.h"
 #include "game/crate.h"
 #include "game/loot.h"
 #include "game/squad.h"
@@ -233,7 +234,8 @@ u32 pad_crate_count(const GameState *gs, i32 team) {
 }
 
 bool pad_usable(const GameState *gs, i32 team) {
-    return pad_site(gs, team) != NULL; // M3: and the team's base is still standing
+    // A team that has a base needs it standing; a pad without a base (test levels) always works.
+    return pad_site(gs, team) != NULL && (!gs->teams[team].has_base || base_alive(gs, team));
 }
 
 bool pad_read_grid(const GameState *gs, i32 team, PadGrid *grid, EntityId ids[PAD_ROWS][PAD_COLS]) {
@@ -347,6 +349,7 @@ bool pad_build(GameState *gs, i32 team, PadShape shape, bool blue) {
         crate_consume(gs, ids[chosen->cells[k].row][chosen->cells[k].col]);
     }
     gs->products_built++;
+    gs->teams[team].stats.built++;
     const Rect r = pad_rect(gs, team);
     events_push(&gs->events, EV_PAD_BUILT, vec2(r.x + r.w * 0.5f, r.y + r.h * 0.5f), (i32)chosen->product, team);
     return true;

@@ -291,3 +291,61 @@ Les travailleurs (ramasser / voler) ne quittent pas leur tâche pour poursuivre 
 un étage par côté atteint par une échelle, un pad par côté. Les zones de largage sont plafonnées (2 près des bases, 1 sur la colline) car les piles de 3 caisses ou plus sont hors de portée depuis le sol et finissent en mur.
 Les parties par défaut de l'exécutable (`ai_opponents`) mettent l'IA sur chaque équipe adverse qui a un point de départ et un pad ; les tests de logique (`Sim` sans cette option) n'ont aucune équipe IA sauf demande.
 
+
+### D051 — Bases : un bâtiment sur le point de départ, non solide, épargné par les explosions de son équipe
+**Statut :** Provisoire (forme, taille, règles de dégâts)
+Une équipe qui a un point de départ **et** un pad a une base : un bâtiment de 40 × 40 px posé sur son point de départ, derrière les soldats (il n'est pas solide : on passe devant).
+Elle a 1000 PV (`TUNING_BASE_HP`) et c'est une cible comme les autres dans `combat.c` : balles et coups des autres équipes s'arrêtent dessus ; une explosion la touche si elle n'est pas
+déclenchée par sa propre équipe (`combat_explode_by(…, équipe)` ; sans équipe, elle touche toutes les bases). Une base ne recule pas. Détruite, elle reste en ruine, n'est plus une cible,
+et `pad_usable` devient faux : plus de menu, plus de construction, mais les caisses du pad restent prenables. L'équipe continue avec les soldats qui lui restent. Un pad sans base (niveaux
+de test) reste utilisable. Une base touchée garde son équipe à la maison 3 s (le commandant se sent menacé). L'IA ne vise une base que si aucun soldat ni mannequin ennemi n'est en vue,
+et l'ordre *attaquer* mène devant la base adverse (3 tuiles avant, côté d'où l'on vient), puis vers son pad une fois détruite.
+Statistiques par équipe (`TeamStats` : éliminés, pertes, constructions, dégâts aux bases) pour l'écran de résultats ; un ennemi achevé est crédité à l'équipe qui a porté le coup.
+
+### D052 — Escarmouche : élimination au dernier soldat, résultat verrouillé
+**Statut :** Provisoire (en attente des règles multijoueur du jeu d'origine)
+Une équipe *joue* dès qu'elle a eu un soldat (`Team.playing`) ; elle est éliminée quand son dernier soldat meurt (l'eau ne tue pas). La partie est finie quand il reste au plus une équipe parmi
+au moins deux qui ont joué (seul contre des mannequins, elle ne finit jamais) : la dernière debout gagne, si les dernières tombent ensemble c'est un match nul. Le résultat (`GameState.match` :
+fini, gagnant, tick de fin) est verrouillé et haché ; `EV_MATCH_OVER` est émis une fois. La simulation continue derrière : l'écran de résultats arrive 2,5 s plus tard (`TUNING_RESULTS_DELAY_S`)
+et la fige. Détruire une base n'élimine pas : c'est le moyen de couper la production adverse.
+
+### D053 — Les écrans (titre, configuration, pause, résultats) dans `app/front.c`, sans SDL
+**Statut :** Acceptée
+Comme le menu du pad, l'enchaînement des écrans est une machine à états pure qui lit des `InputFrame` (haut / bas : choisir, gauche / droite : régler, Entrée ou Espace : valider, Échap : retour /
+pause) et des positions de souris en pixels logiques (`front_menu_rect` donne les rectangles au dessin et au clic). `Front` possède le `Sim` de la partie en cours (gros : il vit en statique dans
+`main.c`). Testé sans fenêtre (`test_front`) et pilotable par script en headless (`--front`). Mode fenêtré : écran titre par défaut ; `--play` va droit à une partie avec les options de la
+ligne de commande (c'est ce que font les tests et le débogage). Le dessin est dans `render/draw_front.c`. Le plan prévoyait `ui/` et `scenes/` : inutile tant que la logique tient dans `app/`.
+
+### D054 — Police bitmap écrite dans le code
+**Statut :** Acceptée
+Pas de fichier de police ni de bibliothèque (pas de stb_truetype) : une police 5 × 7 en capitales, chiffres et ponctuation, dessinée pour le projet dans `render/font.c` (une chaîne de `#` par glyphe),
+avec les accents du français posés au-dessus (é è ê ë à â ä î ï ô ö ù û ü, cédille dessous). Le texte est en UTF-8 ; les minuscules s'affichent en capitales ; un caractère inconnu donne « ? ».
+La partie données / mesure est sans SDL (testable, liée à `cs_app`), le dessin (`ui_text`, un rectangle par pixel allumé, mise à l'échelle entière) est dans `render/draw_ui.c`.
+Le rendu active le mélange alpha (`SDL_BLENDMODE_BLEND`) : panneaux et voiles sont translucides.
+
+### D055 — Sons placeholders synthétisés, joués par des `SDL_AudioStream`
+**Statut :** Acceptée
+Aucun fichier son : chaque son (tir, explosion, caisse, construction, mort, plouf, victoire, menus…) est décrit par 1 à 4 voix (carré, triangle, dent de scie, bruit ; glissement de hauteur,
+filtre passe-bas, décroissance) et synthétisé une fois au démarrage (`app/sfx.c`, sans SDL, déterministe). `sfx_consume` transforme les événements d'un tick en « cues » (son, volume, panoramique)
+entendus depuis le centre de la caméra : pleine puissance jusqu'à 220 px, silence au-delà de 760 px ; un même son a un écart minimal entre deux lectures (une rafale de coups fait un son).
+`audio/audio.c` ouvre le périphérique par défaut et lit sur 12 voix (`SDL_AudioStream` liés au même périphérique, mixés par SDL). Jamais de son en headless ; sous les tests (`--expect-video-driver`),
+seulement avec `SDL_AUDIODRIVER=dummy` ; `--mute` coupe tout.
+
+### D056 — Escarmouche à trois soldats ; garde devant la base, pas sur le pad
+**Statut :** Provisoire (à valider en jouant)
+Avec un seul soldat par équipe, la partie se joue au premier accrochage. Une escarmouche lancée du menu donne **3 soldats** à chaque équipe (`TUNING_SKIRMISH_START_SQUAD` ; `SimConfig.start_squad`,
+`--squad N` en ligne de commande, 1 par défaut pour que les tests et `--play` gardent leur départ). Cela a montré un défaut : les gardiens se postaient au centre du pad, or une caisse ne se pose pas
+sur une case occupée par un soldat ; le poste de garde (et l'attente d'un ramasseur sans travail, et la fuite) est donc **le point de départ**, devant la base.
+
+### D057 — L'IA vise avec une petite erreur, tirée du RNG du jeu
+**Statut :** Provisoire (valeur ; base des futures difficultés)
+Une IA parfaite et sans hasard rejouait la même partie quelle que soit la graine (le RNG ne servait qu'à la dispersion de l'uzi et aux zones mixtes), et un petit avantage de côté décidait toujours
+du vainqueur. Chaque tick où il vise, un soldat IA décale son point de visée de ±7 px (`TUNING_AI_AIM_ERROR`) avec `gs->rng` : toujours déterministe pour une graine, mais chaque graine donne une partie
+différente, et l'IA n'est plus un tireur d'élite.
+
+### D058 — « La Crique », premier niveau soigné, symétrique et vérifié par la navigation
+**Statut :** Acceptée
+112 × 32 tuiles : une base sur une falaise de chaque côté (avec une vigie atteinte par une échelle), une plage, un chenal d'eau de 2 tuiles enjambé par un petit pont (un porteur de caisse ne saute pas
+2 tuiles), et un plateau central à marches d'une tuile où tombent les caisses bleues. Cinq zones de largage plafonnées (rouges aux bases et sur les plages, bleue au centre). `test_nav` vérifie que
+toute place est atteignable depuis les deux départs et qu'une caisse peut être portée de chaque zone jusqu'aux deux pads, et y fait des trajets aléatoires. C'est le niveau proposé en premier par le menu.
+L'habillage du terrain (herbe, terre qui fonce en profondeur, planches, eau animée, ciel du soir, collines en parallaxe) est dessiné pour tous les niveaux par `draw_game.c`.

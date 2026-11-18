@@ -45,6 +45,7 @@ Render *render_create(bool headless, const char *title) {
         render_destroy(r);
         return NULL;
     }
+    SDL_SetRenderDrawBlendMode(r->renderer, SDL_BLENDMODE_BLEND); // colors with alpha < 255 are see-through
     return r;
 }
 

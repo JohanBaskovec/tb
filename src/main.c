@@ -1,4 +1,6 @@
+#include "app/front.h"
 #include "app/sim.h"
+#include "audio/audio.h"
 #include "core/config.h"
 #include "core/log.h"
 #include "game/combat.h"
@@ -7,6 +9,7 @@
 #include "game/squad.h"
 #include "game/walker.h"
 #include "platform/platform.h"
+#include "render/draw_front.h"
 #include "render/draw_game.h"
 #include "render/render.h"
 
@@ -21,6 +24,11 @@
 
 typedef struct Options {
     bool headless;
+    bool play;  // windowed: straight into a match, no menus
+    bool front; // headless: run the menus (title, setup...) instead of a match
+    bool seed_set;
+    bool mute;
+    u32 squad;  // soldiers each team starts with
     bool bot;
     bool frames_set;
     u32 frames;     // headless: ticks to simulate
@@ -62,6 +70,10 @@ static void print_usage(const char *prog) {
     fprintf(stderr,
             "Usage: %s [options]\n"
             "  --headless              no window: simulate and exit (needs no display)\n"
+            "  --play                  windowed: start a match at once (with the options below) instead of the title screen\n"
+            "  --front                 headless: run the menus (title screen first), driven by --script\n"
+            "  --mute                  no sound\n"
+            "  --squad N               every team in the match starts with N soldiers (default 1; 3 from the menus)\n"
             "  --frames N              headless: ticks to simulate (default 600, or the script length)\n"
             "  --max-ticks N           windowed: quit after N ticks\n"
             "  --bot                   drive the player with a random bot\n"
@@ -99,6 +111,18 @@ static bool parse_args(int argc, char **argv, Options *o) {
         const bool has_val = i + 1 < argc;
         if (strcmp(a, "--headless") == 0) {
             o->headless = true;
+        } else if (strcmp(a, "--play") == 0) {
+            o->play = true;
+        } else if (strcmp(a, "--front") == 0) {
+            o->front = true;
+        } else if (strcmp(a, "--mute") == 0) {
+            o->mute = true;
+        } else if (strcmp(a, "--squad") == 0 && has_val) {
+            o->squad = (u32)strtoul(argv[++i], NULL, 10);
+            if (o->squad < 1 || o->squad > 8) {
+                LOG_ERROR("--squad expects 1 to 8");
+                return false;
+            }
         } else if (strcmp(a, "--bot") == 0) {
             o->bot = true;
         } else if (strcmp(a, "--debug-overlay") == 0) {
@@ -128,6 +152,7 @@ static bool parse_args(int argc, char **argv, Options *o) {
             o->max_ticks = (u32)strtoul(argv[++i], NULL, 10);
         } else if (strcmp(a, "--seed") == 0 && has_val) {
             o->seed = strtoull(argv[++i], NULL, 10);
+            o->seed_set = true;
         } else if (strcmp(a, "--assets") == 0 && has_val) {
             o->assets = argv[++i];
         } else if (strcmp(a, "--level") == 0 && has_val) {
@@ -252,6 +277,20 @@ static bool parse_args(int argc, char **argv, Options *o) {
     return true;
 }
 
+// Sound for the window loops. Under the tests (--expect-video-driver) only SDL's silent "dummy" driver is
+// accepted, so that a test run never makes a sound.
+static Audio *open_audio(const Options *o) {
+    if (o->mute) {
+        return NULL;
+    }
+    const char *env = getenv("SDL_AUDIODRIVER");
+    if (o->expect_driver && (!env || strcmp(env, "dummy") != 0)) {
+        LOG_INFO("tests: no sound unless SDL_AUDIODRIVER=dummy");
+        return NULL;
+    }
+    return audio_create();
+}
+
 static void print_trace(const Sim *sim) {
     const Companion *c = game_player_const(&sim->gs);
     printf("t=%" PRIu64 " pos=(%.2f,%.2f) vel=(%.1f,%.1f) ground=%d ladder=%d\n", sim->gs.tick,
@@ -261,13 +300,21 @@ static void print_trace(const Sim *sim) {
 
 static void print_summary(const Sim *sim) {
     const Companion *c = game_player_const(&sim->gs);
+    char stats[128]; // per team: built:kills:losses
+    usize n = 0;
+    for (i32 t = 0; t < MAX_TEAMS; t++) {
+        const TeamStats *ts = &sim->gs.teams[t].stats;
+        n += (usize)snprintf(stats + n, sizeof(stats) - n, "%s%u:%u:%u", t ? "/" : "", ts->built, ts->kills, ts->losses);
+    }
     printf("ticks=%" PRIu64 " pos=(%.2f, %.2f) respawns=%u products=%u soldiers=%u/%u order=%s hp=%d weapon=%s ammo=%d shots=%u hits=%u "
-           "kills=%u deaths=%u squads=%u/%u/%u/%u picked=%u placed=%u hash=%016" PRIx64 "\n",
+           "kills=%u deaths=%u squads=%u/%u/%u/%u picked=%u placed=%u bases=%d/%d/%d/%d match=%s winner=%d stats=%s hash=%016" PRIx64 "\n",
            sim->gs.tick, (f64)c->body.pos.x, (f64)c->body.pos.y, sim->gs.respawns, sim->gs.products_built,
            team_soldier_count(&sim->gs, 0), team_soldier_count(&sim->gs, 1), order_name(sim->gs.teams[0].order), c->hp, weapon_name(c->weapon), c->ammo, sim->gs.combat_stats.shots, sim->gs.combat_stats.hits,
            sim->gs.combat_stats.kills, sim->gs.combat_stats.deaths, team_soldier_count(&sim->gs, 0),
            team_soldier_count(&sim->gs, 1), team_soldier_count(&sim->gs, 2), team_soldier_count(&sim->gs, 3),
-           sim->gs.crate_stats.picked_up, sim->gs.crate_stats.placed, game_hash(&sim->gs));
+           sim->gs.crate_stats.picked_up, sim->gs.crate_stats.placed, sim->gs.teams[0].base_hp, sim->gs.teams[1].base_hp,
+           sim->gs.teams[2].base_hp, sim->gs.teams[3].base_hp, sim->gs.match.over ? "over" : "on", sim->gs.match.winner + 1,
+           stats, game_hash(&sim->gs));
 }
 
 static bool write_shot(Render *render, const Sim *sim, u32 flags, const char *path) {
@@ -331,6 +378,7 @@ static int run_windowed(const Options *o, Sim *sim) {
     InputFrame human = {0};
     char title[96];
     snprintf(title, sizeof(title), "Crate Squad");
+    Audio *audio = open_audio(o);
 
     f64 prev = platform_time_s();
     f64 acc = 0.0;
@@ -387,11 +435,12 @@ static int run_windowed(const Options *o, Sim *sim) {
         } else if (ev.step) {
             to_run = 1;
         }
-        for (int i = 0; i < to_run; i++) {
+        for (int i = 0; i < to_run && !(o->max_ticks > 0 && sim->gs.tick >= o->max_ticks); i++) {
             platform_read_input(&human);
             sim_tick(sim, &human);
             ticks++;
         }
+        audio_play_all(audio, &sim->cues);
 
         const bool last = o->max_ticks > 0 && sim->gs.tick >= o->max_ticks;
         const f32 alpha = paused ? 1.0f : (f32)(acc / (f64)TICK_DT);
@@ -416,9 +465,193 @@ static int run_windowed(const Options *o, Sim *sim) {
             platform_sleep_ms(1); // do not spin when vsync is unavailable
         }
     }
-    printf("title=%s\n", render_title(render));
+    printf("title=%s audio=%s\n", render_title(render), audio ? audio_driver() : "off");
     print_summary(sim);
+    audio_destroy(audio);
     render_destroy(render);
+    return rc;
+}
+
+// ---- Menus (title, setup, match, pause, results) ------------------------------------------------
+
+static const char *const SCREEN_NAMES[] = {"title", "setup", "play", "pause", "results", "quit"};
+
+static void print_front_summary(const Front *f, u32 ticks) {
+    printf("front ticks=%u screen=%s level=%s spectate=%d\n", ticks, SCREEN_NAMES[f->screen], FRONT_LEVELS[f->level_index].file,
+           (int)f->spectate);
+    const Sim *sim = front_sim_const(f);
+    if (sim) {
+        print_summary(sim);
+    }
+}
+
+// Menus input: the script when there is one (tests), else nothing / the keyboard.
+static void front_input(Script *script, bool use_script, InputFrame *in, bool keyboard) {
+    if (use_script) {
+        script_next(script, in);
+    } else if (keyboard) {
+        platform_read_input(in);
+    } else {
+        input_frame_update(in, 0);
+    }
+}
+
+static int run_front_headless(const Options *o, Front *f, Script *script, bool use_script) {
+    Render *render = render_create(true, "Crate Squad");
+    if (!render) {
+        return 1;
+    }
+    const u32 flags = (o->debug_overlay ? DRAW_DEBUG : 0u) | (o->debug_nav ? DRAW_NAV : 0u);
+    u32 frames = o->frames;
+    if (use_script && !o->frames_set) {
+        frames = script_total_ticks(script);
+    }
+    InputFrame in = {0};
+    u32 ticks = 0;
+    for (; ticks < frames && f->screen != SCREEN_QUIT; ticks++) {
+        front_input(script, use_script, &in, false);
+        front_tick(f, &in);
+    }
+    int rc = 0;
+    if (o->shot) {
+        render_begin(render, (Color){0, 0, 0, 255});
+        draw_front(render, f, NULL, 1.0f, flags);
+        rc = render_screenshot(render, o->shot) ? 0 : 1;
+    }
+    print_front_summary(f, ticks);
+    render_destroy(render);
+    return rc;
+}
+
+static int run_front_windowed(const Options *o, Front *f, Script *script, bool use_script) {
+    Render *render = render_create(false, "Crate Squad");
+    if (!render) {
+        return 1;
+    }
+    u32 flags = (o->debug_overlay ? DRAW_DEBUG : 0u) | (o->debug_nav ? DRAW_NAV : 0u);
+    bool paused = false, slow = false;
+    InputFrame in = {0};
+    char title[96];
+    f64 prev = platform_time_s(), acc = 0.0, fps_clock = 0.0;
+    u32 frames = 0, ticks_shown = 0, ticks = 0;
+    Audio *audio = open_audio(o);
+    int rc = 0;
+    bool running = true;
+    while (running) {
+        PlatformEvents ev = {0};
+        platform_pump_events(&ev);
+        if (ev.quit) {
+            break;
+        }
+        Sim *sim = f->screen == SCREEN_PLAY ? front_sim(f) : NULL;
+        if (ev.toggle_debug) {
+            flags ^= DRAW_DEBUG;
+        }
+        if (ev.toggle_pause) {
+            paused = !paused;
+        }
+        if (ev.toggle_slow) {
+            slow = !slow;
+        }
+        if (ev.restart && sim) {
+            sim_restart(sim);
+        }
+        f32 mx, my;
+        bool left;
+        platform_read_mouse(&mx, &my, &left);
+        const Vec2 mouse = render_window_to_logical(render, mx, my);
+        if (ev.click) {
+            front_click(f, render_window_to_logical(render, ev.click_x, ev.click_y));
+        }
+        if (sim && (ev.mouse_moved || sim->mouse_active)) {
+            sim_set_mouse(sim, mouse, left);
+        } else if (!sim && ev.mouse_moved) {
+            front_point(f, mouse);
+        }
+
+        const f64 now = platform_time_s();
+        f64 frame_dt = MIN(now - prev, 0.25);
+        prev = now;
+        fps_clock += frame_dt;
+        const bool hold = paused && f->screen == SCREEN_PLAY; // the debug pause (F2) only freezes a match
+        if (!hold) {
+            acc += frame_dt * (slow ? 0.25 : 1.0);
+        }
+        int to_run = 0;
+        if (!hold) {
+            while (acc >= (f64)TICK_DT) {
+                to_run++;
+                acc -= (f64)TICK_DT;
+            }
+        } else if (ev.step) {
+            to_run = 1;
+        }
+        for (int i = 0; i < to_run && f->screen != SCREEN_QUIT && !(o->max_ticks > 0 && ticks >= o->max_ticks); i++) {
+            front_input(script, use_script, &in, true);
+            front_tick(f, &in);
+            ticks++;
+            ticks_shown++;
+        }
+        audio_play_all(audio, &f->cues);
+        if (front_sim(f)) {
+            audio_play_all(audio, &front_sim(f)->cues);
+        }
+        if (f->screen == SCREEN_QUIT) {
+            break;
+        }
+        const bool last = o->max_ticks > 0 && ticks >= o->max_ticks;
+        sim = f->screen == SCREEN_PLAY ? front_sim(f) : NULL;
+        const Vec2 *cross = sim && sim->mouse_active ? &sim->mouse_logical : NULL;
+        render_begin(render, (Color){0, 0, 0, 255});
+        draw_front(render, f, cross, hold ? 1.0f : (f32)(acc / (f64)TICK_DT), flags);
+        if (last && o->shot && !render_screenshot(render, o->shot)) {
+            rc = 1;
+        }
+        render_end(render);
+        frames++;
+        if (fps_clock >= 1.0) {
+            snprintf(title, sizeof(title), "Crate Squad - %u FPS / %u TPS", (unsigned)((f64)frames / fps_clock + 0.5),
+                     (unsigned)((f64)ticks_shown / fps_clock + 0.5));
+            render_set_title(render, title);
+            fps_clock = 0.0;
+            frames = 0;
+            ticks_shown = 0;
+        }
+        if (last) {
+            running = false;
+        } else {
+            platform_sleep_ms(1);
+        }
+    }
+    printf("title=%s audio=%s\n", render_title(render), audio ? audio_driver() : "off");
+    print_front_summary(f, ticks);
+    audio_destroy(audio);
+    render_destroy(render);
+    return rc;
+}
+
+static Front g_front; // big (a whole match inside): not on the stack
+
+static int run_front(const Options *o) {
+    Script script;
+    const bool use_script = o->script != NULL;
+    char err[256] = "";
+    if (use_script && !script_parse(&script, o->script, err, sizeof(err))) {
+        LOG_ERROR("%s", err);
+        return 1;
+    }
+    u64 seed = o->seed;
+    if (!o->seed_set && !o->headless) {
+        seed = (u64)(platform_time_s() * 1000.0); // a different match every time
+    }
+    const FrontConfig cfg = {.assets_dir = o->assets, .seed = seed};
+    if (!front_init(&g_front, &cfg)) {
+        LOG_ERROR("cannot set up the menus");
+        return 1;
+    }
+    const int rc = o->headless ? run_front_headless(o, &g_front, &script, use_script)
+                               : run_front_windowed(o, &g_front, &script, use_script);
+    front_free(&g_front);
     return rc;
 }
 
@@ -437,6 +670,12 @@ int main(int argc, char **argv) {
         return 3;
     }
 
+    if (o.headless ? o.front : !o.play) {
+        const int rc = run_front(&o);
+        platform_shutdown();
+        return rc;
+    }
+
     char level_path[1024];
     if (o.level) {
         snprintf(level_path, sizeof(level_path), "%s", o.level);
@@ -451,7 +690,8 @@ int main(int argc, char **argv) {
                      .has_start = o.has_start,
                      .start_feet = o.start_feet,
                      .ai_teams = o.ai_mask,
-                     .ai_opponents = !o.ai_set};
+                     .ai_opponents = !o.ai_set,
+                     .start_squad = o.squad};
     Sim sim;
     char err[256] = "";
     if (!sim_init(&sim, &cfg, err, sizeof(err))) {

@@ -1,6 +1,7 @@
 #include "game/combat.h"
 
 #include "core/log.h"
+#include "game/base.h"
 #include "game/crate.h"
 #include "game/loot.h"
 #include "game/tuning.h"
@@ -12,14 +13,16 @@
 
 // ---- Targets -----------------------------------------------------------------------------------
 
+typedef enum TargetKind { TARGET_SOLDIER, TARGET_DUMMY, TARGET_BASE } TargetKind;
+
 typedef struct Target {
-    bool is_soldier;
-    u16 slot; // soldier index, or dummy entity slot
+    TargetKind kind;
+    u16 slot; // soldier index, dummy entity slot, or team of the base
     i32 team;
     Rect rect;
 } Target;
 
-#define MAX_TARGETS (MAX_ENTITIES + 1)
+#define MAX_TARGETS (MAX_SOLDIERS + MAX_ENTITIES + MAX_TEAMS)
 
 static EntityId slot_id(const GameState *gs, u16 slot) {
     return (EntityId){slot, gs->entities.slots[slot].generation};
@@ -30,13 +33,18 @@ static u32 collect_targets(GameState *gs, Target *out) {
     for (u16 i = 0; i < MAX_SOLDIERS; i++) {
         const Soldier *s = &gs->soldiers[i];
         if (s->alive && s->c.hp > 0) {
-            out[n++] = (Target){true, i, s->team, body_rect(&s->c.body)};
+            out[n++] = (Target){TARGET_SOLDIER, i, s->team, body_rect(&s->c.body)};
         }
     }
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
         const Entity *e = &gs->entities.slots[i];
         if (e->type == ENT_DUMMY && !e->pending_destroy && e->as.dummy.hp > 0) {
-            out[n++] = (Target){false, i, e->as.dummy.team, body_rect(&e->body)};
+            out[n++] = (Target){TARGET_DUMMY, i, e->as.dummy.team, body_rect(&e->body)};
+        }
+    }
+    for (u16 t = 0; t < MAX_TEAMS; t++) {
+        if (base_alive(gs, t)) {
+            out[n++] = (Target){TARGET_BASE, t, t, base_rect(gs, t)};
         }
     }
     return n;
@@ -46,16 +54,28 @@ static Vec2 rect_center(Rect r) {
     return vec2(r.x + r.w * 0.5f, r.y + r.h * 0.5f);
 }
 
-static void hurt(GameState *gs, const Target *t, i32 amount, Vec2 impulse) {
+// `source_team`: the team of whoever dealt the blow (TEAM_NONE: nobody), credited with the kill.
+static void hurt(GameState *gs, const Target *t, i32 amount, Vec2 impulse, i32 source_team) {
     if (amount <= 0) {
         return;
     }
+    if (t->kind == TARGET_BASE) { // buildings do not budge; a team's own explosions spare its base
+        if (base_damage(gs, t->team, amount, source_team) > 0) {
+            gs->combat_stats.hits++;
+        }
+        return;
+    }
     gs->combat_stats.hits++;
-    events_push(&gs->events, EV_DAMAGE, rect_center(t->rect), amount, t->is_soldier ? 1 : 0);
-    if (t->is_soldier) {
-        Companion *p = &gs->soldiers[t->slot].c;
+    events_push(&gs->events, EV_DAMAGE, rect_center(t->rect), amount, t->kind == TARGET_SOLDIER ? 1 : 0);
+    if (t->kind == TARGET_SOLDIER) {
+        Soldier *s = &gs->soldiers[t->slot];
+        Companion *p = &s->c;
+        const bool was_alive = p->hp > 0;
         p->hp -= amount;
         p->hurt_ticks = HURT_FLASH_TICKS;
+        if (was_alive && p->hp <= 0 && source_team >= 0 && source_team < MAX_TEAMS && source_team != s->team) {
+            gs->teams[source_team].stats.kills++;
+        }
         crate_release_carried(gs, p); // a hit makes the soldier drop what it carries
         p->body.vel = vec2_add(p->body.vel, impulse);
         if (impulse.y < 0.0f) {
@@ -105,6 +125,10 @@ bool combat_line_clear(const Level *lv, Vec2 a, Vec2 b) {
 // ---- Explosions --------------------------------------------------------------------------------
 
 void combat_explode(GameState *gs, Vec2 center, WeaponKind weapon) {
+    combat_explode_by(gs, center, weapon, TEAM_NONE);
+}
+
+void combat_explode_by(GameState *gs, Vec2 center, WeaponKind weapon, i32 team) {
     const WeaponDef *def = weapon_def(weapon);
     gs->combat_stats.explosions++;
     events_push(&gs->events, EV_EXPLOSION, center, (i32)def->radius, (i32)weapon);
@@ -135,7 +159,7 @@ void combat_explode(GameState *gs, Vec2 center, WeaponKind weapon) {
         }
         const Vec2 impulse = vec2(px * def->knockback * falloff,
                                   py * def->knockback * falloff - TUNING_EXPLOSION_LIFT * falloff);
-        hurt(gs, t, (i32)((f32)def->damage * falloff + 0.5f), impulse);
+        hurt(gs, t, (i32)((f32)def->damage * falloff + 0.5f), impulse, team);
     }
 }
 
@@ -162,12 +186,12 @@ static void projectile_end(GameState *gs, u16 slot, const Target *victim) {
     Entity *e = &gs->entities.slots[slot];
     const WeaponDef *def = weapon_def(e->as.projectile.weapon);
     if (def->radius > 0.0f) {
-        combat_explode(gs, body_center(&e->body), e->as.projectile.weapon);
+        combat_explode_by(gs, body_center(&e->body), e->as.projectile.weapon, e->as.projectile.team);
     } else {
         events_push(&gs->events, EV_PROJECTILE_HIT, body_center(&e->body), (i32)e->as.projectile.weapon, 0);
         if (victim) {
             const f32 dir = e->body.vel.x >= 0.0f ? 1.0f : -1.0f;
-            hurt(gs, victim, def->damage, vec2(dir * def->knockback, 0.0f));
+            hurt(gs, victim, def->damage, vec2(dir * def->knockback, 0.0f), e->as.projectile.team);
         }
     }
     pool_mark_destroy(&gs->entities, slot_id(gs, slot));
@@ -334,7 +358,7 @@ static void punch(GameState *gs, Soldier *s, const WeaponDef *def) {
     i32 hits = 0;
     for (u32 i = 0; i < n; i++) {
         if (targets[i].team != s->team && rect_overlap(fist, targets[i].rect)) {
-            hurt(gs, &targets[i], def->damage, vec2((f32)p->facing * def->knockback, 0.0f));
+            hurt(gs, &targets[i], def->damage, vec2((f32)p->facing * def->knockback, 0.0f), s->team);
             hits++;
         }
     }

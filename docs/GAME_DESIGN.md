@@ -37,7 +37,7 @@
 | 3 | Armes et véhicules | ✅ liste suffisante « pour l'instant » : pistolet, uzi, grenades, lance-roquettes, tank |
 | 4 | Ordres de l'escouade | ✅ suivre, garder la base, ramasser, attaquer ; 🟡 + voler (ajouté en M5) |
 | 5 | Chutes de caisses | ✅ dépend de la carte (§ 5) |
-| 6 | Bases / victoire | ◐ base de 1000 PV, destructible par toute arme ; détruite = pad inutilisable, l'équipe continue ; conditions de victoire multijoueur encore ❓ |
+| 6 | Bases / victoire | ◐ base de 1000 PV, destructible par toute arme ; détruite = pad inutilisable, l'équipe continue (✅ M6) ; victoire par élimination ✅ |
 | 7 | Missions de campagne | ⏳ à voir mission par mission, plus tard |
 | 8 | Autres mécaniques importantes pour le « feeling » | ❓ ouvert, à compléter au fil du jeu |
 
@@ -52,6 +52,9 @@
 4. **Bases** : 1000 points de vie, destructibles avec n'importe quelle arme.
 5. **PV** : 100 (compagnon), 150, 200, du plus faible au plus fort.
 6. **Munitions** : dépendent de l'arme ; valeurs provisoires ci-dessous (§ 7), à ajuster en jouant.
+7. **Victoire en escarmouche** : la dernière équipe qui a encore des soldats gagne ; détruire une base coupe sa production mais n'élimine pas.
+8. **Effectif de départ** : une escarmouche commence à **3 soldats** par équipe.
+9. **Explosions et sa propre base** : les explosions blessent les soldats de toutes les équipes, mais **épargnent la base de l'équipe qui les déclenche**.
 
 ### ❓ Questions encore ouvertes
 
@@ -108,12 +111,12 @@ les escouades adverses (ou selon l'objectif de la mission).
   🟡 L'ordre vaut pour **tous les soldats de l'équipe que le joueur ne contrôle pas** (portée « tous » retenue) et s'affiche en haut à gauche
   (cinq pastilles, l'ordre actif allumé ; en dessous, une pastille par soldat vivant). Une équipe **menée par l'IA** n'a pas d'ordre d'équipe : son commandant donne un rôle à chaque soldat (§ 11).
   - **Suivre** : rester près du soldat contrôlé (à ± 40 px) et tirer sur les ennemis à portée.
-  - **Garder la base** : rester près du pad de l'équipe et tirer sur les ennemis à portée.
+  - **Garder la base** : rester devant la base de l'équipe (son point de départ, à côté du pad) et tirer sur les ennemis à portée.
   - **Ramasser** : aller chercher les caisses **libres** (sur n'importe quel sol : le soldat **navigue**, § 11), les rapporter au pad et les poser en
     colonnes de deux, en commençant par la colonne la plus éloignée du côté d'où l'on arrive ; s'arrêter quand le pad est plein. Une caisse
     qu'on ne pourrait pas **rapporter en la portant** (une échelle à descendre, une chute haute à remonter…) ou qu'on n'atteint pas (haut d'une pile,
     chemin bloqué) est ignorée 20 s. Les caisses d'un pad (le sien comme celui d'un autre) ne sont pas touchées.
-  - **Attaquer** : aller vers le pad adverse le plus proche (la base, tant qu'elle n'a pas de PV propres) et tirer sur ce qui est en chemin.
+  - **Attaquer** : aller vers la base adverse la plus proche, tirer sur ce qui est en chemin, puis sur la base elle-même ; une fois la base détruite, vers le pad adverse.
   - **Voler** : comme *ramasser*, mais en commençant par les caisses posées **sur le pad d'une autre équipe** (celles dont rien n'est posé dessus et
     qu'on peut approcher) ; faute de proie, il ramasse les caisses libres.
 - 🟡 Comportements communs : un soldat voit les ennemis à 200 px et jusqu'à 90 px au-dessus / au-dessous, **sans obstacle** entre eux ;
@@ -194,6 +197,10 @@ Les formes peuvent se situer n'importe où sur les 4 colonnes 🟡.
 - ✅ **Une base détruite ne peut plus utiliser son pad** ; l'équipe peut continuer à jouer avec les soldats qui lui restent
   (elle ne peut plus produire d'armes, de compagnons ni de véhicules).
 - ✅ Une base a **1000 points de vie** et est **destructible avec n'importe quelle arme**.
+- 🟡 La base est un bâtiment de 40 × 40 px posé sur le point de départ de l'équipe (les soldats en sortent) ; on passe devant (elle n'est pas solide).
+  Balles et coups des autres équipes s'arrêtent dessus ; les explosions la touchent, ✅ **sauf celles de sa propre équipe**. Détruite, elle reste en ruine ;
+  les caisses de son pad restent là et peuvent être volées.
+- 🟡 Une base touchée met son équipe IA en défense pendant 3 s. Les PV de toutes les bases sont affichés en haut de l'écran.
 
 ## 7. Armes ✅
 
@@ -241,17 +248,29 @@ Idées non confirmées, **non planifiées** : jeep, mini-hélico.
 - Terrain en tuiles : sol plein, plateformes fines traversables par dessous, échelles, eau/vide mortel.
 - Éléments placés : camps (pad + point d'apparition) par équipe, **zones de largage configurables
   (couleur, cadence, plafond)**, décor.
+- 🟡 (M6) **La Crique** (`beach.lvl`), premier niveau soigné : deux bases sur des falaises (avec une vigie à échelle), une plage de chaque côté, un chenal d'eau
+  franchi par un petit pont, un plateau central où tombent les caisses bleues. Tout se traverse dans les deux sens, y compris en portant une caisse.
+  `ai_arena.lvl` (« L'Arène ») et `test_arena.lvl` (« Terrain d'essai ») sont aussi proposés.
 - Formes typiques : symétrique gauche/droite pour 2 équipes ; plusieurs étages pour 3–4 équipes.
 - Décor destructible : hors périmètre initial, à envisager après le jalon « Contenu ».
 
 ## 10. Modes de jeu 🟡
 
 1. **Escarmouche** (priorité) : 2 à 4 équipes, joueurs humains et/ou IA, victoire par élimination.
+   - ✅ (M6) Chaque équipe commence avec **3 soldats** devant sa base. Une équipe est **éliminée** quand son dernier soldat meurt (l'eau ne tue pas : retour à la base) ;
+     la dernière équipe debout gagne ; si les dernières tombent en même temps, **match nul**. Détruire une base n'élimine pas.
+   - 🟡 L'écran de résultats arrive 2,5 s après : vainqueur, durée, et par équipe les constructions, les ennemis éliminés, les pertes, les soldats restants et l'état de la base.
+     On peut **rejouer** (même niveau, nouvelle graine) ou revenir au menu.
+   - 🟡 Écrans : titre (jouer, quitter) → nouvelle partie (niveau avec aperçu, mode « joueur contre l'IA » ou « IA contre IA » en spectateur) → partie → résultats.
+     Échap met en pause (reprendre, recommencer, abandonner).
 2. **Campagne** : suite de missions avec objectifs **propres à chaque mission** ✅ (à définir mission par mission, plus tard).
 3. Variantes plus tard : « roi des caisses » (le plus de caisses en fin de chrono), capture de drapeau.
 
 ## 11. IA ✅ (M5, valeurs 🟡)
 
+- 🟡 (M6) **Garde** : le poste de garde est le point de départ, devant la base (pas sur le pad, où un soldat empêcherait les caisses de se poser).
+  **Attaquer** mène devant la base adverse (3 tuiles avant), puis vers son pad une fois détruite ; un soldat ne tire sur une base que si aucun ennemi n'est en vue.
+  🟡 L'IA vise avec une petite erreur (± 7 px), tirée au hasard de la partie.
 - **Navigation** : le niveau est transformé en un graphe de places où se tenir (au sol, sur une échelle) reliées par des mouvements réels : marcher,
   sauter (cinq hauteurs, trois directions), traverser une plateforme fine en descendant, chuter, monter / descendre une échelle. Il est calculé en
   **rejouant la vraie physique** : un changement de vitesse ou de hauteur de saut change donc le graphe tout seul. Chaque mouvement existe pour un soldat
@@ -268,13 +287,16 @@ Idées non confirmées, **non planifiées** : jeep, mini-hélico.
     *attaquer* (la moitié du reste dès 4 soldats ; les lourds attaquent toujours), *garder* le reste. Un ennemi à moins de 220 px de la base : tout le monde défend.
     Qui porte une caisse finit son travail.
 - ⏳ Pas encore : viser une forme précise du pad pour une recette puissante (la livraison remplit les colonnes par deux, ce qui donne soldat puis lourd),
-  difficultés, véhicules, destruction de base (M6-M7).
+  difficultés, véhicules (M7).
 - Plusieurs niveaux de difficulté : temps de réaction, précision, agressivité. ❓ plus tard.
 
 ## 12. HUD 🟡
 
-- Par joueur : PV et arme/munitions du soldat actif, nombre de soldats de l'équipe, ordre courant.
-- Indicateurs hors écran : direction de la base et des caisses libres proches (couleur rouge / bleue distincte).
+- Par joueur : PV et arme/munitions du soldat actif, nombre de soldats de l'équipe, ordre courant. ✅ (M6, en haut à gauche, avec une police bitmap maison)
+- Indicateurs hors écran : direction de la base et des caisses libres proches (couleur rouge / bleue distincte). ✅ (M6 : un rond à la couleur de l'équipe par base,
+  un carré rouge / bleu pour les 3 caisses libres les plus proches)
+- 🟡 (M6) En haut au centre : les PV de chaque base (« DÉTRUITE » une fois à terre) ; en haut à droite : la durée de la partie ; « VICTOIRE ! », « DÉFAITE » ou « MATCH NUL »
+  en grand à la fin. Le menu du pad affiche le nom de la construction sélectionnée.
 - Menu de construction affiché à côté du pad à l'approche d'un soldat (§ 6) ; constructions irréalisables absentes ou grisées 🟡.
 
 ## 13. Direction artistique et audio 🟡
@@ -283,8 +305,10 @@ Idées non confirmées, **non planifiées** : jeep, mini-hélico.
   Attention : les caisses rouges/bleues ne doivent pas être confondues avec les couleurs d'équipe
   (forme ou motif distinct pour les caisses).
 - Personnages à inventer (forme, nom de l'espèce, ton humoristique).
-- Placeholders au début : rectangles colorés + police bitmap.
-- Sons courts et cartoon ; musique chiptune originale.
+- Placeholders au début : rectangles colorés + police bitmap. 🟡 (M6) Terrain habillé : herbe, terre, planches, eau animée, ciel du soir et collines en parallaxe ;
+  bases en forme de bunker aux couleurs de l'équipe, avec un drapeau (fissurées sous 50 % de PV, en ruine une fois détruites).
+- Sons courts et cartoon ; musique chiptune originale. 🟡 (M6) Sons placeholders synthétisés (aucun fichier) pour les événements : tirs, explosions, coups, caisses, constructions,
+  apparitions, morts, plouf, victoire / défaite, menus ; atténués avec la distance à la caméra. Pas encore de musique.
 
 ## 14. Hors périmètre (pour l'instant)
 
