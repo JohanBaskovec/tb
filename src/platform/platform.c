@@ -34,13 +34,18 @@ void platform_pump_events(PlatformEvents *out) {
             out->click = true;
             out->click_x = e.button.x;
             out->click_y = e.button.y;
+        } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_MIDDLE) {
+            out->mouse_moved = true;
+            out->middle_click = true;
+            out->middle_x = e.button.x;
+            out->middle_y = e.button.y;
         } else if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) {
             switch (e.key.scancode) {
             case SDL_SCANCODE_F1:
                 out->toggle_debug = true;
                 break;
             case SDL_SCANCODE_F2:
-                out->toggle_pause = true;
+                out->toggle_debug_menu = true;
                 break;
             case SDL_SCANCODE_F3:
                 out->step = true;
@@ -51,8 +56,15 @@ void platform_pump_events(PlatformEvents *out) {
             case SDL_SCANCODE_F5:
                 out->restart = true;
                 break;
+            case SDL_SCANCODE_F6:
+                out->toggle_pause = true;
+                break;
             default:
                 break;
+            }
+            // M is the letter on the key whatever the layout (unlike the movement keys, it is not about a position).
+            if (e.key.key == SDLK_M) {
+                out->toggle_music = true;
             }
         }
     }

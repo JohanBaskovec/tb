@@ -60,7 +60,8 @@ Sans écran (CI, captures, bots) :
 mkdir -p build/audio && ./build/cratesquad --export-audio build/audio
 ```
 
-`--mute` coupe le son, `--no-music` garde les bruitages sans la musique.
+`--mute` coupe le son, `--no-music` garde les bruitages sans la musique (M ne fait alors rien), `--music` démarre avec la musique allumée
+(sinon elle est coupée jusqu'à l'appui sur M), `--debug-menu` ouvre le menu de debug (visible dans les captures).
 `./build/cratesquad --sprite-sheet build/sprites.png` exporte tous les sprites (agrandis) dans un PNG.
 Toutes les options : `docs/ARCHITECTURE.md` § Exécution headless.
 
@@ -91,13 +92,16 @@ cmake --build build -j && ctest --test-dir build --output-on-failure
 | Prendre / poser une caisse ; échanger d'arme | E | B / Rond |
 | Lancer la caisse portée | X       | X / Carré        |
 | Détruire une caisse (cœurs ou munitions au hasard) | **bouton droit** | — |
+| Objectif de construction (menu circulaire ; les alliés en *ramasser* le construisent) | **clic du milieu** | — |
 | Changer de soldat (sans menu de pad ouvert) | Tab | RB / R1 |
 | Menu du pad : entrée suivante / valider | Tab / Entrée (ou clic gauche sur l'entrée) | — |
 | Ordre de l'équipe suivant (suivre → garder → ramasser → attaquer → voler) | touche à la position de Q (étiquetée A en AZERTY) | LB / L1 |
 | Pause (et retour dans les menus) | Échap | Start |
 | Menus : choisir / changer un réglage / valider | ↑ ↓ / ← → / Entrée ou Espace (ou souris) | — |
 | Debug overlay       | F1            | —                |
-| Pause / pas-à-pas / ralenti ×0,25 (debug) | F2 / F3 / F4 | — |
+| Musique : activer / couper (**coupée au départ**) | M (la lettre, quelle que soit la disposition) | — |
+| Menu de debug : faire apparaître une caisse, un allié, une arme ou un tank près du soldat suivi (clic) | F2 | — |
+| Pause / pas-à-pas / ralenti ×0,25 (debug) | F6 / F3 / F4 | — |
 | Recommencer la partie (debug) | F5 | — |
 
 **Les touches sont repérées par leur position physique** (scancodes SDL), pas par la lettre imprimée dessus :

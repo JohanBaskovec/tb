@@ -33,6 +33,17 @@ typedef struct PadCoord {
     u8 col, row;
 } PadCoord;
 
+// One position of a shape inside the 4x2 grid: the cells it covers, topmost row first then left to right.
+typedef struct PadPlacement {
+    u32 n;
+    PadCoord c[PAD_CELLS];
+} PadPlacement;
+
+#define PAD_MAX_PLACEMENTS 8
+
+// Every position of `shape` inside the grid; returns how many.
+u32 pad_shape_placements(PadShape shape, PadPlacement out[PAD_MAX_PLACEMENTS]);
+
 // One entry of the menu: a shape found among the crates, in its red or blue version.
 typedef struct PadOption {
     PadShape shape;
@@ -58,6 +69,9 @@ typedef struct PadOptionList {
 void pad_options(const PadGrid *grid, PadOptionList *out);
 // Recipe table lookup.
 PadProduct pad_recipe(PadShape shape, bool blue);
+// Puts a product that is not a weapon or a soldier (the tanks: models for now) on the map at `pos` (top left).
+// Returns ENTITY_NONE if the pool is full.
+EntityId product_spawn(GameState *gs, PadProduct kind, i32 team, Vec2 pos);
 // Number of crates in a shape (1, 2, 2, 3, 4, 8).
 u32 pad_shape_size(PadShape shape);
 const char *pad_shape_name(PadShape shape);

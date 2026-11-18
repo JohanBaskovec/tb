@@ -41,7 +41,7 @@ typedef struct Scenario {
 // from the slab down to the ground; water pit x 1024..1152 with a floating platform at y=400
 // (x 1056..1120).
 static const Scenario SCENARIOS[] = {
-    {"ground -> thin platform 1", 360, 432, "R:12 RJ:30 R:20 .:20", 50, 400, 384, 448, false},
+    {"ground -> thin platform 1", 360, 432, "R:12 RJ:30 R:5 .:20", 50, 400, 384, 448, false},
     {"platform 1 -> platform 2", 430, 400, "R:4 RJ:30 R:30 .:10", 45, 368, 464, 528, false},
     {"platform 2 -> platform 3", 520, 368, "R:2 RJ:30 R:30 .:10", 45, 336, 544, 608, false},
     {"platform 3 -> slab", 598, 336, "R:2 RJ:30 R:30 .:10", 45, 320, 608, 976, false},

@@ -379,7 +379,32 @@ void crate_carried_follow(GameState *gs) {
     }
 }
 
-// The reachable resting crate closest to the soldier that has nothing on top of it.
+// The crate the soldier stands on (the one under the most of its feet), if it is resting and has nothing else on it.
+static EntityId find_crate_underfoot(const GameState *gs, const Companion *p) {
+    const Body *b = &p->body;
+    if (!b->on_ground) {
+        return ENTITY_NONE;
+    }
+    const Rect feet = {b->pos.x, b->pos.y + b->size.y - 1.0f, b->size.x, 3.0f}; // the crate's top is at the soles
+    EntityId best = ENTITY_NONE;
+    f32 best_dist = 0.0f;
+    const f32 cx = b->pos.x + b->size.x * 0.5f;
+    for (u16 i = 1; i <= MAX_ENTITIES; i++) {
+        const Entity *e = &gs->entities.slots[i];
+        if (!is_live_crate(e) || e->as.crate.state != CRATE_RESTING || !rect_overlap(body_rect(&e->body), feet)) {
+            continue;
+        }
+        const f32 dist = fabsf(e->body.pos.x + CRATE_SIZE * 0.5f - cx);
+        if (!entity_id_valid(best) || dist < best_dist) {
+            best = slot_id(gs, i);
+            best_dist = dist;
+        }
+    }
+    return best;
+}
+
+// The reachable resting crate closest to the soldier that has nothing on top of it: in front of it, else the one it
+// stands on.
 static EntityId find_pickup(const GameState *gs, const Companion *p) {
     const Body *b = &p->body;
     const f32 reach = TUNING_PICKUP_REACH;
@@ -407,7 +432,7 @@ static EntityId find_pickup(const GameState *gs, const Companion *p) {
             best_dist = dist;
         }
     }
-    return best;
+    return entity_id_valid(best) ? best : find_crate_underfoot(gs, p);
 }
 
 EntityId crate_pickup_target(const GameState *gs, const Companion *p) {
@@ -422,6 +447,11 @@ static void try_pick_up(GameState *gs, Companion *p) {
     Entity *e = pool_get(&gs->entities, id);
     Crate *c = &e->as.crate;
     level_set_dyn_solid(gs->level, c->cell_x, c->cell_y, false);
+    const Body *b = &p->body;
+    if (fabsf(e->body.pos.y - (b->pos.y + b->size.y)) < 0.5f && e->body.pos.x < b->pos.x + b->size.x &&
+        b->pos.x < e->body.pos.x + CRATE_SIZE) {
+        p->body.on_ground = false; // it was the floor: the soldier comes down with the next step
+    }
     c->state = CRATE_CARRIED;
     e->body.vel = vec2(0.0f, 0.0f);
     e->prev_pos = e->body.pos;

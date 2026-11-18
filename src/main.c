@@ -7,11 +7,14 @@
 #include "core/wav.h"
 #include "game/combat.h"
 #include "game/crate.h"
+#include "game/goal.h"
 #include "game/pad.h"
 #include "game/squad.h"
 #include "game/walker.h"
 #include "platform/platform.h"
+#include "render/draw_debug.h"
 #include "render/draw_front.h"
+#include "render/draw_goal.h"
 #include "render/draw_game.h"
 #include "render/draw_ui.h"
 #include "render/render.h"
@@ -33,6 +36,8 @@ typedef struct Options {
     bool seed_set;
     bool mute;
     bool no_music;
+    bool music; // start with the music on (it is off until M is pressed)
+    bool debug_menu; // start with the F2 spawn menu open
     const char *export_audio; // directory: write every sound and song as WAV files, then quit
     const char *sprite_sheet; // PNG path: write the sprite atlases (every team, magnified), then quit
     u32 squad;  // soldiers each team starts with
@@ -61,6 +66,10 @@ typedef struct Options {
     CrateKind crate_kind[16];
     bool has_fill_pad;
     bool has_order;
+    bool has_goal;
+    PadShape goal_shape;
+    bool goal_blue;
+    bool goal_menu; // start with the middle-click ring open (shows in screenshots)
     Order order;
     u32 soldier_count;
     i32 soldier_team[16];
@@ -80,7 +89,9 @@ static void print_usage(const char *prog) {
             "  --play                  windowed: start a match at once (with the options below) instead of the title screen\n"
             "  --front                 headless: run the menus (title screen first), driven by --script\n"
             "  --mute                  no sound\n"
-            "  --no-music              sound effects only\n"
+            "  --no-music              sound effects only (M does nothing)\n"
+            "  --music                 start with the music on (it is off until M is pressed)\n"
+            "  --debug-menu            start with the F2 spawn menu open (shows in screenshots)\n"
             "  --export-audio DIR      write every sound effect and song to DIR as WAV files, then quit\n"
             "  --sprite-sheet PATH     write the sprites (every team, magnified 4x) to a PNG, then quit\n"
             "  --squad N               every team in the match starts with N soldiers (default 1; 1 to 5 from the menus)\n"
@@ -100,7 +111,11 @@ static void print_usage(const char *prog) {
             "  --fill-pad TOP,BOTTOM   put crates in the team-1 pad, e.g. rb..,rrr. (r red, b blue, . empty)\n"
             "  --soldier TEAM,VARIANT,X add a soldier (TEAM 1-4; VARIANT normal|strong|heavy|armored; feet x in pixels, at the\n"
             "                          height of the team-1 spawn); repeatable\n"
+            "  --goal SHAPE,COLOR      the build goal of team 1 (SHAPE: 1x1, 2x1h, 2x1v, l, 2x2, 4x2; COLOR: red or blue)\n"
+            "  --goal-menu             start with the build-goal ring open (shows in screenshots)\n"
             "  --order ORDER           order of team 1: follow, guard, collect, attack or steal\n"
+            "  --goal SHAPE,COLOR      build goal of team 1 (SHAPE: 1x1, 2x1h, 2x1v, l, 2x2, 4x2; COLOR: red or blue)\n"
+            "  --goal-menu             start with the build-goal ring open (shows in screenshots)\n"
             "  --give WEAPON           start with a full weapon: pistol, uzi, grenades, strong-grenades, rocket\n"
             "  --debug-overlay         draw hitboxes, grid and state flags\n"
             "  --debug-nav             draw the navigation graph, the paths and what each AI soldier is doing\n"
@@ -129,6 +144,10 @@ static bool parse_args(int argc, char **argv, Options *o) {
             o->mute = true;
         } else if (strcmp(a, "--no-music") == 0) {
             o->no_music = true;
+        } else if (strcmp(a, "--music") == 0) {
+            o->music = true;
+        } else if (strcmp(a, "--debug-menu") == 0) {
+            o->debug_menu = true;
         } else if (strcmp(a, "--export-audio") == 0 && has_val) {
             o->export_audio = argv[++i];
         } else if (strcmp(a, "--sprite-sheet") == 0 && has_val) {
@@ -254,6 +273,27 @@ static bool parse_args(int argc, char **argv, Options *o) {
                 return false;
             }
             o->order = found;
+        } else if (strcmp(a, "--goal") == 0 && has_val) {
+            static const char *const NAMES[SHAPE_COUNT] = {"1x1", "2x1h", "2x1v", "l", "2x2", "4x2"};
+            char shape[16] = "", color[16] = "";
+            if (sscanf(argv[++i], "%15[^,],%15s", shape, color) != 2 || (strcmp(color, "red") != 0 && strcmp(color, "blue") != 0)) {
+                LOG_ERROR("--goal expects SHAPE,COLOR such as 2x1h,red");
+                return false;
+            }
+            o->goal_shape = SHAPE_COUNT;
+            for (int k = 0; k < SHAPE_COUNT; k++) {
+                if (strcmp(shape, NAMES[k]) == 0) {
+                    o->goal_shape = (PadShape)k;
+                }
+            }
+            if (o->goal_shape == SHAPE_COUNT) {
+                LOG_ERROR("--goal: unknown shape '%s' (1x1, 2x1h, 2x1v, l, 2x2, 4x2)", shape);
+                return false;
+            }
+            o->has_goal = true;
+            o->goal_blue = strcmp(color, "blue") == 0;
+        } else if (strcmp(a, "--goal-menu") == 0) {
+            o->goal_menu = true;
         } else if (strcmp(a, "--give") == 0 && has_val) {
             const char *w = argv[++i];
             o->has_give = true;
@@ -304,7 +344,38 @@ static Audio *open_audio(const Options *o) {
         LOG_INFO("tests: no sound unless SDL_AUDIODRIVER=dummy");
         return NULL;
     }
-    return audio_create(!o->no_music);
+    Audio *audio = audio_create(!o->no_music);
+    audio_set_music_enabled(audio, o->music);
+    return audio;
+}
+
+// A short message after a key changes a setting, shown for a moment near the top of the screen.
+typedef struct Toast {
+    char text[40];
+    u32 frames_left;
+} Toast;
+
+#define TOAST_FRAMES 100
+
+static void toast_show(Toast *t, const char *text) {
+    snprintf(t->text, sizeof(t->text), "%s", text);
+    t->frames_left = TOAST_FRAMES;
+}
+
+static void toast_draw(Render *r, Toast *t) {
+    if (t->frames_left > 0) {
+        draw_toast(r, t->text);
+        t->frames_left--;
+    }
+}
+
+// M: music on / off.
+static void toggle_music(Audio *audio, Toast *toast) {
+    if (!audio || !audio_set_music_enabled(audio, !audio_music_enabled(audio))) {
+        toast_show(toast, "MUSIQUE INDISPONIBLE");
+        return;
+    }
+    toast_show(toast, audio_music_enabled(audio) ? "MUSIQUE : OUI" : "MUSIQUE : NON");
 }
 
 // --sprite-sheet: the atlases of the four teams and the white one, one under the other, magnified, on a grey
@@ -402,18 +473,20 @@ static void print_summary(const Sim *sim) {
         n += (usize)snprintf(stats + n, sizeof(stats) - n, "%s%u:%u:%u", t ? "/" : "", ts->built, ts->kills, ts->losses);
     }
     printf("ticks=%" PRIu64 " pos=(%.2f, %.2f) respawns=%u products=%u soldiers=%u/%u order=%s hp=%d weapon=%s ammo=%d shots=%u hits=%u "
-           "kills=%u deaths=%u squads=%u/%u/%u/%u picked=%u placed=%u bases=%d/%d/%d/%d match=%s winner=%d stats=%s hash=%016" PRIx64 "\n",
+           "kills=%u deaths=%u squads=%u/%u/%u/%u picked=%u placed=%u bases=%d/%d/%d/%d match=%s winner=%d end=%" PRIu64 " stats=%s hash=%016" PRIx64 "\n",
            sim->gs.tick, (f64)c->body.pos.x, (f64)c->body.pos.y, sim->gs.respawns, sim->gs.products_built,
            team_soldier_count(&sim->gs, 0), team_soldier_count(&sim->gs, 1), order_name(sim->gs.teams[0].order), c->hp, weapon_name(c->weapon), c->ammo, sim->gs.combat_stats.shots, sim->gs.combat_stats.hits,
            sim->gs.combat_stats.kills, sim->gs.combat_stats.deaths, team_soldier_count(&sim->gs, 0),
            team_soldier_count(&sim->gs, 1), team_soldier_count(&sim->gs, 2), team_soldier_count(&sim->gs, 3),
            sim->gs.crate_stats.picked_up, sim->gs.crate_stats.placed, sim->gs.teams[0].base_hp, sim->gs.teams[1].base_hp,
            sim->gs.teams[2].base_hp, sim->gs.teams[3].base_hp, sim->gs.match.over ? "over" : "on", sim->gs.match.winner + 1,
-           stats, game_hash(&sim->gs));
+           sim->gs.match.over ? sim->gs.match.end_tick : 0, stats, game_hash(&sim->gs));
 }
 
 static bool write_shot(Render *render, const Sim *sim, u32 flags, const char *path) {
     draw_game(render, &sim->gs, &sim->cam, &sim->menu, &sim->fx, sim->mouse_active ? &sim->mouse_logical : NULL, 1.0f, flags);
+    draw_debug_menu(render, &sim->debug, sim->mouse_active ? &sim->mouse_logical : NULL);
+    draw_goal_menu(render, &sim->goal_menu, &sim->gs.teams[PLAYER_TEAM].goal, sim->mouse_active ? &sim->mouse_logical : NULL);
     return render_screenshot(render, path);
 }
 
@@ -423,6 +496,7 @@ static int run_headless(const Options *o, Sim *sim) {
         return 1;
     }
     const u32 flags = (o->debug_overlay ? DRAW_DEBUG : 0u) | (o->debug_nav ? DRAW_NAV : 0u);
+    sim->debug.visible = o->debug_menu;
     u32 frames = o->frames;
     if (sim->use_script && !o->frames_set) {
         frames = script_total_ticks(&sim->script);
@@ -474,6 +548,8 @@ static int run_windowed(const Options *o, Sim *sim, const char *level_path) {
     char title[96];
     snprintf(title, sizeof(title), "Crate Squad");
     Audio *audio = open_audio(o);
+    Toast toast = {0};
+    sim->debug.visible = o->debug_menu;
 
     f64 prev = platform_time_s();
     f64 acc = 0.0;
@@ -494,6 +570,12 @@ static int run_windowed(const Options *o, Sim *sim, const char *level_path) {
         if (ev.toggle_pause) {
             paused = !paused;
         }
+        if (ev.toggle_debug_menu) {
+            sim_toggle_debug_menu(sim);
+        }
+        if (ev.toggle_music) {
+            toggle_music(audio, &toast);
+        }
         if (ev.restart) {
             sim_restart(sim);
         }
@@ -502,6 +584,9 @@ static int run_windowed(const Options *o, Sim *sim, const char *level_path) {
         }
         if (ev.click) {
             sim_click(sim, render_window_to_logical(render, ev.click_x, ev.click_y));
+        }
+        if (ev.middle_click) {
+            sim_toggle_goal_menu(sim, render_window_to_logical(render, ev.middle_x, ev.middle_y));
         }
         if (ev.mouse_moved || sim->mouse_active) { // once the mouse was used it keeps aiming and firing
             f32 mx, my;
@@ -541,6 +626,9 @@ static int run_windowed(const Options *o, Sim *sim, const char *level_path) {
         const bool last = o->max_ticks > 0 && sim->gs.tick >= o->max_ticks;
         const f32 alpha = paused ? 1.0f : (f32)(acc / (f64)TICK_DT);
         draw_game(render, &sim->gs, &sim->cam, &sim->menu, &sim->fx, sim->mouse_active ? &sim->mouse_logical : NULL, alpha, flags);
+        draw_debug_menu(render, &sim->debug, sim->mouse_active ? &sim->mouse_logical : NULL);
+        draw_goal_menu(render, &sim->goal_menu, &sim->gs.teams[PLAYER_TEAM].goal, sim->mouse_active ? &sim->mouse_logical : NULL);
+        toast_draw(render, &toast);
         if (last && o->shot && !render_screenshot(render, o->shot)) {
             rc = 1;
         }
@@ -561,7 +649,8 @@ static int run_windowed(const Options *o, Sim *sim, const char *level_path) {
             platform_sleep_ms(1); // do not spin when vsync is unavailable
         }
     }
-    printf("title=%s audio=%s\n", render_title(render), audio ? audio_driver() : "off");
+    printf("title=%s audio=%s music=%s\n", render_title(render), audio ? audio_driver() : "off",
+           audio_music_enabled(audio) ? "on" : "off");
     print_summary(sim);
     audio_destroy(audio);
     render_destroy(render);
@@ -631,6 +720,7 @@ static int run_front_windowed(const Options *o, Front *f, Script *script, bool u
     f64 prev = platform_time_s(), acc = 0.0, fps_clock = 0.0;
     u32 frames = 0, ticks_shown = 0, ticks = 0;
     Audio *audio = open_audio(o);
+    Toast toast = {0};
     int rc = 0;
     bool running = true;
     while (running) {
@@ -640,6 +730,12 @@ static int run_front_windowed(const Options *o, Front *f, Script *script, bool u
             break;
         }
         Sim *sim = f->screen == SCREEN_PLAY ? front_sim(f) : NULL;
+        if (ev.toggle_music) {
+            toggle_music(audio, &toast);
+        }
+        if (ev.toggle_debug_menu && sim) {
+            sim_toggle_debug_menu(sim);
+        }
         if (ev.toggle_debug) {
             flags ^= DRAW_DEBUG;
         }
@@ -659,6 +755,9 @@ static int run_front_windowed(const Options *o, Front *f, Script *script, bool u
         if (ev.click) {
             front_click(f, render_window_to_logical(render, ev.click_x, ev.click_y));
         }
+        if (ev.middle_click && sim) {
+            sim_toggle_goal_menu(sim, render_window_to_logical(render, ev.middle_x, ev.middle_y));
+        }
         if (sim && (ev.mouse_moved || sim->mouse_active)) {
             sim_set_mouse(sim, mouse, left, right);
         } else if (!sim && ev.mouse_moved) {
@@ -669,7 +768,7 @@ static int run_front_windowed(const Options *o, Front *f, Script *script, bool u
         f64 frame_dt = MIN(now - prev, 0.25);
         prev = now;
         fps_clock += frame_dt;
-        const bool hold = paused && f->screen == SCREEN_PLAY; // the debug pause (F2) only freezes a match
+        const bool hold = paused && f->screen == SCREEN_PLAY; // the debug pause (F6) only freezes a match
         if (!hold) {
             acc += frame_dt * (slow ? 0.25 : 1.0);
         }
@@ -703,6 +802,11 @@ static int run_front_windowed(const Options *o, Front *f, Script *script, bool u
         const Vec2 *cross = sim && sim->mouse_active ? &sim->mouse_logical : NULL;
         render_begin(render, (Color){0, 0, 0, 255});
         draw_front(render, f, cross, hold ? 1.0f : (f32)(acc / (f64)TICK_DT), flags);
+        if (sim) {
+            draw_debug_menu(render, &sim->debug, cross);
+            draw_goal_menu(render, &sim->goal_menu, &sim->gs.teams[PLAYER_TEAM].goal, cross);
+        }
+        toast_draw(render, &toast);
         if (last && o->shot && !render_screenshot(render, o->shot)) {
             rc = 1;
         }
@@ -722,7 +826,8 @@ static int run_front_windowed(const Options *o, Front *f, Script *script, bool u
             platform_sleep_ms(1);
         }
     }
-    printf("title=%s audio=%s\n", render_title(render), audio ? audio_driver() : "off");
+    printf("title=%s audio=%s music=%s\n", render_title(render), audio ? audio_driver() : "off",
+           audio_music_enabled(audio) ? "on" : "off");
     print_front_summary(f, ticks);
     audio_destroy(audio);
     render_destroy(render);
@@ -829,6 +934,12 @@ int main(int argc, char **argv) {
     }
     if (o.has_order) {
         sim.gs.teams[PLAYER_TEAM].order = o.order;
+    }
+    if (o.has_goal) {
+        goal_set(&sim.gs, PLAYER_TEAM, o.goal_shape, o.goal_blue);
+    }
+    if (o.goal_menu) {
+        goal_menu_open(&sim.goal_menu, vec2((f32)LOGICAL_W * 0.5f, (f32)LOGICAL_H * 0.5f));
     }
     if (o.has_give) {
         combat_give_weapon(&sim.gs, o.give);

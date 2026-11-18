@@ -6,14 +6,18 @@
 // Things the window loop cares about besides gameplay input.
 typedef struct PlatformEvents {
     bool quit;
-    bool toggle_debug; // F1
-    bool toggle_pause; // F2
-    bool step;         // F3: advance one tick while paused
-    bool toggle_slow;  // F4: quarter speed
-    bool restart;      // F5: start the match over
+    bool toggle_debug;      // F1: debug overlay
+    bool toggle_debug_menu; // F2: the spawn menu
+    bool step;              // F3: advance one tick while paused
+    bool toggle_slow;       // F4: quarter speed
+    bool restart;           // F5: start the match over
+    bool toggle_pause;      // F6: freeze the match (debug)
+    bool toggle_music;      // M: music on / off
     bool mouse_moved;  // the mouse moved or clicked: from then on the soldier aims with it
     bool click;        // left mouse button pressed
     f32 click_x, click_y; // where, in window pixels (convert with render_window_to_logical)
+    bool middle_click; // middle mouse button pressed: the build-goal ring
+    f32 middle_x, middle_y; // where
 } PlatformEvents;
 
 // Headless mode initializes no video/audio subsystem at all.

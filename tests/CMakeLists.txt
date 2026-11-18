@@ -23,6 +23,8 @@ cs_test(game cs_app)
 cs_test(crate cs_app)
 cs_test(pad cs_app)
 cs_test(pad_menu cs_app)
+cs_test(debug_menu cs_app)
+cs_test(goal cs_app)
 cs_test(events cs_app)
 cs_test(combat cs_app)
 cs_test(squad cs_app)
@@ -119,7 +121,33 @@ add_test(NAME smoke_front_windowed_dummy
     COMMAND ${CMAKE_COMMAND} -E env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy
             ${EXE} --expect-video-driver dummy --max-ticks 200 --script ".:3 C:1 .:3 C:1 R:150"
             --screenshot ${SHOTS}/front_windowed.png)
-set_tests_properties(smoke_front_windowed_dummy PROPERTIES PASS_REGULAR_EXPRESSION "audio=dummy.*screen=play")
+set_tests_properties(smoke_front_windowed_dummy PROPERTIES PASS_REGULAR_EXPRESSION "audio=dummy music=off.*screen=play")
+
+# The music is off until M is pressed; --music starts with it on; --no-music has no music at all.
+add_test(NAME smoke_music_flag
+    COMMAND ${CMAKE_COMMAND} -E env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy
+            ${EXE} --expect-video-driver dummy --max-ticks 30 --music --script ".:3 C:1 .:3 C:1 R:20")
+set_tests_properties(smoke_music_flag PROPERTIES PASS_REGULAR_EXPRESSION "audio=dummy music=on")
+add_test(NAME smoke_no_music_flag
+    COMMAND ${CMAKE_COMMAND} -E env SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy
+            ${EXE} --expect-video-driver dummy --max-ticks 30 --no-music --music --script ".:3 C:1 .:3 C:1 R:20")
+set_tests_properties(smoke_no_music_flag PROPERTIES PASS_REGULAR_EXPRESSION "audio=dummy music=off")
+
+# The build goal: an ally brings the two crates of a 2x1 horizontal shape to the pad and builds it (team 1 shows one build).
+add_test(NAME smoke_goal_builds
+    COMMAND cratesquad --headless --goal 2x1h,red --order collect --soldier 1,normal,120 --crate 150,300,red --crate 170,300,red
+            --crate 200,300,red --frames 2400 --ai-team none --screenshot ${SHOTS}/goal_built.png)
+set_tests_properties(smoke_goal_builds PROPERTIES PASS_REGULAR_EXPRESSION "stats=1:0:0/")
+add_test(NAME smoke_goal_menu
+    COMMAND cratesquad --headless --goal-menu --goal 4x2,blue --frames 30 --screenshot ${SHOTS}/goal_menu.png)
+set_tests_properties(smoke_goal_menu PROPERTIES PASS_REGULAR_EXPRESSION "ticks=30 ")
+add_test(NAME bad_goal_option COMMAND cratesquad --headless --goal 3x3,red)
+set_tests_properties(bad_goal_option PROPERTIES WILL_FAIL TRUE)
+
+# The F2 spawn menu is drawn in screenshots with --debug-menu.
+add_test(NAME smoke_debug_menu
+    COMMAND cratesquad --headless --debug-menu --frames 30 --screenshot ${SHOTS}/debug_menu.png)
+set_tests_properties(smoke_debug_menu PROPERTIES PASS_REGULAR_EXPRESSION "ticks=30 ")
 
 add_test(NAME smoke_sprite_sheet COMMAND cratesquad --sprite-sheet ${SHOTS}/sprite_sheet.png)
 set_tests_properties(smoke_sprite_sheet PROPERTIES PASS_REGULAR_EXPRESSION "sprite sheet: [0-9]+ sprites x 5 palettes")

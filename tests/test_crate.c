@@ -330,9 +330,56 @@ static void test_player_stands_on_a_crate(void) {
     CHECK_NEAR(player_feet(&e), 144.0, 1e-3);
     ticks(&e, 0, 30);
     CHECK_NEAR(player_feet(&e), 144.0, 1e-3);
-    // Standing on it does not let you pick it up.
+    sim_free(&e.sim);
+}
+
+static void test_the_crate_underfoot_can_be_picked_up(void) {
+    TestMap m = base_map();
+    Env e;
+    CHECK(env_init(&e, &m, NULL));
+    EntityId id = spawn_resting(&e, CRATE_BLUE, 6, 9);
+    teleport(&e, 104, 144); // standing on it
+    CHECK(entity_id_eq(crate_pickup_target(gs_of(&e), game_player(gs_of(&e))), id)); // the white frame is on it
     press(&e, KEY(ACT_GRAB));
-    CHECK(!entity_id_valid(game_player(gs_of(&e))->carrying));
+    CHECK(entity_id_eq(game_player(gs_of(&e))->carrying, id));
+    CHECK(crate_of(&e, id)->as.crate.state == CRATE_CARRIED && crate_of(&e, id)->as.crate.kind == CRATE_BLUE);
+    CHECK(!level_dyn_solid(&e.sim.level, 6, 9)); // its cell is free again
+    ticks(&e, 0, 20);
+    CHECK_NEAR(player_feet(&e), 160.0, 1e-3); // the soldier came down to the floor with it overhead
+    const Body *pb = &game_player(gs_of(&e))->body;
+    CHECK_NEAR(crate_of(&e, id)->body.pos.y, pb->pos.y - 16.0f, 1e-3);
+    CHECK_EQ_U64(gs_of(&e)->crate_stats.picked_up, 1);
+    sim_free(&e.sim);
+}
+
+static void test_standing_on_a_stack_takes_the_top_one_and_the_front_crate_comes_first(void) {
+    TestMap m = base_map();
+    Env e;
+    CHECK(env_init(&e, &m, NULL));
+    spawn_resting(&e, CRATE_RED, 6, 9);
+    EntityId top = spawn_resting(&e, CRATE_RED, 6, 8);
+    teleport(&e, 104, 128); // on the top of a stack of two
+    press(&e, KEY(ACT_GRAB));
+    CHECK(entity_id_eq(game_player(gs_of(&e))->carrying, top));
+    CHECK(is_resting_at(&e, 6, 9) && !is_resting_at(&e, 6, 8));
+    sim_free(&e.sim);
+
+    // A crate in front, level with the feet, is taken before the one underfoot.
+    CHECK(env_init(&e, &m, NULL));
+    spawn_resting(&e, CRATE_RED, 6, 9);
+    EntityId ahead = spawn_resting(&e, CRATE_BLUE, 7, 8);
+    spawn_resting(&e, CRATE_RED, 7, 9);
+    teleport(&e, 104, 144);
+    press(&e, KEY(ACT_GRAB));
+    CHECK(entity_id_eq(game_player(gs_of(&e))->carrying, ahead));
+    sim_free(&e.sim);
+
+    // In the air, nothing underfoot counts.
+    CHECK(env_init(&e, &m, NULL));
+    spawn_resting(&e, CRATE_RED, 6, 9);
+    teleport(&e, 104, 120);
+    CHECK(!game_player(gs_of(&e))->body.on_ground);
+    CHECK(!entity_id_valid(crate_pickup_target(gs_of(&e), game_player(gs_of(&e)))));
     sim_free(&e.sim);
 }
 
@@ -895,6 +942,8 @@ int main(void) {
     RUN_TEST(test_player_is_blocked_by_a_crate_and_can_climb_a_low_stack);
     RUN_TEST(test_a_tall_stack_is_a_wall);
     RUN_TEST(test_player_stands_on_a_crate);
+    RUN_TEST(test_the_crate_underfoot_can_be_picked_up);
+    RUN_TEST(test_standing_on_a_stack_takes_the_top_one_and_the_front_crate_comes_first);
     RUN_TEST(test_pick_up_and_carry);
     RUN_TEST(test_pick_up_reach_and_direction);
     RUN_TEST(test_only_the_top_of_a_stack_can_be_picked);

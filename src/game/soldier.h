@@ -73,6 +73,7 @@ typedef struct SoldierAi {
     u32 clock;         // ticks since the soldier exists: paces the trigger
     CollectState collect;
     i32 deliver_dir;   // +1: walks in from the left of the pad and fills it from the right; -1: the mirror
+    i32 deliver_col;   // pad column this soldier is bringing its crate to under a build goal (-1: none yet)
     EntityId crate;    // crate being fetched
     u32 state_ticks;   // ticks spent in the current collect state
     EntityId banned[AI_BAN_SLOTS]; // crates that could not be fetched or delivered: ignored for a while
@@ -96,6 +97,13 @@ typedef struct TeamStats {
     u32 base_damage; // hit points it took from enemy bases
 } TeamStats;
 
+// What the team's allies try to build on the pad while the order is "collect" (game/goal.h). `shape` is a PadShape.
+typedef struct BuildGoal {
+    bool active;
+    i32 shape;
+    bool blue; // the blue version (at least one blue crate); the red version also accepts blue crates
+} BuildGoal;
+
 typedef struct Team {
     bool active; // has a spawn in the level
     bool playing; // took part in the match: had at least one soldier
@@ -108,5 +116,6 @@ typedef struct Team {
     u32 base_hurt_ticks; // > 0: the base was just hit (flash; the commander defends)
     u32 stagnant_ticks; // commander: how long the pad has been waiting without a new crate
     u32 pad_crates;     // commander: crates on the pad when it last looked
+    BuildGoal goal;     // chosen by the human with the middle-click menu
     TeamStats stats;
 } Team;

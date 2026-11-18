@@ -11,6 +11,7 @@
 #pragma once
 
 #include "core/geom.h"
+#include "game/weapon.h"
 
 #define SPRITE_CELL 32
 #define SPRITE_COLUMNS 16
@@ -103,6 +104,8 @@ static inline SpriteId sprite_body(i32 variant, BodyPose pose) {
 }
 
 SpriteInfo sprite_info(SpriteId id);
+// The sprite of a weapon in hand or on the ground; SPR_COUNT for the fists (they have none).
+SpriteId sprite_for_weapon(WeaponKind weapon);
 // Where the sprite is in an atlas (pixels).
 Rect sprite_rect(SpriteId id);
 // How far the head and torso of a pose sit below their usual place (breathing, stride).

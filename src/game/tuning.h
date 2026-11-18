@@ -10,7 +10,7 @@
 #define TUNING_COMPANION_H 22.0f
 
 // Horizontal movement.
-#define TUNING_WALK_SPEED 100.0f
+#define TUNING_WALK_SPEED 115.0f
 #define TUNING_GROUND_ACCEL 900.0f
 #define TUNING_GROUND_DECEL 1200.0f
 #define TUNING_AIR_ACCEL 600.0f

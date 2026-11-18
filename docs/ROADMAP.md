@@ -26,7 +26,7 @@ que lorsque les critères de fin sont remplis. Cases : `[ ]` à faire, `[x]` fai
 - [x] Soldat : marcher, sauter (hauteur variable, coyote time, jump buffer)
 - [x] Plateformes fines (traverser par dessous, descendre) et échelles (le haut d'une échelle sert de sol)
 - [x] Caméra : suivi, zone morte, anticipation, limites du niveau
-- [x] Overlay debug : hitboxes, grille, vitesse, pastilles d'état (`--debug-overlay` / F1) ; pause / pas-à-pas / ralenti (F2/F3/F4, événements testés)
+- [x] Overlay debug : hitboxes, grille, vitesse, pastilles d'état (`--debug-overlay` / F1) ; pause / pas-à-pas / ralenti (F6/F3/F4 depuis D067, événements testés)
 - [x] Fichier `tuning.h`
 - [x] Outils de test : scripts d'entrées, bot aléatoire, bot « marcheur », `--start`, `--walk-to`, films de captures
 - [x] Niveau de test `assets/levels/test_arena.lvl` (80×30) et scénarios de traversée automatisés
@@ -97,6 +97,9 @@ Après le point d'étape (demandé par l'utilisateur) :
 - [x] Écrasement des caisses à l'atterrissage et à la pose (`fx_crate_squash`)
 - [x] Cadres blancs : caisse qui serait prise / détruite, case où la caisse portée serait posée (D066)
 - [x] Prendre / poser sur **E** (au lieu de C)
+- [x] Touche **M** : musique allumée / coupée, **coupée au départ** (`--music` pour la démarrer allumée)
+- [x] **Objectif de construction** : clic du milieu → menu circulaire des 12 constructions (forme en caisses) ; les alliés en *ramasser* apportent les bonnes caisses (couleur préférée, bleu déjà là accepté) et construisent (D068)
+- [x] Menu de debug **F2** : faire apparaître une caisse rouge / bleue, un allié, une arme ou un tank près du soldat (D067) ; la pause passe sur F6
 - [x] Détruire une caisse au **clic droit** : cœurs ou munitions au hasard (D066)
 - [x] Tileset (herbe, terre en profondeur, planches, échelles, décor de touffes, fleurs et cailloux), eau animée, base en 3 états + ruine, drapeau, mannequin, tanks en maquette,
   mallette d'arme, pad en acier, icônes du HUD et du menu du pad, camps sur l'écran titre (D065)

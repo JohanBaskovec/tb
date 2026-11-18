@@ -413,3 +413,24 @@ sur la moitié basse, pour des dégradés sans bandes nettes ; arêtes, débord 
 - **Écrasement des caisses** : `fx_observe` repère les passages d'un état en vol (ou porté) à posé, par case du pool, sans nouvel événement du jeu ; le pivot du sprite de caisse passe
   en bas pour que l'écrasement reste au sol.
 
+### D067 — Musique coupée au départ, menu de debug sur F2
+**Statut :** Acceptée
+- **Musique** : le flux musical reste ouvert (sauf `--no-music`) mais `audio_music` demande le silence tant que `audio_set_music_enabled` n'a pas été appelé : M bascule (par la lettre
+  de la touche, pas par sa position : ce n'est pas une touche de déplacement) et un message bref s'affiche. `--music` démarre allumée. Une coupure se fait en fondu (le morceau en cours
+  s'efface en 0,5 s). Sans flux (pas de périphérique, `--mute`, `--no-music`), M affiche « MUSIQUE INDISPONIBLE ».
+- **F2 = menu de debug** ; l'ancienne pause F2 passe sur **F6** (F3 pas-à-pas, F4 ralenti, F5 recommencer inchangés). Le menu ne gèle pas la partie : on peut faire apparaître des choses
+  pendant que ça tourne. Il se commande à la souris seulement (les flèches, Entrée et Tab sont pris par le jeu), et un clic dessus ne tire pas. C'est un outil de développement :
+  il modifie la partie (et son hachage) seulement quand on s'en sert, et les IA l'ignorent. Il vit dans `Sim` pour que les tests l'exercent sans fenêtre (`sim_click`, `sim_debug_spawn`).
+
+### D068 — Objectif de construction pour les alliés
+**Statut :** Acceptée
+- **Un objectif par équipe**, un état du jeu (`Team.goal`, haché) choisi au clic du milieu, et non un réglage de l'IA : il vaut pour l'équipe du joueur, les équipes menées par l'IA gardent leur commandant.
+- **Entrées = formes × couleurs** (12), pas des produits : l'ordre « rouge d'abord, bleu accepté s'il est déjà là » n'a de sens que par forme et couleur (l'uzi s'obtient en 1×1 bleu comme en L rouge).
+  Un objectif rouge accepte les caisses bleues déjà sur le pad ou déjà portées (et on construit alors la version bleue) ; il en va chercher si la carte n'a plus de rouge. Un objectif bleu exige une caisse bleue.
+- **Il ne joue que sous l'ordre *ramasser*** (le sens de la demande) et construit tout seul quand la forme est sur le pad **si un allié est là** ; l'objectif est alors **accompli et effacé** (un objectif
+  « permanent » est une variante facile : ne pas appeler `goal_clear` dans `goal_update`). Sans allié, le joueur construit avec le menu du pad comme avant.
+- **Le plan est pur** (`goal_plan`) et partagé : le HUD, `goal_update` et l'IA lisent la même chose, donc un test suffit pour dire ce qu'ils font. Il tient compte du côté d'arrivée parce qu'on pose une caisse
+  depuis la colonne d'avant : une pile de deux ne se franchit pas en portant, et un allié ne rapporte que des caisses qui peuvent entrer par un côté valable.
+- **Le menu circulaire est modal pour la souris seulement** : la partie continue (comme le menu de debug) mais plus de tir tant qu'il est ouvert.
+- Hors périmètre : vider le pad d'un allié quand le plan est impossible (le joueur change l'objectif), et un objectif pour les équipes IA.
+

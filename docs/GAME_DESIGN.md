@@ -35,7 +35,7 @@
 | 1 | Combinaisons du pad | ✅ fournies (§ 6) |
 | 2 | Classes de soldats | ✅ quatre variantes de compagnon (§ 4) ; PV 100 / 150 / 200 confirmés, la 4ᵉ est provisoire |
 | 3 | Armes et véhicules | ✅ liste suffisante « pour l'instant » : pistolet, uzi, grenades, lance-roquettes, tank |
-| 4 | Ordres de l'escouade | ✅ suivre, garder la base, ramasser, attaquer ; 🟡 + voler (ajouté en M5) |
+| 4 | Ordres de l'escouade | ✅ suivre, garder la base, ramasser, attaquer ; 🟡 + voler (ajouté en M5) ; 🟡 objectif de construction pour *ramasser* (clic du milieu) |
 | 5 | Chutes de caisses | ✅ dépend de la carte (§ 5) |
 | 6 | Bases / victoire | ◐ base de 1000 PV, destructible par toute arme ; détruite = pad inutilisable, l'équipe continue (✅ M6) ; victoire par élimination ✅ |
 | 7 | Missions de campagne | ⏳ à voir mission par mission, plus tard |
@@ -89,7 +89,8 @@ les escouades adverses (ou selon l'objectif de la mission).
     en portant, la **pose** dans la première colonne entièrement devant le corps (ou jusqu'à 2 tuiles plus haut si
     la case est prise, pour construire des piles). Si rien n'est possible (mur devant), on garde la caisse.
   - 🟡 **Touche de tir** (X) en portant : **lance** la caisse en cloche (≈ 5 tuiles). Refusé sous un plafond trop bas.
-  - 🟡 On ne peut prendre que la caisse du **dessus** d'une pile, et jamais celle sur laquelle on se tient.
+  - 🟡 On ne peut prendre que la caisse du **dessus** d'une pile. Devant soi, la plus proche passe en premier ; s'il n'y en a pas, on prend (debout, au sol d'une caisse) **la caisse sur laquelle on se tient** (après M6) :
+    elle passe au-dessus de la tête et le soldat retombe d'une case. Le cadre blanc et le clic droit suivent la même règle.
   - 🟡 **Cadres blancs** (après M6) : un cadre blanc entoure la caisse que la touche d'action prendrait (ou que le clic droit détruirait) ; en portant une caisse,
     un cadre à peine rempli montre la case où elle serait posée. Rien n'est dessiné pour un spectateur.
   - 🟡 **Détruire une caisse** (après M6, bouton droit de la souris ; lettre `B` des scripts) : brise la caisse que le cadre blanc désigne, ou celle qu'on porte,
@@ -122,6 +123,20 @@ les escouades adverses (ou selon l'objectif de la mission).
     colonnes de deux, en commençant par la colonne la plus éloignée du côté d'où l'on arrive ; s'arrêter quand le pad est plein. Une caisse
     qu'on ne pourrait pas **rapporter en la portant** (une échelle à descendre, une chute haute à remonter…) ou qu'on n'atteint pas (haut d'une pile,
     chemin bloqué) est ignorée 20 s. Les caisses d'un pad (le sien comme celui d'un autre) ne sont pas touchées.
+    - 🟡 **Objectif de construction** (après M6) : le **clic du milieu** de la souris ouvre un **menu circulaire** autour du curseur avec les 12 constructions
+      (6 formes × version rouge / bleue), chacune dessinée avec sa forme de caisses et ce qu'elle donne ; un clic sur l'une la choisit comme objectif de l'équipe,
+      le disque du milieu l'efface, un clic ailleurs, le clic droit ou un nouveau clic du milieu ferment le menu. La partie continue derrière, mais la souris
+      appartient au menu (pas de tir). L'objectif s'affiche dans le panneau (« OBJ », la forme en caisses, le nom du produit ; terne tant que l'ordre n'est pas *ramasser*).
+      Sous l'ordre *ramasser*, **les alliés** (les soldats que le joueur ne contrôle pas) travaillent pour lui :
+      - ils ne rapportent que **les caisses qu'il manque** (celles que les autres portent ou vont chercher comptent déjà) ;
+      - un objectif **rouge** cherche des caisses rouges d'abord ; les caisses **bleues déjà sur le pad ou déjà portées** servent (on obtient alors la version bleue, meilleure) ;
+        faute de caisse rouge sur la carte, ils prennent des bleues. Un objectif **bleu** cherche d'abord une caisse bleue (des rouges peuvent combler les autres cases, mais pas la dernière) ;
+      - chaque caisse va dans **une colonne où la forme en a besoin** (en commençant par la colonne la plus éloignée du côté d'où l'on arrive, comme d'habitude) ; ils comptent les
+        caisses déjà sur le pad, y compris celles que le joueur y a mises, et choisissent la position de la forme qui demande le moins de caisses ; ils n'entrent que par un côté
+        dont les colonnes avant la cible sont vides (on ne passe pas par-dessus une pile de deux en portant) ;
+      - dès que la forme est sur le pad (dans une couleur acceptable), **un allié la construit** et l'objectif est accompli (effacé). Sans allié, rien ne se construit tout seul : le joueur
+        garde le menu du pad.
+      - Si la forme est impossible (par exemple un objectif bleu alors que le pad est plein de caisses rouges), les alliés attendent : il faut changer l'objectif ou vider le pad.
   - **Attaquer** : aller vers la base adverse la plus proche, tirer sur ce qui est en chemin, puis sur la base elle-même ; une fois la base détruite, vers le pad adverse.
   - **Voler** : comme *ramasser*, mais en commençant par les caisses posées **sur le pad d'une autre équipe** (celles dont rien n'est posé dessus et
     qu'on peut approcher) ; faute de proie, il ramasse les caisses libres.
@@ -340,6 +355,7 @@ Idées non confirmées, **non planifiées** : jeep, mini-hélico.
 - Sons courts et cartoon ; musique chiptune originale. 🟡 (M6) Sons placeholders synthétisés (aucun fichier) pour les événements : tirs, explosions (plus grosses pour roquettes et
   grenades fortes), coups, ricochets, caisses (prise, pose, chute du ciel, arrivée au sol), constructions, apparitions, morts, plouf, mannequin brisé, arme ramassée / lâchée, changement de soldat,
   sauts et atterrissages du soldat suivi, équipe éliminée, **alarme quand la base du joueur est attaquée**, victoire / défaite, menus ; atténués avec la distance à la caméra.
+- 🟡 **Musique coupée au départ** (après M6) : la touche **M** l'allume et la coupe, un message le confirme ; `--music` la démarre allumée. Les bruitages ne sont pas concernés.
 - 🟡 Musique placeholder chiptune (synthétisée, 4 morceaux originaux) : thème du titre (enjoué, fa majeur), « La Crique » (sautillant, sol majeur, accords à contretemps), « L'Arène » (la mineur,
   plus tendu), résultats (calme). Fondu entre les écrans, volume réduit en pause, silence à la fin du match le temps de la fanfare.
 

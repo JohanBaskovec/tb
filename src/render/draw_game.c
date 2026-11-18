@@ -7,6 +7,7 @@
 #include "game/loot.h"
 #include "game/squad.h"
 #include "game/tuning.h"
+#include "render/draw_goal.h"
 #include "render/draw_ui.h"
 
 #include <stdio.h>
@@ -292,22 +293,6 @@ static void draw_carry_arm(Render *r, i32 palette, Vec2 shoulder, f32 side) {
     render_sprite(r, &d);
 }
 
-static SpriteId weapon_sprite(WeaponKind w) {
-    switch (w) {
-    case WEAPON_PISTOL:
-        return SPR_PISTOL;
-    case WEAPON_UZI:
-        return SPR_UZI;
-    case WEAPON_GRENADES:
-    case WEAPON_STRONG_GRENADES:
-        return SPR_GRENADE;
-    case WEAPON_ROCKET_LAUNCHER:
-        return SPR_ROCKET_LAUNCHER;
-    default:
-        return SPR_COUNT;
-    }
-}
-
 // The free arm hangs and swings with the stride; in the air it flails.
 static Vec2 idle_arm_dir(BodyPose pose, f32 facing) {
     switch (pose) {
@@ -364,7 +349,7 @@ static void draw_soldier(Render *r, const GameState *gs, const FxList *fx, i32 i
         sprite_at(r, SPR_PUNCH, palette, shoulder, 0.0f, facing < 0.0f, false);
     } else if (c->weapon != WEAPON_FISTS) {
         const Vec2 dir = c->aim_dir;
-        const SpriteId ws = weapon_sprite(c->weapon);
+        const SpriteId ws = sprite_for_weapon(c->weapon);
         draw_arm(r, palette, shoulder, dir);
         if (ws == SPR_GRENADE) {
             sprite_at(r, ws, palette, vec2_add(shoulder, vec2_scale(dir, 6.0f)), 0.0f, false, false);
@@ -548,7 +533,7 @@ static void draw_loot_weapons(Render *r, const GameState *gs, f32 alpha, i32 ox,
         const f32 y = roundf(lerpf(e->prev_pos.y, e->body.pos.y, alpha));
         const f32 w = e->body.size.x, h = e->body.size.y;
         sprite_at(r, SPR_CASE, 0, vec2(x + w * 0.5f - (f32)ox, y + h - (f32)oy), 0.0f, false, false);
-        const SpriteId ws = weapon_sprite(e->as.weapon.kind);
+        const SpriteId ws = sprite_for_weapon(e->as.weapon.kind);
         if (ws != SPR_COUNT) {
             const f32 hover = roundf(sinf((f32)gs->tick * 0.1f + (f32)i) * 1.5f);
             sprite_at(r, ws, 0, vec2(x + w * 0.5f - (f32)ox, y + h - 9.0f + hover - (f32)oy), 0.0f, false, false);
@@ -736,13 +721,14 @@ static void draw_soldier_panel(Render *r, const GameState *gs) {
     }
     const Companion *c = game_player_const(gs);
     char line[48];
-    ui_panel(r, (Rect){4.0f, 4.0f, 136.0f, 58.0f}, ui_team_color_dark(team));
+    const BuildGoal *goal = &gs->teams[team].goal;
+    ui_panel(r, (Rect){4.0f, 4.0f, 136.0f, goal->active ? 73.0f : 58.0f}, ui_team_color_dark(team));
     ui_text_shadow(r, 9.0f, 9.0f, "PV", COL_TEXT_DIM, 1, ALIGN_LEFT);
     draw_hp_bar(r, (Rect){24.0f, 9.0f, 64.0f, 7.0f}, c->max_hp > 0 ? (f32)c->hp / (f32)c->max_hp : 0.0f);
     snprintf(line, sizeof(line), "%d", MAX(c->hp, 0));
     ui_text_shadow(r, 134.0f, 9.0f, line, COL_TEXT, 1, ALIGN_RIGHT);
 
-    const SpriteId ws = weapon_sprite(c->weapon);
+    const SpriteId ws = sprite_for_weapon(c->weapon);
     const SpriteDraw icon = {.id = ws == SPR_COUNT ? SPR_PUNCH : ws,
                              .palette = team,
                              .pos = vec2(16.0f, 25.5f),
@@ -785,6 +771,13 @@ static void draw_soldier_panel(Render *r, const GameState *gs) {
     }
     snprintf(line, sizeof(line), "%d", n);
     ui_text_shadow(r, 134.0f, 49.0f, line, COL_TEXT, 1, ALIGN_RIGHT);
+    if (goal->active) { // the build goal: its shape in crates and what it makes (dim while the order is not "collect")
+        const bool working = order == ORDER_COLLECT;
+        ui_text_shadow(r, 9.0f, 66.0f, "OBJ", COL_TEXT_DIM, 1, ALIGN_LEFT);
+        draw_goal_shape(r, (PadShape)goal->shape, goal->blue, vec2(32.0f, 64.0f), 4.0f);
+        ui_text_shadow(r, 134.0f, 66.0f, ui_product_label(pad_recipe((PadShape)goal->shape, goal->blue)),
+                       working ? COL_TEXT : COL_TEXT_DIM, 1, ALIGN_RIGHT);
+    }
 }
 
 // Top center: the hit points of every base.
@@ -938,11 +931,11 @@ static void draw_hud(Render *r, const GameState *gs, i32 ox, i32 oy) {
 }
 
 // What a construction gives, standing on `foot`: the weapon, the soldier (small) or the tank.
-static void draw_product_icon(Render *r, PadProduct product, i32 team, Vec2 foot) {
+void draw_product_icon(Render *r, PadProduct product, i32 team, Vec2 foot) {
     WeaponKind weapon;
     SoldierVariant variant;
     if (weapon_from_product(product, &weapon)) {
-        const SpriteId ws = weapon_sprite(weapon);
+        const SpriteId ws = sprite_for_weapon(weapon);
         const SpriteDraw d = {.id = ws, .palette = team, .pos = vec2(foot.x, foot.y - 6.0f), .pivot_center = true};
         render_sprite(r, &d);
     } else if (soldier_from_product(product, &variant)) {

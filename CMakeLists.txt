@@ -41,6 +41,7 @@ add_library(cs_game STATIC
     src/game/rules.c
     src/game/nav.c
     src/game/commander.c
+    src/game/goal.c
     src/game/squad.c
     src/game/ai.c
     src/game/level.c
@@ -62,6 +63,8 @@ add_library(cs_app STATIC
     src/render/sprites.c
     src/app/sim.c
     src/app/pad_menu.c
+    src/app/debug_menu.c
+    src/app/goal_menu.c
     src/app/fx.c
     src/app/front.c
     src/app/sfx.c
@@ -79,6 +82,8 @@ add_executable(cratesquad
     src/render/draw_game.c
     src/render/draw_ui.c
     src/render/draw_front.c
+    src/render/draw_debug.c
+    src/render/draw_goal.c
     src/audio/audio.c
 )
 target_link_libraries(cratesquad PRIVATE cs_app cs_platform cs_sdl)

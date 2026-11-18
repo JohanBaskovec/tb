@@ -16,5 +16,8 @@ enum {
 // (logical pixels, where to draw the aiming cursor) may be NULL.
 // There is no text rendering yet: menu entries show the shape (with the real crate colors) and a
 // colored swatch for the product; hit points and ammunition are bars.
+// What a construction gives, drawn standing on `foot` (bottom middle): the weapon, the soldier (small) or the tank.
+void draw_product_icon(Render *r, PadProduct product, i32 team, Vec2 foot);
+
 void draw_game(Render *r, const GameState *gs, const Camera *cam, const PadMenu *menu, const FxList *fx,
                const Vec2 *crosshair, f32 alpha, u32 flags);

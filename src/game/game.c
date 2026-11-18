@@ -7,6 +7,7 @@
 #include "game/crate.h"
 #include "game/loot.h"
 #include "game/pad.h"
+#include "game/goal.h"
 #include "game/rules.h"
 #include "game/squad.h"
 
@@ -69,6 +70,7 @@ void game_update(GameState *gs, const InputFrame *input) {
         squad_cycle_order(gs);
     }
     commander_update(gs);
+    goal_update(gs);
     squad_update(gs, input);
     combat_update(gs);
     crates_update(gs);
@@ -151,6 +153,8 @@ u64 game_hash(const GameState *gs) {
         h = fnv_mix(h, &team->stats.base_damage, sizeof(u32));
         h = fnv_mix(h, &gs->teams[t].stagnant_ticks, sizeof(u32));
         h = fnv_mix(h, &gs->teams[t].pad_crates, sizeof(u32));
+        const u32 goal = (u32)team->goal.active | ((u32)team->goal.blue << 1) | ((u32)team->goal.shape << 2);
+        h = fnv_mix(h, &goal, sizeof(goal));
     }
     for (i32 i = 0; i < MAX_SOLDIERS; i++) {
         const Soldier *s = &gs->soldiers[i];
@@ -167,6 +171,7 @@ u64 game_hash(const GameState *gs) {
         h = fnv_mix(h, &s->ai.clock, sizeof(s->ai.clock));
         h = fnv_mix(h, &s->ai.collect, sizeof(s->ai.collect));
         h = fnv_mix(h, &s->ai.deliver_dir, sizeof(s->ai.deliver_dir));
+        h = fnv_mix(h, &s->ai.deliver_col, sizeof(s->ai.deliver_col));
         h = fnv_mix(h, &s->ai.crate, sizeof(s->ai.crate));
         h = fnv_mix(h, &s->ai.state_ticks, sizeof(s->ai.state_ticks));
         h = fnv_mix(h, s->ai.banned, sizeof(s->ai.banned));

@@ -105,7 +105,7 @@ static void controls(Render *r, f32 y) {
     ui_text_shadow(r, (f32)LOGICAL_W * 0.5f, y,
                    "BOUGER : ZQSD   SAUTER : ESPACE   TIRER : X / CLIC GAUCHE   CAISSE : E   DÉTRUIRE : CLIC DROIT", COL_TEXT_DIM, 1,
                    ALIGN_CENTER);
-    ui_text_shadow(r, (f32)LOGICAL_W * 0.5f, y + 13.0f, "CONSTRUIRE : TAB + ENTRÉE   SOLDAT : TAB   ORDRE : A   PAUSE : ÉCHAP", COL_TEXT_DIM,
+    ui_text_shadow(r, (f32)LOGICAL_W * 0.5f, y + 13.0f, "CONSTRUIRE : TAB + ENTRÉE   SOLDAT : TAB   ORDRE : A   MUSIQUE : M   PAUSE : ÉCHAP", COL_TEXT_DIM,
                    1, ALIGN_CENTER);
 }
 

@@ -169,7 +169,8 @@ static void check_invariants(const Sim *sim, Coverage *cov) {
     if (events_count_of(&gs->events, EV_EXPLOSION) > 0) {
         cov->last_blast = gs->tick + 1;
     }
-    if (cov->last_blast == 0 || gs->tick > cov->last_blast + 90) {
+    // (A dead player is a frozen ghost: it keeps the push of the blow that killed it.)
+    if (c->hp > 0 && (cov->last_blast == 0 || gs->tick > cov->last_blast + 90)) {
         CHECK(fabsf(b->vel.x) <= TUNING_WALK_SPEED + 0.01f);
         CHECK(b->vel.y >= -TUNING_JUMP_SPEED - 0.01f && b->vel.y <= TUNING_MAX_FALL_SPEED + 0.01f);
     }

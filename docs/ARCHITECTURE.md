@@ -48,6 +48,8 @@ tb/
 │   ├── app/                # (sans SDL)
 │   │   ├── sim.h/.c        # Sim : niveau + GameState + caméra + source d'entrées + effets et sons à jouer
 │   │   ├── pad_menu.h/.c   # Menu de construction du pad
+│   │   ├── debug_menu.h/.c # Menu de debug (F2) : liste à l'écran, apparition de caisses, alliés, armes, véhicules
+│   │   ├── goal_menu.h/.c  # Menu circulaire de l'objectif de construction (clic du milieu) : géométrie et formes
 │   │   ├── fx.h/.c         # Effets, particules, animation des soldats, tremblement d'écran (tirés des événements et de l'état)
 │   │   ├── sfx.h/.c        # Sons placeholders : synthèse, événements → « cues » (volume, panoramique)
 │   │   ├── music.h/.c      # Musique placeholder : morceaux en texte + séquenceur chiptune 4 canaux
@@ -138,7 +140,7 @@ scene_render(scene, alpha)              // interpolation positions précédentes
 
 - `game_update` est **déterministe** pour une graine RNG et une séquence d'`InputFrame` donnée :
   utile pour les tests, le débogage et d'éventuels replays.
-- Mode debug : F1 overlay, F2 pause, F3 avance d'une frame, F4 ralenti ×0.25.
+- Mode debug : F1 overlay, F2 menu d'apparition (D067), F3 avance d'une frame, F4 ralenti ×0.25, F5 recommencer, F6 pause. M : musique (coupée au départ).
 
 ## Modèle de données
 
@@ -252,6 +254,21 @@ Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont l
   `pad_build(gs, équipe, forme, bleu?)` **recalcule** les options au moment de l'appel, refuse (sans rien changer) si la forme n'est plus là,
   si le pad est inutilisable ou s'il n'y a plus de place pour le produit, puis consomme les caisses (`crate_consume`, du haut vers le bas) et crée un `ENT_PRODUCT`.
   Les menus périmés sont donc sans danger.
+- **Objectif de construction** (`game/goal.h/.c` + `app/goal_menu.h/.c` ; D068) : `Team.goal` (`BuildGoal` : forme, bleu ou non) est un état du jeu (haché). `goal_plan(gs, team, entry, plan)` est pure
+  et dit ce qu'il manque sur le pad : la forme est-elle déjà là dans une couleur acceptable (`buildable`, `build_blue` : un objectif rouge accepte du bleu), sinon la meilleure position de la forme
+  parmi `pad_shape_placements` (le moins de caisses à apporter, à égalité celle qui a déjà du bleu pour un objectif bleu ; exclues : une case sans rien dessous, un objectif bleu sans case où mettre le bleu,
+  une colonne atteignable seulement en passant par-dessus une colonne occupée), la liste des niveaux voulus par colonne (`wanted`) et ce qu'il y a déjà (`filled`) ; `entry` donne le côté d'où l'on arrive.
+  `goal_update` (après le commandant, avant les soldats) construit la forme quand l'ordre est *ramasser* et qu'un allié existe, puis efface l'objectif. Dans `game/ai.c`, `collect_think` suit le plan quand l'équipe
+  a un objectif : en *chercher*, ne retient que les caisses qu'il manque (en déduisant `inflight` : portées ou visées par les autres), dans la couleur voulue (`CrateWant`, avec repli) et d'un côté du pad d'où elles
+  peuvent être rapportées ; en *livrer*, `pick_goal_column` prend une colonne où le prochain niveau est voulu (en tenant compte des colonnes déjà visées par un allié, `SoldierAi.deliver_col`) ; si rien n'est voulu
+  pour l'instant, le soldat attend avec sa caisse. Sans objectif, le comportement est inchangé. Le menu circulaire (`app/goal_menu`) ne dépend pas de SDL : 12 entrées sur un cercle (rouges à droite, bleues à gauche),
+  `goal_menu_hit` donne l'entrée sous un point (ou le disque central), `sim_toggle_goal_menu` l'ouvre (clic du milieu) et `sim_click` le traite avant tout autre menu ; `render/draw_goal.c` le dessine.
+- **Menu de debug** (`app/debug_menu.h/.c`, sans SDL ; D067) : une liste de 13 entrées (caisse rouge / bleue ; soldat normal / fort / lourd / lourd blindé ;
+  pistolet, uzi, grenades, grenades puissantes, lance-roquettes ; tank, tank lourd) en coordonnées d'écran logiques (à droite), contrairement au menu du pad qui est dans le monde.
+  `Sim.debug` porte son état ; `sim_click` le traite en premier (la presse est « au menu » : l'arme ne tire pas, `mouse_fire_blocked`), `sim_debug_spawn` calcule le soldat suivi
+  (équipe, côté regardé ; sans soldat, le milieu de l'écran) et appelle `debug_spawn`, qui cherche une place libre **à côté** du soldat (jamais dessus) en commençant par le côté regardé,
+  puis l'autre, puis plus loin, et refuse s'il n'y en a pas. Les caisses tombent d'en haut (et pas dans la colonne d'une autre caisse qui descend encore : deux caisses dans la même
+  case resteraient bloquées), les armes et les véhicules tombent au sol, l'allié se place debout. `product_spawn` (`game/pad.c`) crée le véhicule, comme `pad_build`. Dessin : `render/draw_debug.c`.
 - **Menu** (`app/pad_menu.h/.c`, sans SDL) : visible tant que le soldat contrôlé est près du pad et que le pad propose quelque chose ;
   entrées à droite du pad (à gauche en bord de carte), rangées de bas en haut, deuxième colonne au-delà de 6. La sélection suit
   un couple (forme, couleur), pas un indice. Clavier : `ACT_SWITCH` (Tab) puis `ACT_CONFIRM` (Entrée) ; souris : `sim_click()` (position
@@ -418,7 +435,11 @@ RGBA 640×360 via le renderer logiciel de SDL. Aucun display n'est requis.
 | `--front` | Headless : fait tourner les écrans (titre d'abord), pilotés par `--script` ; la capture montre l'écran courant ; affiche `front ticks=… screen=…` puis le résumé de la partie s'il y en a une |
 | `--play` | Fenêtré : directement une partie avec les options ci-dessous (sans `--play`, la fenêtre s'ouvre sur l'écran titre) |
 | `--mute` | Pas de son (fenêtré) |
-| `--no-music` | Les bruitages sans la musique (fenêtré) |
+| `--no-music` | Les bruitages sans la musique (fenêtré) ; M ne fait alors rien |
+| `--music` | Démarre avec la musique allumée (sinon coupée jusqu'à M) |
+| `--debug-menu` | Ouvre le menu de debug F2 (affiché dans les captures) |
+| `--goal FORME,COULEUR` | Objectif de construction de l'équipe 1 (FORME : `1x1`, `2x1h`, `2x1v`, `l`, `2x2`, `4x2` ; COULEUR : `red` ou `blue`), à combiner avec `--order collect` et `--soldier` |
+| `--goal-menu` | Ouvre le menu circulaire de l'objectif (affiché dans les captures) |
 | `--sprite-sheet PATH` | Écrit les atlas de sprites (4 équipes + silhouette blanche, agrandis ×4) dans un PNG puis quitte ; ni SDL ni fenêtre |
 | `--export-audio DIR` | Écrit chaque son (`sfx_*.wav`) et chaque morceau (`music_*.wav` : intro, deux boucles, fondu) dans DIR puis quitte ; ni SDL ni fenêtre |
 | `--squad N` | Chaque équipe en jeu commence avec N soldats (1 par défaut ; 3 depuis le menu) |
@@ -492,11 +513,17 @@ Les touches F1–F4 sont testées en injectant des événements (`SDL_PushEvent`
 - Musique et sons ajoutés : `music` (chaque morceau s'analyse, a une boucle de plus de 10 s, sonne sans saturer ; rendu déterministe ; retour à la boucle sans rejouer l'intro ; fondu au changement ;
   même morceau = seul le volume change ; musique de chaque écran et de chaque niveau), `sfx` (nouveaux sons, alarme pour la seule base du joueur, élimination muette quand elle finit le match,
   une minute d'IA contre IA reste lisible), `events` (sauts et atterrissages), `rules` (une alerte par attaque de base) ; fumée `smoke_export_audio`, `bad_export_dir`.
+- Objectif : `goal` (le plan dit ce qu'il manque : formes seules, déjà sur le pad, rouge qui accepte du bleu, bleu qui exige du bleu, impossible si le pad est plein de rouge ; construction seulement en *ramasser* avec un allié ;
+  les alliés ne rapportent que ce qu'il faut, un objectif bleu va chercher la caisse bleue même plus loin, un objectif rouge se sert du bleu déjà posé ou porté et se rabat sur le bleu faute de rouge, forme à deux colonnes
+  empilée par deux alliés, caisse déjà sur le pad contournée par l'autre côté ; le menu : 12 entrées cliquables dans l'écran pour toute position du centre, réglage, effacement, fermeture, tir bloqué) ; `platform` (clic du milieu) ;
+  fumées `smoke_goal_builds`, `smoke_goal_menu`, `bad_goal_option`.
+- Debug : `debug_menu` (entrées dans l'écran et cliquables, ce que chaque entrée fait apparaître et où, l'autre côté si le premier est bouché, refus sans place, clics et tir via le `Sim`,
+  milieu de l'écran sans soldat) ; fumées `smoke_debug_menu`, `smoke_music_flag`, `smoke_no_music_flag` (musique coupée au départ, `--music`, `--no-music`) ; `platform` (F2 menu, F6 pause, M par sa lettre).
 - Visuels et caisses : `sprites` (données valides, chaque sprite a des pixels et tient dans sa case, deux sprites ne se chevauchent jamais dans l'atlas, tuiles de terrain
   pleines et identiques dans chaque atlas alors que la base prend la couleur d'équipe, soldats posés sur leurs pieds, seule la couleur d'équipe change d'un atlas à
   l'autre, silhouette blanche), `fx` (explosion → débris, fumée, étincelles, onde, tremblement seulement près de la caméra ; débris qui retombent sur le sol sans le traverser puis
   disparaissent ; soldat éliminé projeté dans ses couleurs ; gerbe d'eau ou éclats de bois ; douilles et fumée de roquette ; poses de course, saut, chute et écrasement ; icônes de cœurs et de balles qui montent ; caisse écrasée à l'atterrissage mais pas au repos ; pool plein
-  sans débordement), `crate` (une caisse s'étale à côté plutôt que sur une autre ; clic droit : cœurs ou munitions au hasard, jamais une récompense perdue si l'autre sert, plafonnée au manque,
+  sans débordement), `crate` (une caisse s'étale à côté plutôt que sur une autre ; la caisse sous les pieds se prend (celle de devant d'abord, pas en l'air) ; clic droit : cœurs ou munitions au hasard, jamais une récompense perdue si l'autre sert, plafonnée au manque,
   le dessus d'une pile ou la caisse portée, une pression par caisse ; cibles de prise et de pose ; pas de tir juste après avoir lancé une caisse), `combat` (tir maintenu, délais), `front` (effectif choisi dans le menu).
 
 ## Cibles CMake

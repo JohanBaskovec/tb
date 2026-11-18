@@ -2,6 +2,7 @@
 
 #include "game/base.h"
 #include "game/combat.h"
+#include "game/goal.h"
 #include "game/pad.h"
 #include "game/tuning.h"
 
@@ -209,14 +210,33 @@ static bool fetched_by_a_mate(const GameState *gs, const Soldier *me, EntityId c
     return false;
 }
 
+// Which crates a soldier looks for. Only the goal (game/goal.h) asks for a colour.
+typedef enum CrateWant {
+    WANT_ANY,
+    WANT_RED,
+    WANT_BLUE,
+    WANT_NONE, // no fallback
+} CrateWant;
+
+static bool wanted_colour(const Entity *e, CrateWant want) {
+    return want == WANT_ANY || (want == WANT_RED && e->as.crate.kind == CRATE_RED) ||
+           (want == WANT_BLUE && e->as.crate.kind == CRATE_BLUE);
+}
+
 // The nearest crate of a kind that this soldier could take (not banned, not already someone's).
-static EntityId nearest_crate(const GameState *gs, const Soldier *s, CrateSource source) {
+#define CRATE_HALF (TUNING_CRATE_SIZE * 0.5f)
+
+static EntityId nearest_crate(const GameState *gs, const Soldier *s, CrateSource source, CrateWant want, const bool side_ok[2]) {
+    const f32 home_x = home_feet(gs, s->team).x;
     EntityId best = ENTITY_NONE;
     f32 best_score = 0.0f;
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
         const Entity *e = &gs->entities.slots[i];
-        if (!takeable(gs, e) || pad_holds_crate(gs, s->team, e)) {
+        if (!takeable(gs, e) || pad_holds_crate(gs, s->team, e) || !wanted_colour(e, want)) {
             continue;
+        }
+        if (!side_ok[e->body.pos.x + CRATE_HALF < home_x ? 0 : 1]) {
+            continue; // it would be brought in from a side of the pad that cannot take it
         }
         const EntityId id = slot_id(gs, i);
         if (is_banned(&s->ai, id) || fetched_by_a_mate(gs, s, id)) {
@@ -278,9 +298,13 @@ static bool deliverable(GameState *gs, const Soldier *s, const Entity *crate) {
 
 // The nearest crate of a kind that this soldier can fetch and bring home. The ones that cannot be brought home
 // are forgotten for a while.
-static EntityId pick_crate(GameState *gs, Soldier *s, CrateSource source) {
+// `side_ok[0]`: crates left of the pad may be fetched, `[1]`: crates on its right.
+static EntityId pick_crate(GameState *gs, Soldier *s, CrateSource source, CrateWant want, const bool side_ok[2]) {
+    if (want == WANT_NONE) {
+        return ENTITY_NONE;
+    }
     for (u32 attempt = 0; attempt < AI_BAN_SLOTS; attempt++) {
-        const EntityId id = nearest_crate(gs, s, source);
+        const EntityId id = nearest_crate(gs, s, source, want, side_ok);
         if (!entity_id_valid(id)) {
             break;
         }
@@ -290,6 +314,77 @@ static EntityId pick_crate(GameState *gs, Soldier *s, CrateSource source) {
         ban_crate(&s->ai, id);
     }
     return ENTITY_NONE;
+}
+
+// ---- Working towards the team's build goal -----------------------------------------------------
+
+// What the other soldiers of the team already have under way: crates carried (by anyone) or being fetched (by the AI).
+typedef struct Inflight {
+    u32 total, blue;
+} Inflight;
+
+static Inflight inflight(const GameState *gs, const Soldier *me) {
+    Inflight f = {0, 0};
+    for (i32 i = 0; i < MAX_SOLDIERS; i++) {
+        const Soldier *o = &gs->soldiers[i];
+        if (o == me || !o->alive || o->team != me->team) {
+            continue;
+        }
+        EntityId crate = o->c.carrying;
+        if (!entity_id_valid(crate) && o->ai.collect == COLLECT_FETCH && i != gs->controlled) {
+            crate = o->ai.crate;
+        }
+        const Entity *e = pool_get_const(&gs->entities, crate);
+        if (e && e->type == ENT_CRATE && !e->pending_destroy) {
+            f.total++;
+            f.blue += e->as.crate.kind == CRATE_BLUE ? 1u : 0u;
+        }
+    }
+    return f;
+}
+
+// Where to look first and, failing that, where else. A red goal looks for red crates, then takes blue ones. A blue goal
+// looks for a blue crate until one is on its way (red ones may fill the other cells meanwhile, but not the last one).
+static void crate_wishes(const BuildGoal *goal, const GoalPlan *plan, const Inflight *fl, u32 need, CrateWant *first,
+                         CrateWant *fallback) {
+    const bool blue_secured = !plan->needs_blue || fl->blue > 0;
+    if (goal->blue && !blue_secured) {
+        *first = WANT_BLUE;
+        *fallback = need >= 2 ? WANT_RED : WANT_NONE;
+    } else {
+        *first = WANT_RED;
+        *fallback = WANT_ANY;
+    }
+}
+
+// The column of the pad to put the crate in under a goal: one where the next crate is wanted, the far ones first (as in
+// pick_column), skipping the places the mates on their way already count on. The plan says which side to come from.
+// A mate delivering to a farther column goes first (it stands in the columns before it).
+static i32 pick_goal_column(const GameState *gs, const Soldier *me, const GoalPlan *plan) {
+    u8 claimed[PAD_COLS] = {0};
+    for (i32 i = 0; i < MAX_SOLDIERS; i++) {
+        const Soldier *o = &gs->soldiers[i];
+        if (o != me && o->alive && o->team == me->team && o->ai.collect == COLLECT_DELIVER &&
+            entity_id_valid(o->c.carrying) && o->ai.deliver_col >= 0 && o->ai.deliver_col < PAD_COLS) {
+            claimed[o->ai.deliver_col]++;
+        }
+    }
+    const i32 d = plan->side != 0 ? plan->side : 1;
+    for (i32 i = 0; i < PAD_COLS; i++) {
+        const i32 c = d > 0 ? PAD_COLS - 1 - i : i;
+        const i32 level = plan->filled[c] + claimed[c];
+        if (level >= PAD_ROWS || !(plan->wanted[c] & (1u << level))) {
+            continue;
+        }
+        bool blocked = false; // a mate bringing a crate to a column farther in
+        for (i32 k = d > 0 ? c + 1 : 0; k < (d > 0 ? PAD_COLS : c); k++) {
+            blocked |= claimed[k] > 0;
+        }
+        if (!blocked) {
+            return c;
+        }
+    }
+    return -1;
 }
 
 // Which column of the pad to fill next: the far one first (seen from where the soldier comes in), so that
@@ -347,6 +442,7 @@ static u32 collect_think(GameState *gs, Soldier *s, bool steal, AiMode *mode) {
         ai->collect = COLLECT_DELIVER;
         ai->state_ticks = 0;
         ai->deliver_dir = center_x(c) < home.x ? 1 : -1;
+        ai->deliver_col = -1;
     } else if (!carrying && ai->collect == COLLECT_DELIVER) {
         ai->collect = COLLECT_SEEK;
         ai->state_ticks = 0;
@@ -362,13 +458,39 @@ static u32 collect_think(GameState *gs, Soldier *s, bool steal, AiMode *mode) {
     bool no_path = false;
     switch (ai->collect) {
     case COLLECT_SEEK: {
-        if (pad_crate_count(gs, s->team) < PAD_CELLS) {
+        GoalPlan plan, from_left, from_right; // the crates are brought in from the side they are on
+        if (!steal) {
+            goal_plan(gs, s->team, 1, &from_left);
+            goal_plan(gs, s->team, -1, &from_right);
+            plan = from_left.feasible ? from_left : from_right;
+        }
+        if (!steal && plan.valid) { // a goal: only what the shape still needs, in the colour it asks for
+            const Inflight fl = inflight(gs, s);
+            const u32 need = plan.missing > fl.total ? plan.missing - fl.total : 0;
+            const bool side_ok[2] = {from_left.feasible, from_right.feasible};
+            CrateWant first = WANT_ANY, fallback = WANT_NONE;
+            crate_wishes(&gs->teams[s->team].goal, &plan, &fl, need, &first, &fallback);
             EntityId id = ENTITY_NONE;
+            if (plan.feasible && !plan.buildable && need > 0) {
+                id = pick_crate(gs, s, SOURCE_FREE, first, side_ok);
+                if (!entity_id_valid(id)) {
+                    id = pick_crate(gs, s, SOURCE_FREE, fallback, side_ok);
+                }
+            }
+            if (entity_id_valid(id)) {
+                ai->crate = id;
+                ai->collect = COLLECT_FETCH;
+                ai->state_ticks = 0;
+                return 0;
+            }
+        } else if (pad_crate_count(gs, s->team) < PAD_CELLS) {
+            EntityId id = ENTITY_NONE;
+            static const bool EVERY_SIDE[2] = {true, true};
             if (steal) {
-                id = pick_crate(gs, s, SOURCE_ENEMY_PAD);
+                id = pick_crate(gs, s, SOURCE_ENEMY_PAD, WANT_ANY, EVERY_SIDE);
             }
             if (!entity_id_valid(id)) {
-                id = pick_crate(gs, s, SOURCE_FREE);
+                id = pick_crate(gs, s, SOURCE_FREE, WANT_ANY, EVERY_SIDE);
             }
             if (entity_id_valid(id)) {
                 ai->crate = id;
@@ -401,9 +523,27 @@ static u32 collect_think(GameState *gs, Soldier *s, bool steal, AiMode *mode) {
     }
     case COLLECT_DELIVER: {
         *mode = AI_DELIVER;
-        const i32 dir = ai->deliver_dir != 0 ? ai->deliver_dir : 1;
-        const i32 col = pick_column(gs, s->team, dir);
+        i32 dir = ai->deliver_dir != 0 ? ai->deliver_dir : 1;
+        GoalPlan plan;
+        if (!steal) {
+            goal_plan(gs, s->team, dir, &plan);
+        }
+        const bool goal = !steal && plan.valid;
+        i32 col;
+        if (goal) {
+            col = pick_goal_column(gs, s, &plan);
+            if (col >= 0) {
+                dir = plan.side;
+                ai->deliver_dir = dir;
+            }
+            ai->deliver_col = col;
+        } else {
+            col = pick_column(gs, s->team, dir);
+        }
         u32 mask = 0;
+        if (goal && col < 0 && ai->state_ticks <= GIVE_UP_TICKS) {
+            return 0; // nothing is wanted just now (a mate is placing the crate it needs): wait with the crate
+        }
         if (col >= 0 && ai->state_ticks <= GIVE_UP_TICKS) {
             // The body's front edge just before the column: the crate lands in it.
             const i32 abs_col = gs->level->pads[s->team].cell_x + col;

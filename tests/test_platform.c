@@ -109,11 +109,30 @@ static void test_events(void) {
     CHECK(ev.toggle_debug && ev.step && !ev.toggle_pause && !ev.toggle_slow && !ev.quit);
 
     memset(&ev, 0, sizeof(ev));
-    push_key(SDL_SCANCODE_F2, false);
+    push_key(SDL_SCANCODE_F6, false);
     push_key(SDL_SCANCODE_F4, false);
     push_key(SDL_SCANCODE_F1, true); // auto-repeat must be ignored
     platform_pump_events(&ev);
-    CHECK(ev.toggle_pause && ev.toggle_slow && !ev.toggle_debug);
+    CHECK(ev.toggle_pause && ev.toggle_slow && !ev.toggle_debug && !ev.toggle_debug_menu);
+
+    // F2 opens the spawn menu (it used to pause); M toggles the music, found by its letter.
+    memset(&ev, 0, sizeof(ev));
+    push_key(SDL_SCANCODE_F2, false);
+    platform_pump_events(&ev);
+    CHECK(ev.toggle_debug_menu && !ev.toggle_pause && !ev.toggle_music);
+    memset(&ev, 0, sizeof(ev));
+    SDL_Event m;
+    memset(&m, 0, sizeof(m));
+    m.type = SDL_EVENT_KEY_DOWN;
+    m.key.key = SDLK_M;
+    CHECK(SDL_PushEvent(&m));
+    platform_pump_events(&ev);
+    CHECK(ev.toggle_music && !ev.toggle_debug_menu);
+    memset(&ev, 0, sizeof(ev));
+    m.key.key = SDLK_N;
+    CHECK(SDL_PushEvent(&m));
+    platform_pump_events(&ev);
+    CHECK(!ev.toggle_music);
 
     // A left click is reported with its window position; other buttons are ignored.
     memset(&ev, 0, sizeof(ev));
@@ -134,6 +153,17 @@ static void test_events(void) {
     CHECK(ev.click);
     CHECK_NEAR(ev.click_x, 123.0, 0.0);
     CHECK_NEAR(ev.click_y, 45.0, 0.0);
+
+    // The middle button asks for the build-goal ring, with its position; it is not a left click.
+    memset(&ev, 0, sizeof(ev));
+    click.button.button = SDL_BUTTON_MIDDLE;
+    click.button.x = 321.0f;
+    click.button.y = 98.0f;
+    CHECK(SDL_PushEvent(&click));
+    platform_pump_events(&ev);
+    CHECK(ev.middle_click && !ev.click && ev.mouse_moved);
+    CHECK_NEAR(ev.middle_x, 321.0, 0.0);
+    CHECK_NEAR(ev.middle_y, 98.0, 0.0);
 
     memset(&ev, 0, sizeof(ev));
     SDL_Event quit;

@@ -54,12 +54,9 @@ const char *pad_product_name(PadProduct product) {
 
 // ---- Shapes ------------------------------------------------------------------------------------
 
-typedef struct Placement {
-    u32 n;
-    PadCoord c[PAD_CELLS]; // topmost row first, then left to right
-} Placement;
+typedef PadPlacement Placement;
 
-#define MAX_PLACEMENTS 8
+#define MAX_PLACEMENTS PAD_MAX_PLACEMENTS
 
 static void placement_add(Placement *p, i32 col, i32 row) {
     // Insertion sort keeps the cells ordered top first, then left to right.
@@ -80,7 +77,7 @@ static Placement make(u32 count, const i32 *colrow) {
 }
 
 // Every position of `shape` inside the 4x2 grid. Returns the number of placements.
-static u32 shape_placements(PadShape shape, Placement out[MAX_PLACEMENTS]) {
+u32 pad_shape_placements(PadShape shape, PadPlacement out[PAD_MAX_PLACEMENTS]) {
     u32 n = 0;
     const i32 bottom = PAD_ROWS - 1;
     switch (shape) {
@@ -155,7 +152,7 @@ void pad_options(const PadGrid *grid, PadOptionList *out) {
     out->count = 0;
     for (i32 shape = SHAPE_COUNT - 1; shape >= 0; shape--) { // biggest first
         Placement placements[MAX_PLACEMENTS];
-        const u32 np = shape_placements((PadShape)shape, placements);
+        const u32 np = pad_shape_placements((PadShape)shape, placements);
         Fit red = {0}, blue = {0}; // best all-red placement, best placement with at least one blue crate
         for (u32 i = 0; i < np; i++) {
             const Placement *pl = &placements[i];
@@ -299,6 +296,19 @@ static bool product_spawn_pos(const GameState *gs, const PadSite *site, Vec2 *ou
     return false;
 }
 
+EntityId product_spawn(GameState *gs, PadProduct kind, i32 team, Vec2 pos) {
+    EntityId id = pool_create(&gs->entities, ENT_PRODUCT);
+    Entity *e = pool_get(&gs->entities, id);
+    if (!e) {
+        return ENTITY_NONE;
+    }
+    e->body.size = vec2(PRODUCT_SIZE, PRODUCT_SIZE);
+    e->body.pos = pos;
+    e->prev_pos = pos;
+    e->as.product = (Product){.kind = kind, .team = team};
+    return id;
+}
+
 bool pad_build(GameState *gs, i32 team, PadShape shape, bool blue) {
     if (!pad_usable(gs, team) || shape < 0 || shape >= SHAPE_COUNT) {
         return false;
@@ -331,15 +341,7 @@ bool pad_build(GameState *gs, i32 team, PadShape shape, bool blue) {
     } else if (soldier_from_product(chosen->product, &variant)) {
         made = soldier_spawn(gs, team, variant, vec2(where.x + PRODUCT_SIZE * 0.5f, where.y + PRODUCT_SIZE)) >= 0;
     } else {
-        EntityId pid = pool_create(&gs->entities, ENT_PRODUCT); // vehicles: placeholder until M6
-        Entity *pe = pool_get(&gs->entities, pid);
-        if (pe) {
-            pe->body.size = vec2(PRODUCT_SIZE, PRODUCT_SIZE);
-            pe->body.pos = where;
-            pe->prev_pos = where;
-            pe->as.product = (Product){.kind = chosen->product, .team = team};
-            made = true;
-        }
+        made = entity_id_valid(product_spawn(gs, chosen->product, team, where)); // vehicles: models until M7
     }
     if (!made) {
         return false;

@@ -24,6 +24,7 @@ struct Audio {
     i16 *scratch; // stereo copy of the sound being started (2 * SFX_MAX_SAMPLES)
     SDL_AudioStream *music_stream; // NULL without music
     MusicPlayer *music;            // touched by the audio thread: only under the stream's lock
+    bool music_on;                 // the player's choice (M): off until asked for
     i16 music_buf[MUSIC_CHUNK * 2];
 };
 
@@ -169,7 +170,7 @@ void audio_music(Audio *a, MusicTrack track, f32 volume) {
         return;
     }
     SDL_LockAudioStream(a->music_stream);
-    music_play(a->music, track, volume);
+    music_play(a->music, a->music_on ? track : MUSIC_NONE, volume); // off: the song fades out, the stream stays open
     SDL_UnlockAudioStream(a->music_stream);
 }
 
@@ -178,4 +179,16 @@ void audio_play_all(Audio *a, SfxCueList *cues) {
         audio_play(a, &cues->items[i]);
     }
     cues->count = 0;
+}
+
+bool audio_set_music_enabled(Audio *a, bool on) {
+    if (!a || !a->music_stream) {
+        return false;
+    }
+    a->music_on = on;
+    return true;
+}
+
+bool audio_music_enabled(const Audio *a) {
+    return a && a->music_stream && a->music_on;
 }

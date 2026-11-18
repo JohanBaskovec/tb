@@ -817,6 +817,22 @@ static const i32 POSE_LEGS[POSE_COUNT] = {
     [POSE_CLIMB0] = P_LEGS_CLIMB0, [POSE_CLIMB1] = P_LEGS_CLIMB1,
 };
 
+SpriteId sprite_for_weapon(WeaponKind weapon) {
+    switch (weapon) {
+    case WEAPON_PISTOL:
+        return SPR_PISTOL;
+    case WEAPON_UZI:
+        return SPR_UZI;
+    case WEAPON_GRENADES:
+    case WEAPON_STRONG_GRENADES:
+        return SPR_GRENADE;
+    case WEAPON_ROCKET_LAUNCHER:
+        return SPR_ROCKET_LAUNCHER;
+    default:
+        return SPR_COUNT;
+    }
+}
+
 i32 sprite_pose_bob(BodyPose pose) {
     return pose >= 0 && pose < POSE_COUNT ? POSE_BOB[pose] : 0;
 }

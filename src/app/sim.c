@@ -1,7 +1,10 @@
 #include "app/sim.h"
 
 #include "core/config.h"
+#include "game/combat.h"
+#include "game/goal.h"
 #include "game/squad.h"
+#include "game/tuning.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -122,6 +125,10 @@ void sim_set_mouse(Sim *sim, Vec2 logical, bool left_down, bool right_down) {
     sim->mouse_active = true;
     sim->mouse_logical = logical;
     sim->mouse_left = left_down;
+    if (right_down && !sim->mouse_right && sim->goal_menu.visible) {
+        goal_menu_close(&sim->goal_menu); // a right click cancels the ring
+        sfx_play_ui(&sim->sfx, SFX_MENU_BACK, &sim->cues);
+    }
     sim->mouse_right = right_down;
     if (!left_down) {
         sim->mouse_fire_blocked = false;
@@ -135,7 +142,8 @@ static void sim_apply_human(Sim *sim, const InputFrame *human) {
     sim->input.aim = human->aim;
     if (sim->mouse_active) {
         const Vec2 world = sim_logical_to_world(sim, sim->mouse_logical);
-        const bool on_menu = pad_menu_hit_test(&sim->menu, world) >= 0;
+        const bool on_menu = pad_menu_hit_test(&sim->menu, world) >= 0 || debug_menu_covers(&sim->debug, sim->mouse_logical) ||
+                             sim->goal_menu.visible;
         sim->input.aim_active = true;
         sim->input.aim = world;
         if ((sim->mouse_left || sim->mouse_click_pending) && !sim->mouse_fire_blocked && !on_menu) {
@@ -196,7 +204,79 @@ Vec2 sim_logical_to_world(const Sim *sim, Vec2 logical) {
     return vec2(logical.x + roundf(sim->cam.pos.x), logical.y + roundf(sim->cam.pos.y));
 }
 
+void sim_toggle_debug_menu(Sim *sim) {
+    sim->debug.visible = !sim->debug.visible;
+}
+
+bool sim_debug_spawn(Sim *sim, DebugItem item) {
+    DebugFocus focus = {.facing = 1, .team = PLAYER_TEAM};
+    if (sim->gs.controlled >= 0) {
+        const Soldier *s = &sim->gs.soldiers[sim->gs.controlled];
+        const Body *b = &s->c.body;
+        focus = (DebugFocus){body_center(b), b->pos.y, b->pos.y + b->size.y, s->c.facing, s->team};
+    } else {
+        const Vec2 mid = vec2(roundf(sim->cam.pos.x) + (f32)LOGICAL_W * 0.5f, roundf(sim->cam.pos.y) + (f32)LOGICAL_H * 0.5f);
+        focus.center = mid;
+        focus.top = mid.y - TUNING_COMPANION_H * 0.5f;
+        focus.bottom = mid.y + TUNING_COMPANION_H * 0.5f;
+    }
+    return debug_spawn(&sim->gs, item, &focus);
+}
+
+// The team the human plays for, or -1 when nobody does (spectating).
+static i32 human_team(const Sim *sim) {
+    return sim->gs.controlled >= 0 && !sim->gs.teams[sim->gs.soldiers[sim->gs.controlled].team].ai
+               ? sim->gs.soldiers[sim->gs.controlled].team
+               : -1;
+}
+
+void sim_toggle_goal_menu(Sim *sim, Vec2 logical) {
+    if (sim->goal_menu.visible) {
+        goal_menu_close(&sim->goal_menu);
+        sfx_play_ui(&sim->sfx, SFX_MENU_BACK, &sim->cues);
+        return;
+    }
+    const i32 team = human_team(sim);
+    if (team < 0 || !sim->level.pads[team].present) {
+        return;
+    }
+    goal_menu_open(&sim->goal_menu, logical);
+    sim->mouse_fire_blocked = true; // the button that opened it must not fire when released over the game
+    sfx_play_ui(&sim->sfx, SFX_PAD_OPEN, &sim->cues);
+}
+
+// A click while the ring is open.
+static bool goal_menu_click(Sim *sim, Vec2 logical) {
+    const i32 hit = goal_menu_hit(&sim->goal_menu, logical);
+    const i32 team = human_team(sim);
+    goal_menu_close(&sim->goal_menu);
+    sim->mouse_fire_blocked = true; // this press belongs to the ring
+    if (hit == GOAL_MENU_CENTER && team >= 0) {
+        goal_clear(&sim->gs, team);
+        sfx_play_ui(&sim->sfx, SFX_MENU_BACK, &sim->cues);
+        return true;
+    }
+    if (hit >= 0 && team >= 0) {
+        PadShape shape;
+        bool blue;
+        goal_menu_entry(hit, &shape, &blue);
+        goal_set(&sim->gs, team, shape, blue);
+        sfx_play_ui(&sim->sfx, SFX_MENU_OK, &sim->cues);
+        return true;
+    }
+    sfx_play_ui(&sim->sfx, SFX_MENU_BACK, &sim->cues);
+    return false;
+}
+
 bool sim_click(Sim *sim, Vec2 logical) {
+    if (sim->goal_menu.visible) {
+        return goal_menu_click(sim, logical);
+    }
+    if (debug_menu_covers(&sim->debug, logical)) {
+        sim->mouse_fire_blocked = true; // the press belongs to the menu
+        const i32 item = debug_menu_hit_test(&sim->debug, logical);
+        return item >= 0 && sim_debug_spawn(sim, (DebugItem)item);
+    }
     const Vec2 world = sim_logical_to_world(sim, logical);
     if (pad_menu_hit_test(&sim->menu, world) >= 0) {
         sim->mouse_fire_blocked = true; // this press belongs to the menu, not to the weapon
