@@ -59,6 +59,7 @@ endif()
 add_library(cs_app STATIC
     src/render/camera.c
     src/render/font.c
+    src/render/sprites.c
     src/app/sim.c
     src/app/pad_menu.c
     src/app/fx.c

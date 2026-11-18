@@ -32,6 +32,7 @@ bool game_init(GameState *gs, u64 seed, Level *level) {
     for (i32 z = 0; z < level->drop_zone_count; z++) {
         gs->drop_timers[z] = (u32)level->drop_cfg[z].interval_s * TICK_HZ;
     }
+    crates_place_start(gs);
     for (i32 d = 0; d < level->dummy_count; d++) {
         dummy_spawn(gs, level->dummies[d], TEAM_NONE);
     }

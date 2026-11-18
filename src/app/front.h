@@ -29,7 +29,7 @@ extern const FrontLevel FRONT_LEVELS[FRONT_LEVEL_COUNT];
 
 // Entries of each menu, top to bottom.
 enum { TITLE_PLAY, TITLE_QUIT, TITLE_COUNT };
-enum { SETUP_LEVEL, SETUP_MODE, SETUP_START, SETUP_BACK, SETUP_COUNT };
+enum { SETUP_LEVEL, SETUP_MODE, SETUP_SQUAD, SETUP_START, SETUP_BACK, SETUP_COUNT };
 enum { PAUSE_RESUME, PAUSE_RESTART, PAUSE_QUIT, PAUSE_COUNT };
 enum { RESULTS_AGAIN, RESULTS_MENU, RESULTS_COUNT };
 
@@ -43,6 +43,7 @@ typedef struct Front {
     i32 selected;     // entry of the current menu
     i32 level_index;  // into FRONT_LEVELS
     bool spectate;    // AI against AI: nobody to control
+    u32 squad;        // soldiers each team starts with (1..TUNING_SKIRMISH_MAX_SQUAD)
     u64 seed;         // of the match being played (or the next one)
     u32 screen_ticks; // since the current screen opened (animations)
     u32 over_ticks;   // since the match ended

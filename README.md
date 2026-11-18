@@ -16,7 +16,8 @@ Jalons M0 à M6 faits : socle technique, niveau et déplacement, caisses et pad 
 explosions, santé, mannequins), escouade (compagnons, équipes, ordres), navigation et IA d'équipe (graphe de navigation, A*, commandant qui
 construit et distribue des rôles, vol de caisses), et **tranche verticale** : escarmouche 1 contre l'IA sur *La Crique*, bases destructibles,
 élimination et écran de résultats, HUD, écran titre, configuration de partie, pause, sons placeholders et **musique chiptune**
-synthétisés dans le code (aucun fichier audio).
+synthétisés dans le code (aucun fichier audio). Depuis : sprites pixel art animés, particules et tremblement d'écran ; effectif réglable dans le menu
+(1 soldat par défaut), caisses plus fréquentes et présentes dès le départ.
 Avancement détaillé : [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Prérequis
@@ -60,6 +61,7 @@ mkdir -p build/audio && ./build/cratesquad --export-audio build/audio
 ```
 
 `--mute` coupe le son, `--no-music` garde les bruitages sans la musique.
+`./build/cratesquad --sprite-sheet build/sprites.png` exporte tous les sprites (agrandis) dans un PNG.
 Toutes les options : `docs/ARCHITECTURE.md` § Exécution headless.
 
 Options CMake prévues :

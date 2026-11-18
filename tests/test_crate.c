@@ -624,15 +624,16 @@ static void test_drop_zone_cadence_and_cap(void) {
     CHECK_EQ_U64(first->as.crate.origin_zone, 0);
     CHECK_NEAR(first->body.pos.x, 3.0f * TILE_SIZE, 0.0); // column-aligned under the marker
 
-    // Second one two seconds later, then the cap of 2 holds.
+    // Second one two seconds later, next to the first rather than on top of it; then the cap of 2 holds.
     ticks(&e, 0, 1200);
     CHECK_EQ_U64(gs_of(&e)->crate_stats.spawned, 2);
     CHECK(is_resting_at(&e, 3, 9));
-    CHECK(is_resting_at(&e, 3, 8));
+    CHECK(is_resting_at(&e, 2, 9) != is_resting_at(&e, 4, 9));
+    CHECK(!is_resting_at(&e, 3, 8));
 
     // Free a slot: the cadence resumes after one interval, not instantly.
     crate_destroy(gs_of(&e), (EntityId){0, 0}); // no-op on an invalid id
-    const Entity *top = resting_at(&e, 3, 8);
+    const Entity *top = resting_at(&e, is_resting_at(&e, 2, 9) ? 2 : 4, 9);
     CHECK(top != NULL);
     crate_destroy(gs_of(&e), (EntityId){(u16)(top - gs_of(&e)->entities.slots), top->generation});
     ticks(&e, 0, 100);

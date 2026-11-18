@@ -14,13 +14,9 @@
 static const Color COL_LADDER = {156, 116, 64, 255};
 static const Color COL_WATER = {36, 96, 190, 255};
 static const Color COL_WATER_TOP = {110, 170, 240, 255};
-static const Color COL_EYE = {255, 255, 255, 255};
 static const Color COL_CRATE_RED = {208, 64, 56, 255};
 static const Color COL_CRATE_BLUE = {56, 112, 226, 255};
-static const Color COL_WOOD = {142, 98, 52, 255};
 static const Color COL_WOOD_DARK = {92, 60, 30, 255};
-static const Color COL_CHUTE = {240, 236, 220, 255};
-static const Color COL_CHUTE_STRIPE = {214, 190, 120, 255};
 
 static const Color COL_PAD_PLATE = {70, 190, 170, 255};
 static const Color COL_PAD_CELL = {56, 120, 118, 255};
@@ -242,82 +238,134 @@ static void draw_hp_bar(Render *r, Rect box, f32 fraction) {
                      fraction > 0.3f ? COL_HP : COL_HP_LOW);
 }
 
-static const Color COL_STEEL = {150, 156, 170, 255};
 static const Color COL_MARKER = {255, 224, 80, 255};
 
-static void draw_soldier(Render *r, const Soldier *s, bool controlled, f32 alpha, i32 ox, i32 oy) {
+static f32 deg(Vec2 dir) {
+    return atan2f(dir.y, dir.x) * 180.0f / 3.14159265f;
+}
+
+static void sprite_at(Render *r, SpriteId id, i32 palette, Vec2 pos, f32 angle, bool flip_x, bool flip_y) {
+    const SpriteDraw d = {.id = id, .palette = palette, .pos = pos, .angle = angle, .flip_x = flip_x, .flip_y = flip_y};
+    render_sprite(r, &d);
+}
+
+// An arm from the shoulder along `dir` (drawn mirrored when it points left, so the sleeve stays on top).
+static void draw_arm(Render *r, i32 palette, Vec2 shoulder, Vec2 dir) {
+    sprite_at(r, SPR_ARM, palette, shoulder, deg(dir), false, dir.x < 0.0f);
+}
+
+// Both arms up along the sides of the head, stretched to reach the crate held overhead.
+static void draw_carry_arm(Render *r, i32 palette, Vec2 shoulder, f32 side) {
+    const SpriteDraw d = {.id = SPR_ARM,
+                          .palette = palette,
+                          .pos = vec2(shoulder.x + side * 5.0f, shoulder.y - 2.0f),
+                          .angle = side > 0.0f ? -100.0f : -80.0f,
+                          .scale_x = 1.6f,
+                          .flip_y = side < 0.0f};
+    render_sprite(r, &d);
+}
+
+static SpriteId weapon_sprite(WeaponKind w) {
+    switch (w) {
+    case WEAPON_PISTOL:
+        return SPR_PISTOL;
+    case WEAPON_UZI:
+        return SPR_UZI;
+    case WEAPON_GRENADES:
+    case WEAPON_STRONG_GRENADES:
+        return SPR_GRENADE;
+    case WEAPON_ROCKET_LAUNCHER:
+        return SPR_ROCKET_LAUNCHER;
+    default:
+        return SPR_COUNT;
+    }
+}
+
+// The free arm hangs and swings with the stride; in the air it flails.
+static Vec2 idle_arm_dir(BodyPose pose, f32 facing) {
+    switch (pose) {
+    case POSE_RUN0:
+        return vec2(facing * 0.8f, 1.0f);
+    case POSE_RUN2:
+        return vec2(-facing * 0.6f, 1.0f);
+    case POSE_JUMP:
+        return vec2(facing * 0.6f, -1.0f);
+    case POSE_FALL:
+        return vec2(facing * 1.0f, -0.4f);
+    default:
+        return vec2(facing * 0.3f, 1.0f);
+    }
+}
+
+static void draw_soldier(Render *r, const GameState *gs, const FxList *fx, i32 index, f32 alpha, i32 ox, i32 oy) {
+    const Soldier *s = &gs->soldiers[index];
     const Companion *c = &s->c;
     const f32 x = roundf(lerpf(c->prev_pos.x, c->body.pos.x, alpha));
     const f32 y = roundf(lerpf(c->prev_pos.y, c->body.pos.y, alpha));
     const f32 w = c->body.size.x, h = c->body.size.y;
+    const Vec2 feet = vec2(x + w * 0.5f - (f32)ox, y + h - (f32)oy);
+    const BodyPose pose = fx ? fx_pose(fx, gs, index) : POSE_IDLE0;
+    const f32 squash = fx ? fx_squash(fx, index) : 0.0f;
+    const f32 sx = 1.0f + 0.2f * squash, sy = 1.0f - 0.18f * squash;
     const bool flash = c->hurt_ticks > 0 && (c->hurt_ticks / 2) % 2 == 0;
-    const Color body = flash ? COL_FLASH : ui_team_color(s->team);
-    const Color dark = flash ? COL_FLASH : ui_team_color_dark(s->team);
-    render_fill_rect(r, rect_at(ox, oy, x, y, w, h), body);
-    render_fill_rect(r, rect_at(ox, oy, x, y + h - 4.0f, w, 4.0f), dark);
-    // Variants: a stripe for the strong one, shoulder pads for the heavy ones, plating for the armored one.
-    if (s->variant == SOLDIER_STRONG) {
-        render_fill_rect(r, rect_at(ox, oy, x, y + 10.0f, w, 2.0f), COL_EYE);
-    } else if (s->variant == SOLDIER_HEAVY || s->variant == SOLDIER_HEAVY_ARMORED) {
-        render_fill_rect(r, rect_at(ox, oy, x - 2.0f, y + 6.0f, 2.0f, 6.0f), dark);
-        render_fill_rect(r, rect_at(ox, oy, x + w, y + 6.0f, 2.0f, 6.0f), dark);
-        if (s->variant == SOLDIER_HEAVY_ARMORED) {
-            render_fill_rect(r, rect_at(ox, oy, x + 1.0f, y + 8.0f, w - 2.0f, 8.0f), COL_STEEL);
-            render_fill_rect(r, rect_at(ox, oy, x + 1.0f, y + 12.0f, w - 2.0f, 1.0f), dark);
+    const i32 palette = flash ? SPRITE_PALETTE_FLASH : s->team;
+    const f32 facing = c->facing < 0 ? -1.0f : 1.0f;
+    const f32 bob = (f32)sprite_pose_bob(pose);
+    const Vec2 shoulder = vec2(feet.x - facing, feet.y - ((f32)(SPRITE_BODY_H - SPRITE_SHOULDER_Y) - bob) * sy);
+    const bool carrying = entity_id_valid(c->carrying);
+
+    // Behind the body: the other arm, when both hands are busy.
+    if (carrying) {
+        draw_carry_arm(r, palette, shoulder, -facing);
+    } else if (c->on_ladder) {
+        draw_arm(r, palette, shoulder, vec2(facing * 0.2f, pose == POSE_CLIMB0 ? -1.0f : -0.5f));
+    }
+    const SpriteDraw body = {.id = sprite_body((i32)s->variant, pose),
+                             .palette = palette,
+                             .pos = feet,
+                             .scale_x = sx,
+                             .scale_y = sy,
+                             .flip_x = facing < 0.0f};
+    render_sprite(r, &body);
+
+    // In front: the arm that holds, punches or swings.
+    if (carrying) {
+        draw_carry_arm(r, palette, shoulder, facing);
+    } else if (c->on_ladder) {
+        draw_arm(r, palette, shoulder, vec2(facing * 0.2f, pose == POSE_CLIMB0 ? -0.5f : -1.0f));
+    } else if (c->weapon == WEAPON_FISTS && c->punch_ticks > 0) {
+        sprite_at(r, SPR_PUNCH, palette, shoulder, 0.0f, facing < 0.0f, false);
+    } else if (c->weapon != WEAPON_FISTS) {
+        const Vec2 dir = c->aim_dir;
+        const SpriteId ws = weapon_sprite(c->weapon);
+        draw_arm(r, palette, shoulder, dir);
+        if (ws == SPR_GRENADE) {
+            sprite_at(r, ws, palette, vec2_add(shoulder, vec2_scale(dir, 6.0f)), 0.0f, false, false);
+        } else if (ws != SPR_COUNT) {
+            const f32 reach = ws == SPR_ROCKET_LAUNCHER ? 2.0f : 5.0f;
+            sprite_at(r, ws, palette, vec2_add(shoulder, vec2_scale(dir, reach)), deg(dir), false, dir.x < 0.0f);
         }
+    } else {
+        draw_arm(r, palette, shoulder, idle_arm_dir(pose, facing));
     }
-    const f32 eye_x = c->facing > 0 ? x + w - 5.0f : x + 3.0f;
-    render_fill_rect(r, rect_at(ox, oy, eye_x, y + 4.0f, 2.0f, 3.0f), COL_EYE);
-    // The weapon in hand (a colored barrel), or the fist while punching.
-    const f32 hand_y = y + TUNING_MUZZLE_HEIGHT - 1.0f;
-    if (c->weapon != WEAPON_FISTS) {
-        // A two-pixel barrel from the shoulder along the aim direction.
-        const Vec2 from = vec2(x + w * 0.5f - (f32)ox, y + TUNING_MUZZLE_HEIGHT - (f32)oy);
-        const Vec2 to = vec2_add(from, vec2_scale(c->aim_dir, 10.0f));
-        const Vec2 side = vec2_scale(vec2(-c->aim_dir.y, c->aim_dir.x), 1.0f);
-        render_line(r, from, to, WEAPON_COLORS[c->weapon]);
-        render_line(r, vec2_add(from, side), vec2_add(to, side), WEAPON_COLORS[c->weapon]);
-    } else if (c->punch_ticks > 0) {
-        const f32 fx = c->facing > 0 ? x + w : x - 6.0f;
-        render_fill_rect(r, rect_at(ox, oy, fx, hand_y - 1.0f, 6.0f, 5.0f), WEAPON_COLORS[WEAPON_FISTS]);
-    }
-    if (controlled) { // a small arrow above the head
-        const f32 mx = x + w * 0.5f - (f32)ox, my = y - 9.0f - (f32)oy;
-        render_line(r, vec2(mx - 3.0f, my), vec2(mx + 3.0f, my), COL_MARKER);
-        render_line(r, vec2(mx - 2.0f, my + 1.0f), vec2(mx + 2.0f, my + 1.0f), COL_MARKER);
-        render_line(r, vec2(mx - 1.0f, my + 2.0f), vec2(mx + 1.0f, my + 2.0f), COL_MARKER);
-        render_line(r, vec2(mx, my + 3.0f), vec2(mx, my + 3.0f), COL_MARKER);
+
+    const f32 top = feet.y - (f32)SPRITE_BODY_H + bob;
+    if (index == gs->controlled) { // a small arrow above the head
+        const f32 mx = feet.x, my = top - 7.0f - (carrying ? TUNING_CRATE_SIZE : 0.0f);
+        for (int k = 0; k < 4; k++) {
+            render_line(r, vec2(mx - 3.0f + (f32)k, my + (f32)k), vec2(mx + 3.0f - (f32)k, my + (f32)k), COL_MARKER);
+        }
     } else if (c->hp < c->max_hp) {
-        draw_hp_bar(r, rect_at(ox, oy, x, y - 5.0f, w, 3.0f), (f32)c->hp / (f32)c->max_hp);
+        draw_hp_bar(r, (Rect){feet.x - w * 0.5f, top - 5.0f, w, 3.0f}, (f32)c->hp / (f32)c->max_hp);
     }
 }
 
-static void draw_soldiers(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 oy) {
+static void draw_soldiers(Render *r, const GameState *gs, const FxList *fx, f32 alpha, i32 ox, i32 oy) {
     for (i32 i = 0; i < MAX_SOLDIERS; i++) {
         if (gs->soldiers[i].alive) {
-            draw_soldier(r, &gs->soldiers[i], i == gs->controlled, alpha, ox, oy);
+            draw_soldier(r, gs, fx, i, alpha, ox, oy);
         }
     }
-}
-
-
-// A wooden frame with crossed planks; the colored panel tells red from blue (and from team colors).
-static void draw_crate_sprite(Render *r, f32 x, f32 y, CrateKind kind) {
-    const f32 s = TUNING_CRATE_SIZE;
-    render_fill_rect(r, (Rect){x, y, s, s}, COL_WOOD);
-    render_fill_rect(r, (Rect){x + 2.0f, y + 2.0f, s - 4.0f, s - 4.0f},
-                     kind == CRATE_BLUE ? COL_CRATE_BLUE : COL_CRATE_RED);
-    render_line(r, vec2(x + 2.0f, y + 2.0f), vec2(x + s - 3.0f, y + s - 3.0f), COL_WOOD_DARK);
-    render_line(r, vec2(x + s - 3.0f, y + 2.0f), vec2(x + 2.0f, y + s - 3.0f), COL_WOOD_DARK);
-}
-
-static void draw_parachute(Render *r, f32 x, f32 y) {
-    const f32 s = TUNING_CRATE_SIZE;
-    render_fill_rect(r, (Rect){x - 2.0f, y - 12.0f, s + 4.0f, 5.0f}, COL_CHUTE);
-    render_fill_rect(r, (Rect){x + 2.0f, y - 12.0f, 3.0f, 5.0f}, COL_CHUTE_STRIPE);
-    render_fill_rect(r, (Rect){x + s - 5.0f, y - 12.0f, 3.0f, 5.0f}, COL_CHUTE_STRIPE);
-    render_line(r, vec2(x - 1.0f, y - 7.0f), vec2(x + 2.0f, y), COL_CHUTE);
-    render_line(r, vec2(x + s, y - 7.0f), vec2(x + s - 3.0f, y), COL_CHUTE);
 }
 
 static void draw_crates(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 oy, u32 flags) {
@@ -332,10 +380,12 @@ static void draw_crates(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 o
             continue;
         }
         const CrateState st = e->as.crate.state;
-        draw_crate_sprite(r, x, y, e->as.crate.kind);
-        if (st == CRATE_DESCENDING) {
-            draw_parachute(r, x, y);
+        if (st == CRATE_DESCENDING) { // the parachute sways a little
+            const f32 sway = sinf((f32)gs->tick * 0.07f + (f32)i) * 5.0f;
+            sprite_at(r, SPR_PARACHUTE, 0, vec2(x + 8.0f, y - 5.0f), sway, false, false);
         }
+        sprite_at(r, e->as.crate.kind == CRATE_BLUE ? SPR_CRATE_BLUE : SPR_CRATE_RED, 0, vec2(x + 8.0f, y + 8.0f), 0.0f,
+                  false, false);
         if (flags & DRAW_DEBUG) { // outline by state: descending cyan, falling orange, carried magenta
             const Color outline = st == CRATE_DESCENDING ? (Color){80, 230, 255, 255}
                                   : st == CRATE_FALLING  ? (Color){255, 150, 40, 255}
@@ -429,6 +479,7 @@ static void draw_products(Render *r, const GameState *gs, f32 alpha, i32 ox, i32
     }
 }
 
+// A weapon on the ground: a small case with the weapon floating above it.
 static void draw_loot_weapons(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 oy) {
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
         const Entity *e = &gs->entities.slots[i];
@@ -439,9 +490,13 @@ static void draw_loot_weapons(Render *r, const GameState *gs, f32 alpha, i32 ox,
         const f32 y = roundf(lerpf(e->prev_pos.y, e->body.pos.y, alpha));
         const Color c = WEAPON_COLORS[e->as.weapon.kind];
         const f32 w = e->body.size.x, h = e->body.size.y;
-        render_fill_rect(r, rect_at(ox, oy, x, y + h - 7.0f, w, 7.0f), COL_WOOD_DARK); // a small case
-        render_fill_rect(r, rect_at(ox, oy, x + 1.0f, y + h - 6.0f, w - 2.0f, 5.0f), c);
-        render_fill_rect(r, rect_at(ox, oy, x + 2.0f, y + h - 9.0f, w - 4.0f, 2.0f), c); // the weapon's top
+        render_fill_rect(r, rect_at(ox, oy, x, y + h - 4.0f, w, 4.0f), COL_WOOD_DARK);
+        render_fill_rect(r, rect_at(ox, oy, x + 1.0f, y + h - 3.0f, w - 2.0f, 2.0f), c);
+        const SpriteId ws = weapon_sprite(e->as.weapon.kind);
+        if (ws != SPR_COUNT) {
+            const f32 hover = roundf(sinf((f32)gs->tick * 0.1f + (f32)i) * 1.5f);
+            sprite_at(r, ws, 0, vec2(x + w * 0.5f - (f32)ox, y + h - 9.0f + hover - (f32)oy), 0.0f, false, false);
+        }
     }
 }
 
@@ -472,26 +527,84 @@ static void draw_projectiles(Render *r, const GameState *gs, f32 alpha, i32 ox, 
         if (e->type != ENT_PROJECTILE) {
             continue;
         }
-        const f32 x = roundf(lerpf(e->prev_pos.x, e->body.pos.x, alpha));
-        const f32 y = roundf(lerpf(e->prev_pos.y, e->body.pos.y, alpha));
-        const f32 w = e->body.size.x, h = e->body.size.y;
-        const WeaponKind wk = e->as.projectile.weapon;
-        switch (weapon_def(wk)->shot) {
+        const f32 x = lerpf(e->prev_pos.x, e->body.pos.x, alpha);
+        const f32 y = lerpf(e->prev_pos.y, e->body.pos.y, alpha);
+        const Vec2 c = vec2(x + e->body.size.x * 0.5f - (f32)ox, y + e->body.size.y * 0.5f - (f32)oy);
+        const Vec2 v = e->body.vel;
+        const f32 sp = sqrtf(v.x * v.x + v.y * v.y);
+        const Vec2 dir = sp > 0.0f ? vec2_scale(v, 1.0f / sp) : vec2(1.0f, 0.0f);
+        switch (weapon_def(e->as.projectile.weapon)->shot) {
         case SHOT_GRENADE:
-            fill_circle(r, vec2(x + w * 0.5f - (f32)ox, y + h * 0.5f - (f32)oy), w * 0.5f, WEAPON_COLORS[wk]);
+            sprite_at(r, SPR_GRENADE, 0, c, (f32)((gs->tick * 23u + i * 40u) % 360u), false, false);
             break;
-        case SHOT_ROCKET: {
-            const Vec2 c = vec2(x + w * 0.5f - (f32)ox, y + h * 0.5f - (f32)oy);
-            const f32 sp = sqrtf(e->body.vel.x * e->body.vel.x + e->body.vel.y * e->body.vel.y);
-            const Vec2 back = sp > 0.0f ? vec2_scale(e->body.vel, -7.0f / sp) : vec2(0.0f, 0.0f); // exhaust behind
-            render_fill_rect(r, rect_at(ox, oy, x, y, w, h), WEAPON_COLORS[wk]);
-            render_line(r, c, vec2_add(c, back), COL_BULLET);
+        case SHOT_ROCKET:
+            sprite_at(r, SPR_ROCKET, 0, c, deg(dir), false, false);
+            fill_circle(r, vec2_sub(c, vec2_scale(dir, 7.0f)), 1.5f, (Color){255, 200, 80, 255}); // exhaust
             break;
-        }
-        default:
-            render_fill_rect(r, rect_at(ox, oy, x, y, w, h), COL_BULLET);
+        default: // a short streak with a bright head
+            render_line(r, vec2_sub(c, vec2_scale(dir, 5.0f)), c, (Color){255, 200, 90, 200});
+            render_fill_rect(r, (Rect){roundf(c.x) - 1.0f, roundf(c.y) - 1.0f, 2.0f, 2.0f}, COL_BULLET);
             break;
         }
+    }
+}
+
+static Color with_alpha(u8 r, u8 g, u8 b, f32 a) {
+    return (Color){r, g, b, (u8)(clampf(a, 0.0f, 1.0f) * 255.0f)};
+}
+
+static void draw_ring(Render *r, Vec2 c, f32 radius, Color color) {
+    const int n = 24;
+    for (int k = 0; k < n; k++) {
+        const f32 a0 = (f32)k / (f32)n * 6.2831853f, a1 = (f32)(k + 1) / (f32)n * 6.2831853f;
+        render_line(r, vec2(c.x + cosf(a0) * radius, c.y + sinf(a0) * radius),
+                    vec2(c.x + cosf(a1) * radius, c.y + sinf(a1) * radius), color);
+    }
+}
+
+static void draw_particle(Render *r, const Particle *p, i32 ox, i32 oy) {
+    const f32 t = particle_progress(p);
+    const Vec2 at = vec2(p->pos.x - (f32)ox, p->pos.y - (f32)oy);
+    if (at.x < -40.0f || at.x > (f32)LOGICAL_W + 40.0f || at.y < -40.0f || at.y > (f32)LOGICAL_H + 40.0f) {
+        return;
+    }
+    switch ((ParticleKind)p->kind) {
+    case PART_DOT:
+        render_fill_rect(r, (Rect){roundf(at.x), roundf(at.y), roundf(p->size), roundf(p->size)},
+                         with_alpha(p->r, p->g, p->b, 1.0f - t * t));
+        break;
+    case PART_SMOKE:
+        fill_circle(r, at, p->size, with_alpha(p->r, p->g, p->b, 0.75f * (1.0f - t)));
+        break;
+    case PART_SPARK:
+        render_line(r, at, vec2_sub(at, vec2_scale(p->vel, 0.025f)), with_alpha(p->r, p->g, p->b, 1.0f - t));
+        break;
+    case PART_CHUNK: { // tumbling: wide then tall
+        const bool wide = ((i32)(fabsf(p->angle) / 90.0f)) % 2 == 0;
+        const f32 w = wide ? p->size : MAX(1.0f, p->size * 0.6f), h = wide ? MAX(1.0f, p->size * 0.6f) : p->size;
+        render_fill_rect(r, (Rect){roundf(at.x - w * 0.5f), roundf(at.y - h * 0.5f), roundf(w), roundf(h)},
+                         with_alpha(p->r, p->g, p->b, t < 0.8f ? 1.0f : (1.0f - t) * 5.0f));
+        break;
+    }
+    case PART_STAR: {
+        const SpriteDraw d = {.id = SPR_STAR, .pos = at, .angle = p->angle, .alpha = (u8)(255.0f * (1.0f - t * t))};
+        render_sprite(r, &d);
+        break;
+    }
+    case PART_RING:
+        draw_ring(r, at, p->size, with_alpha(p->r, p->g, p->b, 1.0f - t));
+        break;
+    case PART_CORPSE: {
+        const SpriteDraw d = {.id = sprite_body(p->variant, POSE_FALL),
+                              .palette = p->team,
+                              .pos = vec2(at.x, at.y + (f32)SPRITE_BODY_H * 0.5f),
+                              .angle = p->angle,
+                              .flip_x = p->facing < 0,
+                              .pivot_center = true,
+                              .alpha = (u8)(255.0f * (t < 0.6f ? 1.0f : (1.0f - t) / 0.4f))};
+        render_sprite(r, &d);
+        break;
+    }
     }
 }
 
@@ -499,21 +612,25 @@ static void draw_fx(Render *r, const FxList *fx, i32 ox, i32 oy) {
     if (!fx) {
         return;
     }
+    for (u32 i = 0; i < fx->part_count; i++) {
+        draw_particle(r, &fx->parts[i], ox, oy);
+    }
     for (u32 i = 0; i < fx->count; i++) {
         const Fx *f = &fx->items[i];
         const f32 t = fx_progress(f);
         const Vec2 c = vec2(f->pos.x - (f32)ox, f->pos.y - (f32)oy);
         switch (f->kind) {
         case FX_EXPLOSION:
-            fill_circle(r, c, f->radius * (0.35f + 0.65f * t), (Color){255, (u8)lerpf(120.0f, 40.0f, t), 30, 255});
-            fill_circle(r, c, f->radius * (0.2f + 0.45f * t), (Color){255, 240, (u8)lerpf(160.0f, 60.0f, t), 255});
+            fill_circle(r, c, f->radius * (0.35f + 0.65f * t), (Color){255, (u8)lerpf(150.0f, 40.0f, t), 30, (u8)lerpf(255.0f, 60.0f, t)});
+            fill_circle(r, c, f->radius * (0.2f + 0.45f * t) * (1.0f - t * 0.5f), (Color){255, 244, (u8)lerpf(190.0f, 60.0f, t), (u8)lerpf(255.0f, 0.0f, t)});
             break;
         case FX_SPARK:
             render_fill_rect(r, (Rect){c.x - f->radius * (1.0f - t), c.y - 1.0f, f->radius * 2.0f * (1.0f - t), 2.0f}, COL_BULLET);
             render_fill_rect(r, (Rect){c.x - 1.0f, c.y - f->radius * (1.0f - t), 2.0f, f->radius * 2.0f * (1.0f - t)}, COL_BULLET);
             break;
         case FX_MUZZLE:
-            fill_circle(r, c, f->radius, COL_FLASH);
+            fill_circle(r, c, f->radius, COL_BULLET);
+            fill_circle(r, c, f->radius * 0.5f, COL_FLASH);
             break;
         }
     }
@@ -896,8 +1013,9 @@ static void draw_nav(Render *r, const GameState *gs, i32 ox, i32 oy) {
 void draw_game(Render *r, const GameState *gs, const Camera *cam, const PadMenu *menu, const FxList *fx,
                const Vec2 *crosshair, f32 alpha, u32 flags) {
     const Vec2 cp = camera_interpolated(cam, alpha);
-    const i32 ox = (i32)roundf(cp.x);
-    const i32 oy = (i32)roundf(cp.y);
+    const Vec2 shake = fx ? fx_shake_offset(fx) : vec2(0.0f, 0.0f);
+    const i32 ox = (i32)roundf(cp.x + shake.x);
+    const i32 oy = (i32)roundf(cp.y + shake.y);
 
     render_begin(r, (Color){24, 28, 44, 255});
     draw_background(r, ox, oy);
@@ -908,7 +1026,7 @@ void draw_game(Render *r, const GameState *gs, const Camera *cam, const PadMenu 
     draw_products(r, gs, alpha, ox, oy);
     draw_loot_weapons(r, gs, alpha, ox, oy);
     draw_dummies(r, gs, alpha, ox, oy);
-    draw_soldiers(r, gs, alpha, ox, oy);
+    draw_soldiers(r, gs, fx, alpha, ox, oy);
     draw_projectiles(r, gs, alpha, ox, oy);
     draw_fx(r, fx, ox, oy);
     draw_pad_menu(r, menu, ox, oy);

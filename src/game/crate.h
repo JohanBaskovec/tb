@@ -16,6 +16,9 @@ void crate_destroy(GameState *gs, EntityId id);
 // Same, for a crate used up by a pad construction (counted and announced differently).
 void crate_consume(GameState *gs, EntityId id);
 
+// Puts the crates each zone starts with (level `start.N`) on the ground under the zone, side by side.
+// Call once, from game_init.
+void crates_place_start(GameState *gs);
 // One tick of drop zones and crate physics. Call after the companions have moved.
 void crates_update(GameState *gs);
 // Handles the grab key (pick up / put down) and the fire key (throw) of one soldier.

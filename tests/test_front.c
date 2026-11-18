@@ -78,6 +78,7 @@ static void test_the_setup_screen_changes_level_and_mode(void) {
     CHECK(g_front.preview_ok && strcmp(g_front.preview.name, "La Crique") == 0);
     press(ACT_UP);
     press(ACT_UP);
+    press(ACT_UP);
     CHECK(g_front.selected == SETUP_LEVEL);
     press(ACT_RIGHT);
     CHECK(g_front.level_index == 1 && g_front.preview_ok && strcmp(g_front.preview.name, "AI Arena") == 0);
@@ -90,6 +91,15 @@ static void test_the_setup_screen_changes_level_and_mode(void) {
     CHECK(g_front.spectate);
     press(ACT_CONFIRM); // confirm on a setting changes it too
     CHECK(!g_front.spectate);
+    press(ACT_DOWN);
+    CHECK(g_front.selected == SETUP_SQUAD && g_front.squad == 1); // one soldier each by default
+    press(ACT_RIGHT);
+    press(ACT_RIGHT);
+    CHECK(g_front.squad == 3);
+    press(ACT_LEFT);
+    press(ACT_LEFT);
+    press(ACT_LEFT); // wraps around
+    CHECK(g_front.squad == TUNING_SKIRMISH_MAX_SQUAD);
     press(ACT_PAUSE); // back
     CHECK(g_front.screen == SCREEN_TITLE);
     front_free(&g_front);
@@ -117,11 +127,27 @@ static void test_a_match_starts_against_the_ai(void) {
     front_free(&g_front);
 }
 
+static void test_the_chosen_squad_size_is_used(void) {
+    init();
+    press(ACT_CONFIRM);
+    press(ACT_UP); // squad
+    press(ACT_RIGHT);
+    press(ACT_RIGHT);
+    press(ACT_DOWN); // start
+    press(ACT_CONFIRM);
+    Sim *sim = front_sim(&g_front);
+    CHECK(sim != NULL);
+    CHECK(team_soldier_count(&sim->gs, 0) == 3 && team_soldier_count(&sim->gs, 1) == 3);
+    front_free(&g_front);
+}
+
 static void test_a_spectated_match_has_no_human(void) {
     init();
     press(ACT_CONFIRM);
     press(ACT_UP);
+    press(ACT_UP);
     press(ACT_RIGHT); // mode: AI against AI
+    press(ACT_DOWN);
     press(ACT_DOWN);
     press(ACT_CONFIRM);
     CHECK(g_front.screen == SCREEN_PLAY);
@@ -230,6 +256,7 @@ int main(void) {
     RUN_TEST(test_the_title_screen_plays_or_quits);
     RUN_TEST(test_the_setup_screen_changes_level_and_mode);
     RUN_TEST(test_a_match_starts_against_the_ai);
+    RUN_TEST(test_the_chosen_squad_size_is_used);
     RUN_TEST(test_a_spectated_match_has_no_human);
     RUN_TEST(test_pause_freezes_resumes_restarts_and_quits);
     RUN_TEST(test_the_results_come_after_the_match_and_lead_to_a_new_one);

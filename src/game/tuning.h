@@ -41,7 +41,7 @@
 #define TUNING_PLACE_MAX_RAISE 2         // a crate can be placed up to this many tiles above the feet
 
 // Carrying a crate: slower, and a lower jump. No ladders, no shooting.
-#define TUNING_CARRY_SPEED_MULT 0.75f
+#define TUNING_CARRY_SPEED_MULT 0.9f
 #define TUNING_CARRY_JUMP_MULT 0.8f
 
 // Combat. Weapons themselves are a data table (game/weapon.c).
@@ -72,7 +72,8 @@
 #define TUNING_BASE_ALERT_S 3.0f // after a hit, the team's commander keeps everybody home this long
 
 // Skirmish started from the menus: soldiers every team starts with (matches started otherwise start with one).
-#define TUNING_SKIRMISH_START_SQUAD 3
+#define TUNING_SKIRMISH_START_SQUAD 1 // default of the setup screen
+#define TUNING_SKIRMISH_MAX_SQUAD 5
 
 // End of a match: the result shows up this long after the last enemy fell.
 #define TUNING_RESULTS_DELAY_S 2.5f

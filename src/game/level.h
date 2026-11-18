@@ -12,6 +12,7 @@
 // (N counts the `D` markers in reading order, from 1): COLOR is red, blue or mixed; INTERVAL_S is the delay
 // between two drops (seconds); CAP is the number of crates from this zone allowed to exist at once;
 // BLUE_PERCENT (mixed only, default 25) is the chance of a blue crate.
+// `start.N=COUNT` (0..CAP) puts COUNT crates of the N-th zone on the ground under it when the match begins.
 //
 // Pads are numbered in reading order; `pad.N=TEAM` (1-4) gives the owner of the N-th pad (default: team N).
 //
@@ -65,6 +66,7 @@ typedef struct Level {
     Vec2 drop_zones[MAX_DROP_ZONES]; // top-center of the marker cell, in pixels
     DropZoneConfig drop_cfg[MAX_DROP_ZONES];
     bool drop_cfg_set[MAX_DROP_ZONES]; // parser bookkeeping
+    i32 drop_start[MAX_DROP_ZONES];    // crates of each zone already on the ground at the start
     i32 drop_zone_count;
     Vec2 dummies[MAX_DUMMIES]; // bottom-center of the marker cell, in pixels
     i32 dummy_count;

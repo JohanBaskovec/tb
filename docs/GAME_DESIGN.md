@@ -83,7 +83,7 @@ les escouades adverses (ou selon l'objectif de la mission).
 ### Déplacement 🟡
 - Marcher, sauter (hauteur variable selon durée d'appui, *coyote time* et *jump buffer*),
   tomber à travers les plateformes fines (bas + saut), grimper aux échelles.
-- **Porter une caisse** ✅ : la caisse est tenue au-dessus de la tête ; vitesse réduite (×0,75), saut réduit (×0,8),
+- **Porter une caisse** ✅ : la caisse est tenue au-dessus de la tête ; vitesse réduite (×0,9, demandé plus rapide après M6 ; ×0,75 avant), saut réduit (×0,8),
   impossible de tirer, 🟡 impossible de grimper aux échelles. On peut la **poser** devant soi ou la **lancer** en cloche.
   - 🟡 **Touche d'action** (C / B) : à mains libres, prend la caisse la plus proche **devant soi** (portée 16 px) ;
     en portant, la **pose** dans la première colonne entièrement devant le corps (ou jusqu'à 2 tuiles plus haut si
@@ -151,6 +151,12 @@ les escouades adverses (ou selon l'objectif de la mission).
 - 🟡 Une caisse qui perd son support (celle du dessous a été prise) retombe ; une pile se tasse.
 - 🟡 Une caisse tombée à l'eau ou dans le vide est détruite. Elle attend de se poser tant qu'un soldat occupe sa case.
 - 🟡 Les caisses ne blessent pas (pour l'instant).
+- ✅ (après M6) **Chutes plus fréquentes, plafonnées par zone** : sur La Crique et L'Arène, une caisse rouge toutes les 3 à 4 s par zone, une bleue toutes les 7 s,
+  et chaque zone garde au plus 2 ou 3 caisses à elle sur la carte (au plafond, son minuteur attend qu'une de ses caisses disparaisse).
+- ✅ (après M6) **Caisses présentes au départ** : un niveau peut poser des caisses au sol sous une zone dès le début (`start.N`) — 2 près de chaque base et 1 sur chaque plage
+  pour La Crique, 2 près de chaque base pour L'Arène.
+- 🟡 Une caisse qui tomberait sur une autre caisse de sa zone (au sol ou encore en l'air) descend plutôt dans une colonne voisine dont le sol est libre : les caisses s'étalent
+  au lieu de former une tour inaccessible.
 - Plus tard 🟡 : caisses spéciales (piégée, dorée…).
 
 ## 6. Le pad d'empilement ✅ (recettes) / 🟡 (mécanique)
@@ -257,7 +263,7 @@ Idées non confirmées, **non planifiées** : jeep, mini-hélico.
 ## 10. Modes de jeu 🟡
 
 1. **Escarmouche** (priorité) : 2 à 4 équipes, joueurs humains et/ou IA, victoire par élimination.
-   - ✅ (M6) Chaque équipe commence avec **3 soldats** devant sa base. Une équipe est **éliminée** quand son dernier soldat meurt (l'eau ne tue pas : retour à la base) ;
+   - ✅ Chaque équipe commence avec **1 soldat** par défaut, **réglable de 1 à 5** sur l'écran de configuration (« ÉQUIPES ») — décidé après M6 (3 soldats imposés pendant M6). Une équipe est **éliminée** quand son dernier soldat meurt (l'eau ne tue pas : retour à la base) ;
      la dernière équipe debout gagne ; si les dernières tombent en même temps, **match nul**. Détruire une base n'élimine pas.
    - 🟡 L'écran de résultats arrive 2,5 s après : vainqueur, durée, et par équipe les constructions, les ennemis éliminés, les pertes, les soldats restants et l'état de la base.
      On peut **rejouer** (même niveau, nouvelle graine) ou revenir au menu.
@@ -304,7 +310,14 @@ Idées non confirmées, **non planifiées** : jeep, mini-hélico.
 - Pixel art original, palette limitée et vive ; une couleur forte par équipe (bleu, rouge, vert, jaune).
   Attention : les caisses rouges/bleues ne doivent pas être confondues avec les couleurs d'équipe
   (forme ou motif distinct pour les caisses).
-- Personnages à inventer (forme, nom de l'espèce, ton humoristique).
+- Personnages à inventer (forme, nom de l'espèce, ton humoristique). 🟡 Premier jet (après M6) : de petits soldats trapus en pixel art (16 × 24), **casque rond à visière** aux couleurs
+  de l'équipe qui tombe sur les yeux, veste et pantalon de l'équipe, ceinture à boucle dorée, bottes sombres ; le soldat fort a une bande blanche sur le casque et des chevrons, le lourd
+  des épaulettes et des sangles, le lourd blindé un casque et une armure d'acier. Pas encore de nom d'espèce. Animations : respiration, course en 4 temps, saut, chute, échelle ;
+  le bras avant vise réellement (arme tournée vers le curseur), les deux bras se lèvent pour porter une caisse, le poing part en avant ; écrasement bref à l'atterrissage, silhouette
+  blanche quand on est touché. Armes dessinées (pistolet, uzi, grenade, lance-roquettes porté à l'épaule), roquette, caisses en bois à panneau rouge / bleu, parachute.
+- 🟡 Effets (après M6) : débris, fumée, étincelles et onde de choc aux explosions (et léger tremblement d'écran près de la caméra), traînée de fumée des roquettes, douilles éjectées,
+  poussière aux sauts, atterrissages et caisses qui se posent, éclats de bois, gerbes d'eau, étoiles aux constructions, apparitions et ramassages ; un soldat éliminé est projeté en
+  tournoyant avant de disparaître.
 - Placeholders au début : rectangles colorés + police bitmap. 🟡 (M6) Terrain habillé : herbe, terre, planches, eau animée, ciel du soir et collines en parallaxe ;
   bases en forme de bunker aux couleurs de l'équipe, avec un drapeau (fissurées sous 50 % de PV, en ruine une fois détruites).
 - Sons courts et cartoon ; musique chiptune originale. 🟡 (M6) Sons placeholders synthétisés (aucun fichier) pour les événements : tirs, explosions (plus grosses pour roquettes et

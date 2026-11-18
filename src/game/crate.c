@@ -1,6 +1,7 @@
 #include "game/crate.h"
 
 #include "core/log.h"
+#include "game/pad.h"
 #include "game/tuning.h"
 
 #include <math.h>
@@ -103,6 +104,77 @@ void crate_consume(GameState *gs, EntityId id) {
     crate_remove(gs, id, true);
 }
 
+// ---- Crates present at the start ---------------------------------------------------------------
+
+static CrateKind zone_kind(GameState *gs, const DropZoneConfig *cfg) {
+    if (cfg->color == DROP_BLUE) {
+        return CRATE_BLUE;
+    }
+    if (cfg->color == DROP_MIXED) {
+        return (i32)rng_below(&gs->rng, 100) < cfg->blue_percent ? CRATE_BLUE : CRATE_RED;
+    }
+    return CRATE_RED;
+}
+
+// Is the cell part of a pad or of a base (where a crate would be in the way)?
+static bool reserved_cell(const GameState *gs, i32 cx, i32 cy) {
+    const Rect cell = {(f32)(cx * TILE_SIZE), (f32)(cy * TILE_SIZE), CRATE_SIZE, CRATE_SIZE};
+    for (i32 t = 0; t < MAX_TEAMS; t++) {
+        const PadSite *p = &gs->level->pads[t];
+        if (p->present && cx >= p->cell_x && cx < p->cell_x + PAD_COLS && cy <= p->cell_y && cy > p->cell_y - PAD_ROWS) {
+            return true;
+        }
+        if (gs->level->has_spawn[t]) {
+            const Vec2 s = gs->level->spawns[t];
+            const Rect base = {s.x - TUNING_BASE_W * 0.5f, s.y - TUNING_BASE_H, TUNING_BASE_W, TUNING_BASE_H};
+            if (rect_overlap(cell, base)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// The free cell a crate dropped in column `cx` from row `cy0` would rest on, or false (water, ladder, wall...).
+static bool landing_cell(const GameState *gs, i32 cx, i32 cy0, i32 *out_cy) {
+    const Level *lv = gs->level;
+    if (cx < 0 || cx >= lv->width) {
+        return false;
+    }
+    for (i32 cy = cy0; cy < lv->height; cy++) {
+        const TileType t = level_tile(lv, cx, cy);
+        if (level_is_solid(lv, cx, cy) || t == TILE_HAZARD || t == TILE_LADDER) {
+            return false;
+        }
+        if (cell_supported(lv, cx, cy)) {
+            if (reserved_cell(gs, cx, cy)) {
+                return false;
+            }
+            *out_cy = cy;
+            return true;
+        }
+    }
+    return false;
+}
+
+void crates_place_start(GameState *gs) {
+    const Level *lv = gs->level;
+    for (i32 z = 0; z < lv->drop_zone_count; z++) {
+        const i32 zx = level_px_to_tile(lv->drop_zones[z].x), zy = level_px_to_tile(lv->drop_zones[z].y + 0.5f);
+        i32 placed = 0;
+        // Under the zone, then alternately one column further right and left.
+        for (i32 k = 0; k < 12 && placed < lv->drop_start[z]; k++) {
+            const i32 cx = zx + ((k % 2 == 0) ? k / 2 : -(k + 1) / 2);
+            i32 cy;
+            if (landing_cell(gs, cx, zy, &cy)) {
+                crate_spawn(gs, zone_kind(gs, &lv->drop_cfg[z]), vec2((f32)(cx * TILE_SIZE), (f32)(cy * TILE_SIZE)),
+                            CRATE_RESTING, z);
+                placed++;
+            }
+        }
+    }
+}
+
 // ---- Drop zones ------------------------------------------------------------------------------
 
 static u32 zone_crate_count(const GameState *gs, i32 zone) {
@@ -112,6 +184,34 @@ static u32 zone_crate_count(const GameState *gs, i32 zone) {
         n += (is_live_crate(e) && e->as.crate.origin_zone == zone) ? 1u : 0u;
     }
     return n;
+}
+
+// A crate that would land on another one goes to a neighbouring column whose ground is free, if there is one:
+// crates spread out instead of piling up into a tower nobody can reach. Returns the column shift (-1, 0, +1).
+static i32 spread_column(GameState *gs, i32 zone) {
+    const Level *lv = gs->level;
+    const i32 zx = level_px_to_tile(lv->drop_zones[zone].x), zy = level_px_to_tile(lv->drop_zones[zone].y + 0.5f);
+    i32 cy;
+    if (!landing_cell(gs, zx, zy, &cy)) {
+        return 0;
+    }
+    bool crowded = level_dyn_solid(lv, zx, cy + 1);
+    for (u16 i = 1; i <= MAX_ENTITIES && !crowded; i++) { // a crate still on its way down there counts too
+        const Entity *e = &gs->entities.slots[i];
+        crowded = is_live_crate(e) && (e->as.crate.state == CRATE_DESCENDING || e->as.crate.state == CRATE_FALLING) &&
+                  level_px_to_tile(e->body.pos.x + CRATE_SIZE * 0.5f) == zx;
+    }
+    if (!crowded) {
+        return 0;
+    }
+    const i32 first = rng_below(&gs->rng, 2) ? 1 : -1;
+    for (i32 k = 0; k < 2; k++) {
+        const i32 shift = k == 0 ? first : -first;
+        if (landing_cell(gs, zx + shift, zy, &cy) && !level_dyn_solid(lv, zx + shift, cy + 1)) {
+            return shift;
+        }
+    }
+    return 0;
 }
 
 static void spawn_from_zones(GameState *gs) {
@@ -128,16 +228,12 @@ static void spawn_from_zones(GameState *gs) {
         gs->drop_timers[z] = (u32)cfg->interval_s * TICK_HZ;
 
         const Vec2 zone = lv->drop_zones[z];
-        const Vec2 pos = vec2(zone.x - CRATE_SIZE * 0.5f, zone.y);
+        const i32 shift = spread_column(gs, z);
+        const Vec2 pos = vec2(zone.x - CRATE_SIZE * 0.5f + (f32)(shift * TILE_SIZE), zone.y);
         if (rect_hits_solid(lv, pos.x, pos.y, CRATE_SIZE, CRATE_SIZE)) {
             continue; // the pile reached the sky: skip this drop
         }
-        CrateKind kind = CRATE_RED;
-        if (cfg->color == DROP_BLUE) {
-            kind = CRATE_BLUE;
-        } else if (cfg->color == DROP_MIXED) {
-            kind = (i32)rng_below(&gs->rng, 100) < cfg->blue_percent ? CRATE_BLUE : CRATE_RED;
-        }
+        const CrateKind kind = zone_kind(gs, cfg);
         crate_spawn(gs, kind, pos, CRATE_DESCENDING, z);
     }
 }

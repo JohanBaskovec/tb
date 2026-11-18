@@ -149,6 +149,17 @@ static bool parse_header_line(Level *lv, const char *line, usize len, int line_n
         lv->pad_owner[n - 1] = team - 1;
         return true;
     }
+    if (klen > 6 && strncmp(line, "start.", 6) == 0) {
+        i32 n = 0, count = 0;
+        if (!parse_int(line + 6, klen - 6, &n) || n < 1 || n > MAX_DROP_ZONES || !parse_int(val, vlen, &count) ||
+            count < 0 || count > 64) {
+            set_err(err, err_len, "line %d: expected start.N=COUNT with N in 1..%d and COUNT in 0..64", line_no,
+                    MAX_DROP_ZONES);
+            return false;
+        }
+        lv->drop_start[n - 1] = count;
+        return true;
+    }
     if (klen > 5 && strncmp(line, "drop.", 5) == 0) {
         return parse_drop_line(lv, line, klen, val, vlen, line_no, err, err_len);
     }
@@ -324,11 +335,21 @@ bool level_parse(Level *lv, Arena *arena, const char *text, char *err, usize err
                     (int)z + 1, (int)lv->drop_zone_count);
             return false;
         }
+        if (lv->drop_start[z] > 0 && z >= lv->drop_zone_count) {
+            set_err(err, err_len, "start.%d refers to a zone that does not exist (the map has %d)", (int)z + 1,
+                    (int)lv->drop_zone_count);
+            return false;
+        }
         if (!lv->drop_cfg_set[z]) {
             lv->drop_cfg[z] = (DropZoneConfig){.color = DROP_MIXED,
                                                .interval_s = DEFAULT_DROP_INTERVAL_S,
                                                .cap = DEFAULT_DROP_CAP,
                                                .blue_percent = DEFAULT_DROP_BLUE_PERCENT};
+        }
+        if (lv->drop_start[z] > lv->drop_cfg[z].cap) {
+            set_err(err, err_len, "start.%d: more crates (%d) than the zone's cap (%d)", (int)z + 1,
+                    (int)lv->drop_start[z], (int)lv->drop_cfg[z].cap);
+            return false;
         }
     }
     return true;

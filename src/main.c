@@ -3,6 +3,7 @@
 #include "audio/audio.h"
 #include "core/config.h"
 #include "core/log.h"
+#include "core/png.h"
 #include "core/wav.h"
 #include "game/combat.h"
 #include "game/crate.h"
@@ -12,7 +13,9 @@
 #include "platform/platform.h"
 #include "render/draw_front.h"
 #include "render/draw_game.h"
+#include "render/draw_ui.h"
 #include "render/render.h"
+#include "render/sprites.h"
 
 #include <inttypes.h>
 #include <stdio.h>
@@ -31,6 +34,7 @@ typedef struct Options {
     bool mute;
     bool no_music;
     const char *export_audio; // directory: write every sound and song as WAV files, then quit
+    const char *sprite_sheet; // PNG path: write the sprite atlases (every team, magnified), then quit
     u32 squad;  // soldiers each team starts with
     bool bot;
     bool frames_set;
@@ -78,7 +82,8 @@ static void print_usage(const char *prog) {
             "  --mute                  no sound\n"
             "  --no-music              sound effects only\n"
             "  --export-audio DIR      write every sound effect and song to DIR as WAV files, then quit\n"
-            "  --squad N               every team in the match starts with N soldiers (default 1; 3 from the menus)\n"
+            "  --sprite-sheet PATH     write the sprites (every team, magnified 4x) to a PNG, then quit\n"
+            "  --squad N               every team in the match starts with N soldiers (default 1; 1 to 5 from the menus)\n"
             "  --frames N              headless: ticks to simulate (default 600, or the script length)\n"
             "  --max-ticks N           windowed: quit after N ticks\n"
             "  --bot                   drive the player with a random bot\n"
@@ -126,6 +131,8 @@ static bool parse_args(int argc, char **argv, Options *o) {
             o->no_music = true;
         } else if (strcmp(a, "--export-audio") == 0 && has_val) {
             o->export_audio = argv[++i];
+        } else if (strcmp(a, "--sprite-sheet") == 0 && has_val) {
+            o->sprite_sheet = argv[++i];
         } else if (strcmp(a, "--squad") == 0 && has_val) {
             o->squad = (u32)strtoul(argv[++i], NULL, 10);
             if (o->squad < 1 || o->squad > 8) {
@@ -298,6 +305,43 @@ static Audio *open_audio(const Options *o) {
         return NULL;
     }
     return audio_create(!o->no_music);
+}
+
+// --sprite-sheet: the atlases of the four teams and the white one, one under the other, magnified, on a grey
+// checkerboard (to see the transparent pixels). No SDL.
+static int export_sprite_sheet(const char *path) {
+    enum { SCALE = 4 };
+    i32 aw, ah;
+    sprites_atlas_size(&aw, &ah);
+    const i32 sheets = SPRITE_PALETTE_COUNT, w = aw * SCALE, h = ah * sheets * SCALE;
+    u8 *atlas = (u8 *)malloc((usize)aw * (usize)ah * 4u);
+    u8 *out = (u8 *)malloc((usize)w * (usize)h * 4u);
+    bool ok = atlas && out;
+    for (i32 s = 0; ok && s < sheets; s++) {
+        const Color team = ui_team_color(s % MAX_TEAMS), dark = ui_team_color_dark(s % MAX_TEAMS);
+        sprites_build_atlas(atlas, (const u8[3]){team.r, team.g, team.b}, (const u8[3]){dark.r, dark.g, dark.b},
+                            s == SPRITE_PALETTE_FLASH);
+        for (i32 y = 0; y < ah * SCALE; y++) {
+            for (i32 x = 0; x < w; x++) {
+                const u8 *src = atlas + ((y / SCALE) * aw + x / SCALE) * 4;
+                u8 *dst = out + (((usize)s * (usize)ah * SCALE + (usize)y) * (usize)w + (usize)x) * 4u;
+                const u8 bg = ((x / 8 + y / 8) % 2) ? 96 : 120;
+                for (int k = 0; k < 3; k++) {
+                    dst[k] = src[3] ? src[k] : bg;
+                }
+                dst[3] = 255;
+            }
+        }
+    }
+    ok = ok && png_write_rgba(path, out, (u32)w, (u32)h, (usize)w * 4u);
+    free(atlas);
+    free(out);
+    if (!ok) {
+        LOG_ERROR("--sprite-sheet: cannot write %s", path);
+        return 1;
+    }
+    printf("sprite sheet: %d sprites x %d palettes -> %s\n", SPR_COUNT, sheets, path);
+    return 0;
 }
 
 // --export-audio: no SDL, no window, just files to listen to.
@@ -717,6 +761,9 @@ int main(int argc, char **argv) {
     }
     if (o.export_audio) {
         return export_audio(o.export_audio);
+    }
+    if (o.sprite_sheet) {
+        return export_sprite_sheet(o.sprite_sheet);
     }
     if (!platform_init(o.headless)) {
         return 1;

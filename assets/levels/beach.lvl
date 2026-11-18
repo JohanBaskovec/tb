@@ -1,13 +1,18 @@
 ; La Crique: the first real level. Two bases on low cliffs, a beach on each side, a water channel to hop over,
 ; and a plateau in the middle where the blue crates fall. Symmetric: everything can be crossed both ways,
 ; carrying a crate included (no ladder on the way between a drop zone and a pad).
-; Drops: red at each base (1, 5) and on each beach (2, 4), blue in the middle (3).
+; Drops: red at each base (1, 5) and on each beach (2, 4), blue in the middle (3). Each zone keeps at most CAP crates
+; on the map; the match starts with a few already on the ground near the bases and on the beaches.
 name=La Crique
-drop.1=red,6,2
-drop.2=red,9,1
-drop.3=blue,12,1
-drop.4=red,9,1
-drop.5=red,6,2
+drop.1=red,3,3
+drop.2=red,4,2
+drop.3=blue,7,2
+drop.4=red,4,2
+drop.5=red,3,3
+start.1=2
+start.2=1
+start.4=1
+start.5=2
 ---
 ................................................................................................................
 ................................................................................................................

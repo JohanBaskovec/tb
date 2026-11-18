@@ -45,7 +45,7 @@ static bool start_match(Front *f) {
                            .seed = f->seed,
                            .ai_teams = f->spectate ? 1u : 0u,
                            .ai_opponents = true,
-                           .start_squad = TUNING_SKIRMISH_START_SQUAD};
+                           .start_squad = f->squad};
     f->error[0] = '\0';
     if (!sim_init(&f->sim, &cfg, f->error, sizeof(f->error))) {
         return false;
@@ -61,6 +61,7 @@ bool front_init(Front *f, const FrontConfig *cfg) {
     memset(f, 0, sizeof(*f));
     snprintf(f->assets, sizeof(f->assets), "%s", cfg->assets_dir);
     f->seed = cfg->seed;
+    f->squad = TUNING_SKIRMISH_START_SQUAD;
     if (!arena_init(&f->preview_arena, 1u << 20)) {
         return false;
     }
@@ -140,7 +141,7 @@ Rect front_menu_rect(const Front *f, i32 index) {
     case SCREEN_TITLE:
         return (Rect){cx - 70.0f, 236.0f + (f32)index * 24.0f, 140.0f, 18.0f};
     case SCREEN_SETUP:
-        return (Rect){cx - 150.0f, 210.0f + (f32)index * 24.0f, 300.0f, 18.0f};
+        return (Rect){cx - 150.0f, 200.0f + (f32)index * 22.0f, 300.0f, 18.0f};
     case SCREEN_PAUSE:
         return (Rect){cx - 80.0f, 150.0f + (f32)index * 24.0f, 160.0f, 18.0f};
     case SCREEN_RESULTS:
@@ -173,6 +174,9 @@ static void change_setting(Front *f, i32 step) {
         load_preview(f);
     } else if (f->selected == SETUP_MODE) {
         f->spectate = !f->spectate;
+    } else if (f->selected == SETUP_SQUAD) {
+        const i32 max = TUNING_SKIRMISH_MAX_SQUAD;
+        f->squad = (u32)(((i32)f->squad - 1 + step + max) % max + 1);
     }
 }
 
@@ -248,6 +252,7 @@ static void menu_tick(Front *f, const InputFrame *in) {
     const i32 count = front_menu_count(f);
     const i32 before = f->selected, level = f->level_index;
     const bool spectate = f->spectate;
+    const u32 squad = f->squad;
     const Screen screen = f->screen;
     if (input_pressed(in, ACT_CONFIRM) || input_pressed(in, ACT_JUMP)) {
         beep(f, SFX_MENU_OK);
@@ -255,7 +260,8 @@ static void menu_tick(Front *f, const InputFrame *in) {
         beep(f, SFX_MENU_BACK);
     }
     menu_keys(f, in, count);
-    if (f->screen == screen && (f->selected != before || f->level_index != level || f->spectate != spectate)) {
+    if (f->screen == screen && (f->selected != before || f->level_index != level || f->spectate != spectate ||
+                                  f->squad != squad)) {
         beep(f, SFX_MENU_MOVE);
     }
 }

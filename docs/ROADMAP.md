@@ -88,6 +88,11 @@ La police de caractères est arrivée avec le HUD (M6) ; l'overlay de debug gard
 Après le point d'étape (demandé par l'utilisateur) :
 - [x] Musique placeholder — séquenceur chiptune sans fichier (`app/music.c`, D059) : 4 morceaux originaux (titre, La Crique, L'Arène, résultats), fondus entre écrans, baissée en pause, coupée à la fin
   du match pour la fanfare ; `--no-music`, `--export-audio DIR` pour les écouter en WAV
+- [x] Effectif de départ réglable dans le menu (1 à 5, **1 par défaut**, D061)
+- [x] Chutes de caisses plus fréquentes avec plafond par zone, caisses présentes au départ (`start.N`), caisses qui s'étalent au lieu de s'empiler (D062)
+- [x] Porteur de caisse plus rapide (×0,9 au lieu de ×0,75)
+- [x] Sprites pixel art des soldats (4 variantes × 10 poses, assemblés à partir de parties), bras qui visent, armes, roquettes, caisses, parachute (`render/sprites.c`, D063)
+- [x] Particules, animations (course, saut, chute, échelle, portage, coup de poing, écrasement à l'atterrissage), tremblement d'écran (`app/fx.c`, D064)
 - [x] Sons manquants — grosse explosion, ricochet, saut et atterrissage (du soldat suivi seulement, D060), caisse qui se pose, mannequin brisé, arme lâchée, changement de soldat, équipe éliminée,
   alarme de base attaquée, ouverture du menu du pad
 
@@ -103,14 +108,14 @@ Après le point d'étape (demandé par l'utilisateur) :
 - [ ] Équipes mixtes humains + IA, jusqu'à 4 équipes
 
 ## M9 — Contenu
-- [ ] Direction artistique : personnages originaux, tilesets, animations
+- [ ] Direction artistique : personnages originaux, tilesets, animations — premiers sprites et animations faits après M6 (D063, D064) ; tilesets, nom de l'espèce à faire
 - [ ] Musique et effets sonores originaux — une première version synthétisée existe (D055, D059) ; à enrichir ou remplacer
 - [ ] 6–10 niveaux d'escarmouche
 - [ ] Campagne : structure, objectifs de mission, progression sauvegardée
 - [ ] Options (volume, plein écran, échelle, difficulté)
 
 ## M10 — Finition et distribution
-- [ ] « Juice » : particules, tremblement d'écran, hit-stop, animations de squash
+- [ ] « Juice » : particules, tremblement d'écran, hit-stop, animations de squash — particules, tremblement et écrasement faits (D064) ; reste le hit-stop
 - [ ] Équilibrage
 - [ ] Profilage, perfs (cible : 60 FPS en 4 joueurs sur une machine modeste)
 - [ ] Packaging Linux (et Windows via MinGW / MSVC)

@@ -175,34 +175,35 @@ static void test_events_do_not_change_the_hash(void) {
 
 static void test_fx_follow_the_events(void) {
     EventQueue q = {0};
-    FxList fx = {0};
+    static FxList fx;
+    fx_init(&fx);
     events_push(&q, EV_EXPLOSION, vec2(10, 20), 40, WEAPON_GRENADES);
     events_push(&q, EV_SHOT, vec2(1, 2), WEAPON_PISTOL, 1);
     events_push(&q, EV_DAMAGE, vec2(3, 4), 12, 0);
     events_push(&q, EV_CRATE_SPAWNED, vec2(0, 0), 0, 0); // no effect for this one
-    fx_consume(&fx, &q);
+    fx_consume(&fx, &q, NULL);
     CHECK_EQ_U64(fx.count, 3);
     CHECK(fx.items[0].kind == FX_EXPLOSION && fx.items[0].radius == 40.0f);
     CHECK(fx.items[1].kind == FX_MUZZLE && fx.items[2].kind == FX_SPARK);
     // The muzzle flash is the shortest: it goes first, the explosion lasts longest.
     for (int i = 0; i < 3; i++) {
-        fx_step(&fx);
+        fx_step(&fx, NULL);
     }
     CHECK_EQ_U64(fx.count, 2);
     for (int i = 0; i < 5; i++) {
-        fx_step(&fx);
+        fx_step(&fx, NULL);
     }
     CHECK_EQ_U64(fx.count, 1);
     CHECK(fx.items[0].kind == FX_EXPLOSION && fx_progress(&fx.items[0]) > 0.0f && fx_progress(&fx.items[0]) < 1.0f);
     for (int i = 0; i < 30; i++) {
-        fx_step(&fx);
+        fx_step(&fx, NULL);
     }
     CHECK_EQ_U64(fx.count, 0);
     // A full list drops new effects instead of overflowing.
     for (u32 i = 0; i < MAX_FX + 10; i++) {
         events_push(&q, EV_EXPLOSION, vec2(0, 0), 8, 0);
         q.count = 1;
-        fx_consume(&fx, &q);
+        fx_consume(&fx, &q, NULL);
     }
     CHECK_EQ_U64(fx.count, MAX_FX);
 }

@@ -32,6 +32,8 @@ cs_test(rules cs_app)
 cs_test(front cs_app)
 cs_test(sfx cs_app)
 cs_test(music cs_app)
+cs_test(sprites cs_app)
+cs_test(fx cs_app)
 cs_test(scenarios cs_app)
 cs_test(platform cs_platform cs_game)
 
@@ -93,7 +95,7 @@ set(AI_ARENA ${CMAKE_SOURCE_DIR}/assets/levels/ai_arena.lvl)
 add_test(NAME smoke_ai_match
     COMMAND cratesquad --headless --level ${AI_ARENA} --ai-team 1,2 --frames 6000 --seed 2 --debug-nav
             --screenshot ${SHOTS}/smoke_ai_match.png --shot-cam 380,300)
-set_tests_properties(smoke_ai_match PROPERTIES PASS_REGULAR_EXPRESSION "squads=[2-9]/[2-9]/0/0")
+set_tests_properties(smoke_ai_match PROPERTIES PASS_REGULAR_EXPRESSION "products=[1-9][0-9]* .*squads=[0-9]+/[0-9]+/0/0")
 add_test(NAME smoke_ai_opponent_vs_bot
     COMMAND cratesquad --headless --level ${AI_ARENA} --bot --frames 5000 --seed 5)
 set_tests_properties(smoke_ai_opponent_vs_bot PROPERTIES PASS_REGULAR_EXPRESSION "squads=[0-9]+/[1-9][0-9]*/0/0")
@@ -119,6 +121,8 @@ add_test(NAME smoke_front_windowed_dummy
             --screenshot ${SHOTS}/front_windowed.png)
 set_tests_properties(smoke_front_windowed_dummy PROPERTIES PASS_REGULAR_EXPRESSION "audio=dummy.*screen=play")
 
+add_test(NAME smoke_sprite_sheet COMMAND cratesquad --sprite-sheet ${SHOTS}/sprite_sheet.png)
+set_tests_properties(smoke_sprite_sheet PROPERTIES PASS_REGULAR_EXPRESSION "sprite sheet: [0-9]+ sprites x 5 palettes")
 file(MAKE_DIRECTORY ${SHOTS}/audio)
 add_test(NAME smoke_export_audio COMMAND cratesquad --export-audio ${SHOTS}/audio)
 set_tests_properties(smoke_export_audio PROPERTIES PASS_REGULAR_EXPRESSION "exported [0-9]+ sounds and 4 songs")

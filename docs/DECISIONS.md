@@ -363,3 +363,30 @@ morceau calme. `--export-audio DIR` écrit tous les sons et morceaux en WAV pour
 **Statut :** Acceptée
 Les événements `EV_JUMP` et `EV_LANDED` (au-dessus de 160 px/s de chute) sont émis pour tous les soldats, mais les entendre tous noyait le combat : sur une minute d'IA contre IA, ils faisaient
 60 % des sons. Seuls ceux du soldat que suit la caméra jouent (`SfxState.focus_soldier`) ; `test_sfx` vérifie qu'une partie reste lisible (pas plus de 30 sons dans la seconde la plus chargée).
+
+### D061 — Une escarmouche commence à 1 soldat par équipe, réglable de 1 à 5
+**Statut :** Acceptée (demande de l'utilisateur ; remplace l'effectif imposé de D056)
+L'écran de configuration a une entrée « ÉQUIPES » (1 à 5 soldats, `TUNING_SKIRMISH_START_SQUAD` = 1 par défaut, `TUNING_SKIRMISH_MAX_SQUAD` = 5). Le reste de D056 tient : le poste de garde
+est le point de départ.
+
+### D062 — Plus de caisses : chutes fréquentes plafonnées, caisses de départ, étalement
+**Statut :** Acceptée (valeurs provisoires)
+Demande de l'utilisateur : des caisses plus souvent, avec une limite par zone, et des caisses déjà là au début. Les intervalles de La Crique et de L'Arène passent à 3-4 s (rouges) et 7 s
+(bleues), les plafonds à 2-3. Nouvelle clé de niveau `start.N=COUNT` (0..plafond) : `crates_place_start` pose ces caisses au repos sous la zone (puis une colonne à droite, une à gauche…)
+en évitant l'eau, les échelles, les pads et les bases. Plus de caisses, c'était aussi des tours de 3 sur la vigie, que personne n'atteint : une caisse qui tomberait sur une autre (posée
+ou encore en l'air dans la colonne) descend dans une colonne voisine au sol libre (tirage dans le RNG du jeu, donc déterministe). Le porteur va aussi plus vite (×0,9).
+
+### D063 — Sprites : du pixel art écrit en texte dans le code, un atlas par équipe
+**Statut :** Acceptée
+Comme la police (D054), les sprites ne viennent d'aucun fichier ni d'aucune bibliothèque (pas besoin de `stb_image`) : `render/sprites.c` (sans SDL) les décrit en texte, un caractère
+par pixel et par couleur d'une petite palette (dont la couleur d'équipe et ses nuances). Les soldats sont assemblés à partir de parties (tête, torse, jambes par pose) : 4 variantes × 10
+poses sans écrire 40 images. Les bras sont des sprites à part, tournés pour viser ou porter. `sprites_build_atlas` remplit un atlas RGBA par palette (4 équipes + une silhouette blanche
+pour le clignotement des coups) ; `render.c` en fait des textures au démarrage et `render_sprite` dessine un sprite par son point de pivot, avec rotation, miroir, échelle et
+transparence (y compris en headless, par le rendu logiciel de SDL). `--sprite-sheet PATH` exporte les atlas agrandis pour les regarder.
+
+### D064 — Particules, animation des soldats et tremblement d'écran dans `app/fx`
+**Statut :** Acceptée
+Tout ce qui est visuel et que le jeu ne suit pas reste dans `FxList` (sans SDL, hors du hachage) : effets courts, jusqu'à 640 particules (points, fumée, étincelles, débris qui rebondissent
+sur le terrain, étoiles, ondes de choc, soldat éliminé qui tournoie), l'état d'animation de chaque soldat (distance parcourue pour le cycle de course, distance grimpée, écrasement après
+un atterrissage) et l'amplitude du tremblement (atténuée loin de la caméra). Les particules tirent leur hasard d'un RNG à elles, jamais de celui du jeu. Le jeu émet `EV_JUMP` /
+`EV_LANDED` et `EV_PROJECTILE_HIT` dit s'il a touché un mur ; le reste vient des événements existants et d'un coup d'œil à l'état (roquettes en vol, soldat qui vient de mourir).

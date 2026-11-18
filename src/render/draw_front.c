@@ -16,8 +16,6 @@ static const Color COL_SELECTED = {255, 224, 80, 255};
 static const Color COL_ERROR = {240, 96, 80, 255};
 static const Color COL_CRATE_RED = {208, 64, 56, 255};
 static const Color COL_CRATE_BLUE = {56, 112, 226, 255};
-static const Color COL_WOOD = {142, 98, 52, 255};
-static const Color COL_WOOD_DARK = {92, 60, 30, 255};
 
 static void sky(Render *r) {
     const int bands = 12;
@@ -29,13 +27,6 @@ static void sky(Render *r) {
     }
 }
 
-static void crate_icon(Render *r, f32 x, f32 y, f32 s, bool blue) {
-    render_fill_rect(r, (Rect){x, y, s, s}, COL_WOOD);
-    render_fill_rect(r, (Rect){x + 2.0f, y + 2.0f, s - 4.0f, s - 4.0f}, blue ? COL_CRATE_BLUE : COL_CRATE_RED);
-    render_line(r, vec2(x + 2.0f, y + 2.0f), vec2(x + s - 3.0f, y + s - 3.0f), COL_WOOD_DARK);
-    render_line(r, vec2(x + s - 3.0f, y + 2.0f), vec2(x + 2.0f, y + s - 3.0f), COL_WOOD_DARK);
-}
-
 // Crates floating down under their parachutes, behind the title.
 static void falling_crates(Render *r, u32 ticks) {
     for (int i = 0; i < 9; i++) {
@@ -45,10 +36,11 @@ static void falling_crates(Render *r, u32 ticks) {
         if (y > 300.0f) {
             continue;
         }
-        render_fill_rect(r, (Rect){x - 2.0f, y - 12.0f, 20.0f, 5.0f}, (Color){240, 236, 220, 255});
-        render_line(r, vec2(x - 1.0f, y - 7.0f), vec2(x + 2.0f, y), (Color){240, 236, 220, 255});
-        render_line(r, vec2(x + 16.0f, y - 7.0f), vec2(x + 13.0f, y), (Color){240, 236, 220, 255});
-        crate_icon(r, x, y, 16.0f, i % 3 == 1);
+        const SpriteDraw chute = {.id = SPR_PARACHUTE, .pos = vec2(x + 8.0f, y - 5.0f),
+                                  .angle = sinf((f32)ticks * 0.05f + (f32)i) * 5.0f};
+        const SpriteDraw crate = {.id = i % 3 == 1 ? SPR_CRATE_BLUE : SPR_CRATE_RED, .pos = vec2(x + 8.0f, y + 8.0f)};
+        render_sprite(r, &chute);
+        render_sprite(r, &crate);
     }
 }
 
@@ -92,7 +84,12 @@ static void draw_title(Render *r, const Front *f) {
     ui_text(r, cx, 70.0f + bob, "CRATE SQUAD", COL_TITLE, 6, ALIGN_CENTER);
     ui_text_shadow(r, cx, 128.0f, "LA GUERRE DES CAISSES", COL_TEXT, 2, ALIGN_CENTER);
     for (int i = 0; i < 4; i++) {
-        crate_icon(r, cx - 46.0f + (f32)i * 24.0f, 162.0f + (i == 1 || i == 2 ? 0.0f : 8.0f), 20.0f, i == 2);
+        const SpriteDraw crate = {.id = i == 2 ? SPR_CRATE_BLUE : SPR_CRATE_RED,
+                                  .pos = vec2(cx - 36.0f + (f32)i * 24.0f, 172.0f + (i == 1 || i == 2 ? 0.0f : 8.0f)),
+                                  .scale_x = 1.25f,
+                                  .scale_y = 1.25f,
+                                  .pivot_center = true};
+        render_sprite(r, &crate);
     }
     menu_entry(r, f, TITLE_PLAY, "JOUER");
     menu_entry(r, f, TITLE_QUIT, "QUITTER");
@@ -169,6 +166,9 @@ static void draw_setup(Render *r, const Front *f) {
     }
     setting_entry(r, f, SETUP_LEVEL, "NIVEAU", FRONT_LEVELS[f->level_index].title);
     setting_entry(r, f, SETUP_MODE, "MODE", f->spectate ? "IA CONTRE IA (SPECTATEUR)" : "JOUEUR CONTRE L'IA");
+    char squad[24];
+    snprintf(squad, sizeof(squad), f->squad > 1 ? "%u SOLDATS" : "%u SOLDAT", (unsigned)f->squad);
+    setting_entry(r, f, SETUP_SQUAD, "ÉQUIPES", squad);
     menu_entry(r, f, SETUP_START, "LANCER LA PARTIE");
     menu_entry(r, f, SETUP_BACK, "RETOUR");
     if (f->error[0]) {

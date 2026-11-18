@@ -48,7 +48,7 @@ tb/
 │   ├── app/                # (sans SDL)
 │   │   ├── sim.h/.c        # Sim : niveau + GameState + caméra + source d'entrées + effets et sons à jouer
 │   │   ├── pad_menu.h/.c   # Menu de construction du pad
-│   │   ├── fx.h/.c         # Effets visuels tirés des événements
+│   │   ├── fx.h/.c         # Effets, particules, animation des soldats, tremblement d'écran (tirés des événements et de l'état)
 │   │   ├── sfx.h/.c        # Sons placeholders : synthèse, événements → « cues » (volume, panoramique)
 │   │   ├── music.h/.c      # Musique placeholder : morceaux en texte + séquenceur chiptune 4 canaux
 │   │   └── front.h/.c      # Écrans : titre, configuration, partie, pause, résultats (possède le Sim)
@@ -73,6 +73,7 @@ tb/
 │   │   ├── sprite.h/.c     # Sprites et animations
 │   │   ├── camera.h/.c     # Suivi, zone morte, anticipation, bornes (sans SDL) ; viewports écran partagé à venir
 │   │   ├── font.h/.c       # Police bitmap 5×7 maison (données + mesure, sans SDL)
+│   │   ├── sprites.h/.c    # Sprites pixel art en texte, assemblés en atlas par palette d'équipe (sans SDL)
 │   │   ├── draw_ui.h/.c    # Texte, panneaux, couleurs et noms d'équipe / d'ordre / d'arme affichés
 │   │   ├── draw_game.h/.c  # Le monde (terrain habillé, bases, caisses, soldats…) et le HUD
 │   │   ├── draw_front.h/.c # Les écrans autour de la partie
@@ -187,7 +188,9 @@ typedef struct Entity {
   robuste et prépare le pad 4×2. Les caisses sont traitées **de bas en haut** pour qu'une pile se pose en un seul tick.
 - `GameState.level` est donc un `Level *` mutable ; `Sim` possède le niveau.
 - Les zones de largage (`drop.N=couleur,intervalle_s,plafond[,%bleu]` dans l'en-tête du niveau) vivent dans les données
-  de niveau ; `GameState.drop_timers` compte à rebours par zone, et ne tourne que sous le plafond.
+  de niveau ; `GameState.drop_timers` compte à rebours par zone, et ne tourne que sous le plafond. `start.N=nombre` pose des caisses au repos
+  sous la zone dès `game_init` (`crates_place_start`). Une caisse qui tomberait sur une autre de la colonne (posée ou en vol) part dans une colonne
+  voisine au sol libre (`spread_column`, D062).
 - Ordre de mise à jour fixe par type : entrées → IA → soldats → véhicules → projectiles → caisses → pads → règles.
   Actuellement dans `game_update` : soldat → prendre/poser/lancer → caisses (largage, physique, calage) → caisse portée
   suit la tête → respawn (eau) → `pool_flush`.
@@ -221,8 +224,9 @@ Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont l
   Une boucle qui exécute plusieurs ticks par image doit donc la vider après chaque tick.
 - Elle est de capacité fixe (`MAX_EVENTS`) ; en cas de débordement les événements en trop sont comptés (`dropped`), jamais fatals.
 - Elle n'est **pas dans le hash d'état** et la simulation ne la relit jamais : la présentation ne peut pas influencer le jeu.
-- Premier consommateur : `app/fx.h/.c` (sans SDL), qui en tire de courts effets visuels (explosions, étincelles, flash de bouche) tenus par
-  `Sim.fx` et dessinés par `draw_game`. `sim_tick` la vide à chaque tick.
+- Premier consommateur : `app/fx.h/.c` (sans SDL), qui en tire de courts effets visuels (explosions, étincelles, flash de bouche) et des particules
+  tenus par `Sim.fx` et dessinés par `draw_game`. `sim_tick` appelle `fx_observe` (animation des soldats, traînées des roquettes), `fx_consume`
+  (événements du tick, avec le `GameState` pour le contexte) puis `fx_step` (physique des particules contre le terrain, déclin du tremblement), D064.
 - Deuxième : `app/sfx.h/.c` (`sfx_consume`, appelé par `sim_tick`), qui en tire des sons à jouer (`Sim.cues`) ; la boucle fenêtrée les passe à `audio/` après chaque image.
 
 ## Physique
@@ -354,6 +358,12 @@ Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont l
 
 ## Rendu
 
+- **Sprites** (D063) : `render/sprites.c` (sans SDL) décrit chaque sprite en texte et remplit un atlas RGBA par palette (`SPRITE_PALETTE_TEAM0..3`,
+  `SPRITE_PALETTE_FLASH`) ; `render_create` en fait des textures (filtrage au plus proche). `render_sprite(SpriteDraw)` place un sprite par son pivot
+  (pieds du soldat, épaule du bras, poignée de l'arme…) avec rotation, miroir, échelle, transparence. `draw_game` assemble un soldat : bras arrière,
+  corps (pose donnée par `fx_pose`, écrasé par `fx_squash`), bras avant tourné vers la visée, arme au bout de la main. Le décor (terrain, bases, HUD)
+  reste dessiné en rectangles.
+- Le tremblement d'écran (`fx_shake_offset`) décale la caméra au dessin, jamais dans la simulation.
 - Le mélange alpha est actif (`SDL_BLENDMODE_BLEND`) : panneaux et voiles translucides.
 - Tout est dessiné dans une texture cible 640×360 (`SDL_TEXTUREACCESS_TARGET`), puis copiée à l'écran
   avec une mise à l'échelle entière (`SDL_SetRenderLogicalPresentation` en mode intégral).
@@ -385,7 +395,7 @@ Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont l
   `P` pad d'empilement (case en bas à gauche de la zone 4×2 ; le N-ᵉ `P` dans l'ordre de lecture appartient à l'équipe N,
   sauf `pad.N=ÉQUIPE` dans l'en-tête).
   En-tête : `name=…` et `drop.N=rouge|bleu|mixte…` : voir `game/level.h` (couleur `red|blue|mixed`, intervalle en secondes,
-  plafond de caisses simultanées pour cette zone, % de bleues pour `mixed`, 25 par défaut).
+  plafond de caisses simultanées pour cette zone, % de bleues pour `mixed`, 25 par défaut) et `start.N=nombre` (caisses posées au départ, ≤ plafond).
 - **Constantes de gameplay** : `tuning.h` au départ ; éventuellement un fichier texte rechargé à chaud plus tard.
 - **Sauvegarde / options** : fichier texte clé=valeur dans `SDL_GetPrefPath()`.
 
@@ -407,6 +417,7 @@ RGBA 640×360 via le renderer logiciel de SDL. Aucun display n'est requis.
 | `--play` | Fenêtré : directement une partie avec les options ci-dessous (sans `--play`, la fenêtre s'ouvre sur l'écran titre) |
 | `--mute` | Pas de son (fenêtré) |
 | `--no-music` | Les bruitages sans la musique (fenêtré) |
+| `--sprite-sheet PATH` | Écrit les atlas de sprites (4 équipes + silhouette blanche, agrandis ×4) dans un PNG puis quitte ; ni SDL ni fenêtre |
 | `--export-audio DIR` | Écrit chaque son (`sfx_*.wav`) et chaque morceau (`music_*.wav` : intro, deux boucles, fondu) dans DIR puis quitte ; ni SDL ni fenêtre |
 | `--squad N` | Chaque équipe en jeu commence avec N soldats (1 par défaut ; 3 depuis le menu) |
 | `--frames N` | Nombre de ticks à simuler (défaut 600, ou la longueur du script) |
@@ -479,6 +490,10 @@ Les touches F1–F4 sont testées en injectant des événements (`SDL_PushEvent`
 - Musique et sons ajoutés : `music` (chaque morceau s'analyse, a une boucle de plus de 10 s, sonne sans saturer ; rendu déterministe ; retour à la boucle sans rejouer l'intro ; fondu au changement ;
   même morceau = seul le volume change ; musique de chaque écran et de chaque niveau), `sfx` (nouveaux sons, alarme pour la seule base du joueur, élimination muette quand elle finit le match,
   une minute d'IA contre IA reste lisible), `events` (sauts et atterrissages), `rules` (une alerte par attaque de base) ; fumée `smoke_export_audio`, `bad_export_dir`.
+- Visuels et caisses : `sprites` (données valides, chaque sprite a des pixels et tient dans sa case, soldats posés sur leurs pieds, seule la couleur d'équipe change d'un atlas à
+  l'autre, silhouette blanche), `fx` (explosion → débris, fumée, étincelles, onde, tremblement seulement près de la caméra ; débris qui retombent sur le sol sans le traverser puis
+  disparaissent ; soldat éliminé projeté dans ses couleurs ; gerbe d'eau ou éclats de bois ; douilles et fumée de roquette ; poses de course, saut, chute et écrasement ; pool plein
+  sans débordement), `crate` (une caisse s'étale à côté plutôt que sur une autre), `front` (effectif choisi dans le menu).
 
 ## Cibles CMake
 

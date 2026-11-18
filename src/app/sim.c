@@ -73,6 +73,7 @@ bool sim_init(Sim *sim, const SimConfig *cfg, char *err, usize err_len) {
     }
     apply_ai_teams(sim);
     sim->sfx.human_team = (sim->ai_teams & 1u) ? -1 : 0;
+    fx_init(&sim->fx);
     if (cfg->script) {
         if (!script_parse(&sim->script, cfg->script, err, err_len)) {
             arena_free(&sim->arena);
@@ -102,7 +103,7 @@ void sim_restart(Sim *sim) {
         companion_init(game_player(&sim->gs), sim->start_feet);
     }
     sim->menu = (PadMenu){0};
-    sim->fx = (FxList){0};
+    fx_init(&sim->fx);
     sim->sfx = (SfxState){.human_team = (sim->ai_teams & 1u) ? -1 : 0};
     sim->cues = (SfxCueList){0};
     pad_menu_refresh(&sim->menu, &sim->gs, 0);
@@ -170,9 +171,11 @@ void sim_tick(Sim *sim, const InputFrame *human) {
     const i32 controlled_before = sim->gs.controlled;
     game_update(&sim->gs, &game_input);
     pad_menu_refresh(&sim->menu, &sim->gs, 0);
-    fx_consume(&sim->fx, &sim->gs.events); // the queue holds one tick only: drain it every tick
-    fx_step(&sim->fx);
     const Vec2 listener = vec2(sim->cam.pos.x + (f32)LOGICAL_W * 0.5f, sim->cam.pos.y + (f32)LOGICAL_H * 0.5f);
+    sim->fx.focus = listener;
+    fx_observe(&sim->fx, &sim->gs);
+    fx_consume(&sim->fx, &sim->gs.events, &sim->gs); // the queue holds one tick only: drain it every tick
+    fx_step(&sim->fx, &sim->level);
     sim->sfx.focus_soldier = sim->gs.controlled;
     sfx_consume(&sim->sfx, &sim->gs.events, listener, &sim->cues);
     if (sim->menu.visible && !menu_was_visible) {
