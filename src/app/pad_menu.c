@@ -32,7 +32,7 @@ void pad_menu_refresh(PadMenu *m, const GameState *gs, i32 team) {
     m->team = team;
     m->visible = false;
     m->options.count = 0;
-    if (!pad_usable(gs, team) || !soldier_near_pad(gs, team)) {
+    if (gs->teams[team].ai || !pad_usable(gs, team) || !soldier_near_pad(gs, team)) { // an AI team has no menu
         m->has_selection = false;
         return;
     }

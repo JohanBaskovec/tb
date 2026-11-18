@@ -65,15 +65,27 @@
 #define TUNING_LOOT_W 12.0f           // pad products and weapons lying on the ground
 #define TUNING_LOOT_H 12.0f
 
-// AI soldiers (no pathfinding: they react to what is in front of them).
+// AI soldiers. They travel over the navigation graph (game/nav.c) and press keys like a human.
 #define TUNING_AI_RANGE 200.0f        // sees and shoots enemies this close
 #define TUNING_AI_RANGE_Y 90.0f       // ... and no more than this far above / below
 #define TUNING_AI_CHASE_RANGE 120.0f  // an unarmed soldier runs at an enemy this close
+#define TUNING_AI_WORKER_CHASE_RANGE 40.0f // ... but one that collects or steals only when the enemy is this close
 #define TUNING_AI_WEAPON_RANGE 140.0f // an unarmed soldier walks to a weapon this close
 #define TUNING_AI_FOLLOW_BAND 40.0f   // follows the leader but stops within this distance
 #define TUNING_AI_GUARD_BAND 40.0f    // stays within this distance of its post
 #define TUNING_AI_BAN_S 20.0f         // a crate that could not be fetched is ignored for this long
-#define TUNING_AI_GIVE_UP_S 10.0f     // longest a fetch / delivery may take
+#define TUNING_AI_GIVE_UP_S 30.0f     // longest a fetch / delivery may take (trips can now cross the level)
+#define TUNING_AI_FLEE_HP_PERCENT 30  // a soldier below this share of its hit points runs from enemies
+#define TUNING_AI_FLEE_RANGE 110.0f   // ... when one is this close
+#define TUNING_AI_ARM_RANGE_Y 60.0f   // a weapon this much higher / lower is still worth a trip
+
+// Team commander (AI teams): looks at the situation every COMMANDER_PERIOD ticks.
+#define TUNING_COMMANDER_PERIOD_S 0.5f
+#define TUNING_COMMANDER_MIN_SQUAD 3  // below this, any soldier will do; above, it waits for something better
+#define TUNING_COMMANDER_MAX_SQUAD 8  // no more soldiers than this per team
+#define TUNING_COMMANDER_PATIENCE_S 15.0f // a pad that waits this long without a new crate builds what it can
+#define TUNING_COMMANDER_ATTACK_SQUAD 4   // from this many soldiers on, a part of the team goes on the offensive
+#define TUNING_COMMANDER_THREAT_RANGE 220.0f // an enemy this close to the pad: everybody defends
 
 // Stacking pad menu: shown while the controlled soldier is within this distance of the pad (px,
 // measured from the soldier's center to the pad rectangle).

@@ -18,6 +18,8 @@ typedef struct SimConfig {
     const char *script; // optional input script (takes precedence over the bot)
     bool has_start;     // override the team-1 spawn
     Vec2 start_feet;    // bottom-center of the body, in pixels
+    u32 ai_teams;       // bit per team index run by the AI (a commander; for team 0 this means no human at all)
+    bool ai_opponents;  // also the AI for every other team that has a spawn and a pad
 } SimConfig;
 
 typedef struct Sim {
@@ -34,6 +36,7 @@ typedef struct Sim {
     Vec2 start_feet;
     bool use_bot;
     bool use_script;
+    u32 ai_teams; // teams run by the AI, once ai_opponents is resolved
     InputFrame input; // last frame fed to the game
     // Mouse (window loop only): once it has moved, the soldier aims at it and the left button fires.
     bool mouse_active;

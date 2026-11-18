@@ -7,6 +7,7 @@
 
 #include "core/config.h"
 #include "game/companion.h"
+#include "game/nav.h"
 #include "game/walker.h"
 
 #define MAX_SOLDIERS 32
@@ -33,10 +34,27 @@ typedef enum Order {
     ORDER_GUARD,  // stay near the team's pad and shoot enemies in range
     ORDER_COLLECT, // fetch crates and bring them to the pad
     ORDER_ATTACK, // go to the nearest enemy pad and shoot what is in the way
+    ORDER_STEAL,  // take crates from the enemy pads and bring them to ours
     ORDER_COUNT
 } Order;
 
 const char *order_name(Order order);
+
+// What the AI of a soldier is doing right now (decided every tick; shown by the debug overlay).
+typedef enum AiMode {
+    AI_IDLE,
+    AI_FOLLOW,  // staying close to the controlled soldier
+    AI_GUARD,   // holding the post at the pad
+    AI_FETCH,   // on the way to a crate
+    AI_DELIVER, // carrying a crate to the pad
+    AI_STEAL,   // on the way to a crate of an enemy pad
+    AI_ATTACK,  // advancing on an enemy base
+    AI_ARM,     // going for a weapon lying around
+    AI_FLEE,    // hurt, with an enemy close: retreating to the base
+    AI_MODE_COUNT
+} AiMode;
+
+const char *ai_mode_name(AiMode mode);
 
 typedef enum CollectState {
     COLLECT_SEEK,    // looking for a crate
@@ -45,15 +63,20 @@ typedef enum CollectState {
 } CollectState;
 
 // Memory of the AI of one soldier (also part of the state hash: it decides what the soldier does).
+#define AI_BAN_SLOTS 4
+
 typedef struct SoldierAi {
-    Walker walker;
+    Walker walker;     // fine positioning (a few pixels), and the fallback when there is no navigation graph
+    NavAgent nav;      // the trip to the current goal
+    Order role;        // what the team's commander told this soldier to do (teams run by the AI)
+    AiMode mode;
     u32 clock;         // ticks since the soldier exists: paces the trigger
     CollectState collect;
     i32 deliver_dir;   // +1: walks in from the left of the pad and fills it from the right; -1: the mirror
     EntityId crate;    // crate being fetched
     u32 state_ticks;   // ticks spent in the current collect state
-    EntityId banned;   // crate that could not be fetched: ignored for a while
-    u32 banned_ticks;
+    EntityId banned[AI_BAN_SLOTS]; // crates that could not be fetched or delivered: ignored for a while
+    u32 banned_ticks[AI_BAN_SLOTS];
 } SoldierAi;
 
 typedef struct Soldier {
@@ -68,6 +91,9 @@ typedef struct Soldier {
 typedef struct Team {
     bool active; // has a spawn in the level
     bool eliminated;
+    bool ai;     // run by a commander (game/commander.c): builds, gives roles; no human behind it
     Order order;
     Vec2 spawn;  // bottom-center, pixels
+    u32 stagnant_ticks; // commander: how long the pad has been waiting without a new crate
+    u32 pad_crates;     // commander: crates on the pad when it last looked
 } Team;

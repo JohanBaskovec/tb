@@ -231,12 +231,12 @@ propre (contrôle, élimination d'équipe) et sert de cible, d'équipier et de p
 ### D041 — L'IA ne produit qu'une `InputFrame`
 **Statut :** Acceptée
 Un soldat non contrôlé est piloté par `ai_think()` qui remplit une `InputFrame` (déplacement via `Walker`, visée, tir, touche d'action). La mise à jour d'un soldat est la même
-pour un humain et pour l'IA : l'IA ne peut ni tricher ni diverger des règles. Aucun pathfinding en M4 : une cible hors du sol du soldat est ignorée (M5).
+pour un humain et pour l'IA : l'IA ne peut ni tricher ni diverger des règles. Aucun pathfinding en M4 : une cible hors du sol du soldat est ignorée (complété par D045–D046 : la navigation arrive en M5 sans changer ce principe).
 
 ### D042 — Un seul ordre par équipe, appliqué aux soldats non contrôlés
 **Statut :** Provisoire
 La portée des ordres était à décider (GDD) : l'ordre est celui de l'**équipe** et s'applique à tous ses soldats que le joueur ne contrôle pas ; la touche d'ordre le fait
-défiler (suivre → garder → ramasser → attaquer). Choisir un ordre par soldat ou par soldat visé reste possible plus tard, sans changer l'IA.
+défiler (suivre → garder → ramasser → attaquer, puis *voler* en M5 : D048). Choisir un ordre par soldat ou par soldat visé reste possible plus tard, sans changer l'IA.
 
 ### D043 — Mort définitive, eau = retour à la base
 **Statut :** Provisoire (remplace D036)
@@ -248,3 +248,46 @@ Le joueur sans soldat voit l'écran s'assombrir ; F5 (débogage) recommence la p
 **Statut :** Acceptée
 Une seule touche pour deux usages : tant que le menu du pad est ouvert (soldat contrôlé près de son pad, avec des options), Tab déplace la sélection du menu et le jeu ne le voit
 pas (`Sim` le retire de l'entrée) ; ailleurs, Tab passe au soldat suivant. Si cela gêne en jeu, une touche dédiée est facile à ajouter (`platform_map_keyboard`).
+
+### D045 — Le graphe de navigation est construit en rejouant la physique
+**Statut :** Acceptée
+Plutôt que de déduire les sauts d'une formule (qui divergerait dès qu'on touche à `tuning.h`), `nav_build` pose un soldat sur chaque place où l'on peut se tenir et rejoue
+`companion_update` avec une dizaine d'entrées canned (marcher, sauter 3 directions × 5 durées d'appui, traverser une plateforme fine, monter / descendre) ; le nœud d'arrivée est la cible de l'arête.
+Le graphe ne peut donc pas promettre un mouvement que la physique refuse, et suit le réglage tout seul. Deux garde-fous : un saut doit aboutir au même nœud depuis ±5 px du centre ;
+chaque mouvement est simulé aussi **en portant une caisse** (flag `who` de l'arête : plus lent, saut plus bas, pas d'échelle), et A* ne prend que les arêtes valables pour son porteur.
+Les caisses posées sont ignorées (le suiveur les saute comme obstacles). Coût : ≈ 14 ms par niveau de test en Release, à la demande.
+
+### D046 — `Nav` dans `GameState`, tableaux de taille fixe, construit à la demande
+**Statut :** Acceptée
+Pas d'allocation dans la boucle de jeu et pas de fuite à libérer : `Nav` (≈ 146 Ko : 1024 nœuds, 10240 arêtes, mémoire de travail d'A*) est un champ de `GameState`, construit au premier besoin
+(ou à `game_set_team_ai`) puis jamais invalidé, car il ne dépend que du terrain. Il n'est pas haché (dérivé du niveau) ; l'état de chaque soldat (`NavAgent` : but, chemin, avancement) l'est. Un niveau trop grand
+met `ok = false` avec un avertissement et l'IA retombe sur la marche en ligne droite (`Walker`) : le jeu reste jouable, juste moins malin. `GameState` pèse ≈ 170 Ko.
+Conséquence : les tests unitaires M0–M4 n'ont pas changé (rien ne construit le graphe tant qu'aucun soldat IA ne se déplace).
+
+### D047 — Commandant d'équipe : mêmes actions qu'un joueur, rôles par soldat
+**Statut :** Provisoire (valeurs)
+Le commandant n'a que les actions d'un joueur : `pad_build` (le menu appelle la même fonction) et l'ordre donné aux soldats. Une équipe IA n'a pas d'ordre d'équipe ; chaque soldat reçoit un **rôle**
+(`SoldierAi.role`, un `Order`) : *ramasser* 1 à 3 selon l'effectif, *voler* 1 s'il y a des caisses sur un pad adverse, *attaquer* la moitié du reste dès 4 soldats (les lourds toujours), *garder* le reste ;
+tout le monde défend quand un ennemi est à moins de 220 px de la base ; qui porte une caisse finit sa livraison. Construction : moins de 3 soldats ⇒ seulement des soldats (un pistolet n'aiderait pas) ;
+au-delà, on attend un produit de valeur ≥ 20 (lourd, lance-roquettes) sauf si le pad n'a pas reçu de caisse depuis 15 s ; jamais de véhicule avant M7 ; 8 soldats par équipe au plus.
+Les valeurs de produit sont un tableau dans `commander.c` ; les seuils sont dans `tuning.h`. Séparer `Team.ai` + `SoldierAi.role` de `Team.order` évite de mélanger les ordres du joueur et les rôles de l'IA.
+
+### D048 — Nouvel ordre « voler » ; l'IA ne prend pas les caisses des pads (le sien comme les autres) en ramassant
+**Statut :** Provisoire
+Le vol de caisses sur les pads adverses (jalon M5) est un ordre à part entière, `ORDER_STEAL`, donc aussi à la disposition du joueur (la touche d'ordre en compte maintenant cinq). *Ramasser* n'y touche pas ;
+*voler* préfère les caisses d'un pad adverse (dont rien n'est posé dessus et qu'on peut approcher : la case où se tenir ne doit pas être occupée par une autre caisse) puis retombe sur les caisses libres.
+Pas de défense dédiée : les gardiens tirent sur ce qu'ils voient, comme pour tout intrus.
+
+### D049 — Une caisse n'est visée que si on sait la prendre ET la rapporter
+**Statut :** Acceptée
+Les premières parties IA contre IA ont montré deux pièges : un soldat qui pique une caisse qu'il ne peut pas ramener en la portant (échelle, saut trop haut) reste coincé en haut et la repose en boucle ; et un
+tas de 3 caisses ou plus dont la dernière est hors de portée depuis le sol bloque le couloir et l'IA s'acharne dessus. Avant de choisir une caisse, l'IA exige donc (1) une place où se tenir à portée de corps
+(`crate_stand`, rangée de la caisse ou celle sous elle, case libre) et (2) un chemin **« avec une caisse »** de là jusqu'au pad. Une caisse refusée est exclue 20 s (quatre exclusions mémorisées par soldat).
+Les travailleurs (ramasser / voler) ne quittent pas leur tâche pour poursuivre un ennemi à plus de 40 px.
+
+### D050 — Niveau `ai_arena.lvl` pour les parties IA
+**Statut :** Acceptée
+`test_arena.lvl` n'est pas praticable dans les deux sens (un mur de quatre tuiles bloque le retour vers la base de gauche) : il convient à la mécanique, pas à une partie. `ai_arena.lvl` est symétrique : une colline à marches d'une tuile au centre,
+un étage par côté atteint par une échelle, un pad par côté. Les zones de largage sont plafonnées (2 près des bases, 1 sur la colline) car les piles de 3 caisses ou plus sont hors de portée depuis le sol et finissent en mur.
+Les parties par défaut de l'exécutable (`ai_opponents`) mettent l'IA sur chaque équipe adverse qui a un point de départ et un pad ; les tests de logique (`Sim` sans cette option) n'ont aucune équipe IA sauf demande.
+

@@ -72,6 +72,10 @@ bool pad_read_grid(const GameState *gs, i32 team, PadGrid *grid, EntityId ids[PA
 void pad_world_options(const GameState *gs, i32 team, PadOptionList *out);
 // Rectangle covered by the pad cells, in pixels.
 Rect pad_rect(const GameState *gs, i32 team);
+// True if the crate is resting in a cell of the pad of `team` (and not just next to it).
+bool pad_holds_crate(const GameState *gs, i32 team, const Entity *crate);
+// Number of crates resting on the pad of `team`.
+u32 pad_crate_count(const GameState *gs, i32 team);
 // True if the pad exists and its owner can still use it (a destroyed base cannot: M3).
 bool pad_usable(const GameState *gs, i32 team);
 

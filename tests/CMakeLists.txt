@@ -26,6 +26,8 @@ cs_test(pad_menu cs_app)
 cs_test(events cs_app)
 cs_test(combat cs_app)
 cs_test(squad cs_app)
+cs_test(nav cs_game)
+cs_test(ai cs_app)
 cs_test(scenarios cs_app)
 cs_test(platform cs_platform cs_game)
 
@@ -73,7 +75,7 @@ add_test(NAME smoke_aimed_shot_misses
 set_tests_properties(smoke_aimed_shot_misses PROPERTIES PASS_REGULAR_EXPRESSION "shots=1 hits=0 ")
 # Squads: followers keep up with the leader; the screenshot shows the variants; an AI-heavy bot game stays sane.
 add_test(NAME smoke_squad_follows
-    COMMAND cratesquad --headless --soldier 1,strong,70 --soldier 1,heavy,90 --frames 600
+    COMMAND cratesquad --headless --ai-team none --soldier 1,strong,70 --soldier 1,heavy,90 --frames 600
             --screenshot ${SHOTS}/smoke_squad.png --shot-cam 0,330)
 set_tests_properties(smoke_squad_follows PROPERTIES PASS_REGULAR_EXPRESSION "soldiers=3/0 order=follow ")
 add_test(NAME smoke_squad_bot_vs_ai
@@ -81,14 +83,29 @@ add_test(NAME smoke_squad_bot_vs_ai
 add_test(NAME smoke_armed_bot
     COMMAND cratesquad --headless --bot --give uzi --frames 3000 --seed 4)
 
+# AI: two AI teams play on the symmetric level: both gather crates, build and grow (more than one soldier each);
+# the debug overlay draws the navigation graph and the paths. A human against the default AI opponent also works.
+set(AI_ARENA ${CMAKE_SOURCE_DIR}/assets/levels/ai_arena.lvl)
+add_test(NAME smoke_ai_match
+    COMMAND cratesquad --headless --level ${AI_ARENA} --ai-team 1,2 --frames 6000 --seed 2 --debug-nav
+            --screenshot ${SHOTS}/smoke_ai_match.png --shot-cam 380,300)
+set_tests_properties(smoke_ai_match PROPERTIES PASS_REGULAR_EXPRESSION "squads=[2-9]/[2-9]/0/0")
+add_test(NAME smoke_ai_opponent_vs_bot
+    COMMAND cratesquad --headless --level ${AI_ARENA} --bot --frames 5000 --seed 5)
+set_tests_properties(smoke_ai_opponent_vs_bot PROPERTIES PASS_REGULAR_EXPRESSION "squads=[0-9]+/[1-9][0-9]*/0/0")
+add_test(NAME smoke_ai_on_the_test_arena
+    COMMAND cratesquad --headless --ai-team 1,2 --frames 4000 --seed 3)
+
 # Bad input must fail cleanly (non-zero exit), never crash.
-foreach(case bad_args bad_level bad_script bad_fill_pad bad_give bad_aim bad_soldier bad_order)
+foreach(case bad_args bad_level bad_script bad_fill_pad bad_give bad_aim bad_soldier bad_order bad_ai_team)
     if(case STREQUAL "bad_args")
         set(args --nonsense)
     elseif(case STREQUAL "bad_level")
         set(args --headless --level ${CMAKE_SOURCE_DIR}/assets/levels/nope.lvl)
     elseif(case STREQUAL "bad_soldier")
         set(args --headless --soldier 1,tank,100)
+    elseif(case STREQUAL "bad_ai_team")
+        set(args --headless --ai-team 9)
     elseif(case STREQUAL "bad_order")
         set(args --headless --order dance)
     elseif(case STREQUAL "bad_aim")

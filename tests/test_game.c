@@ -58,6 +58,7 @@ typedef struct Coverage {
     f32 min_y;
     f32 max_x;
     u32 max_resting; // most crates resting at once
+    u64 last_blast;  // tick of the last explosion (a blast throws the player faster than he can run)
 } Coverage;
 
 // Crates: the grid, the pool and the player must tell the same story at the end of every tick.
@@ -165,8 +166,13 @@ static void check_invariants(const Sim *sim, Coverage *cov) {
     }
     CHECK(b->pos.x >= 0.0f && b->pos.x + b->size.x <= level_width_px(lv));
     CHECK(b->pos.y + b->size.y <= level_height_px(lv) + 1.0f); // respawn triggers at the water
-    CHECK(fabsf(b->vel.x) <= TUNING_WALK_SPEED + 0.01f);
-    CHECK(b->vel.y >= -TUNING_JUMP_SPEED - 0.01f && b->vel.y <= TUNING_MAX_FALL_SPEED + 0.01f);
+    if (events_count_of(&gs->events, EV_EXPLOSION) > 0) {
+        cov->last_blast = gs->tick + 1;
+    }
+    if (cov->last_blast == 0 || gs->tick > cov->last_blast + 90) {
+        CHECK(fabsf(b->vel.x) <= TUNING_WALK_SPEED + 0.01f);
+        CHECK(b->vel.y >= -TUNING_JUMP_SPEED - 0.01f && b->vel.y <= TUNING_MAX_FALL_SPEED + 0.01f);
+    }
     if (b->on_ground && !has_support(lv, b)) {
         fprintf(stderr, "tick %llu: on_ground without support at pos=(%.4f, %.4f) ladder=%d\n",
                 (unsigned long long)gs->tick, (double)b->pos.x, (double)b->pos.y, (int)c->on_ladder);

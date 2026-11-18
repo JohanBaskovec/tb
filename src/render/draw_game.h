@@ -9,6 +9,7 @@
 
 enum {
     DRAW_DEBUG = 1u << 0, // tile grid, hitboxes, velocity, state flags, spawns, drop zones
+    DRAW_NAV = 1u << 1,   // navigation graph, the path of every AI soldier and what it is doing
 };
 
 // `alpha` in [0,1]: interpolation between the previous and current tick. `menu`, `fx` and `crosshair`

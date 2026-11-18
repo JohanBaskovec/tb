@@ -12,8 +12,10 @@ les ramènent à leur base et les empilent pour obtenir des armes, des recrues e
 
 ## État du projet
 
-Jalons M0 à M4 faits : socle technique, niveau et déplacement, caisses et pad de construction, combat (armes, projectiles,
-explosions, santé, mannequins), escouade (compagnons, équipes, ordres). La navigation et l'IA d'équipe arrivent ensuite. Avancement détaillé : [docs/ROADMAP.md](docs/ROADMAP.md).
+Jalons M0 à M5 faits : socle technique, niveau et déplacement, caisses et pad de construction, combat (armes, projectiles,
+explosions, santé, mannequins), escouade (compagnons, équipes, ordres), navigation et IA d'équipe (graphe de navigation, A*, commandant qui
+construit et distribue des rôles, vol de caisses). Par défaut, chaque équipe adverse ayant un pad est jouée par l'IA (`--ai-team` pour choisir).
+Avancement détaillé : [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Prérequis
 
@@ -76,7 +78,7 @@ cmake --build build -j && ctest --test-dir build --output-on-failure
 | Lancer la caisse portée | X       | X / Carré        |
 | Changer de soldat (sans menu de pad ouvert) | Tab | RB / R1 |
 | Menu du pad : entrée suivante / valider | Tab / Entrée (ou clic gauche sur l'entrée) | — |
-| Ordre de l'équipe suivant (suivre → garder → ramasser → attaquer) | touche à la position de Q (étiquetée A en AZERTY) | LB / L1 |
+| Ordre de l'équipe suivant (suivre → garder → ramasser → attaquer → voler) | touche à la position de Q (étiquetée A en AZERTY) | LB / L1 |
 | Pause               | Échap         | Start            |
 | Debug overlay       | F1            | —                |
 | Pause / pas-à-pas / ralenti ×0,25 (debug) | F2 / F3 / F4 | — |

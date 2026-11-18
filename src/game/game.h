@@ -7,6 +7,7 @@
 #include "game/entity.h"
 #include "game/events.h"
 #include "game/level.h"
+#include "game/nav.h"
 #include "game/soldier.h"
 
 // Counters of what happened to crates since the start (tests, future HUD and stats screen).
@@ -33,6 +34,7 @@ typedef struct GameState {
     CrateStats crate_stats;
     u32 products_built;
     CombatStats combat_stats;
+    Nav nav;           // graph of the level for the AI; built on first use, derived from the level only (not hashed)
     EventQueue events; // what happened during the last tick (presentation only, not hashed)
 } GameState;
 
@@ -44,6 +46,10 @@ u32 team_soldier_count(const GameState *gs, i32 team);
 
 // Returns false if the level has no spawn for team 0.
 bool game_init(GameState *gs, u64 seed, Level *level);
+// Puts a team under (or takes it from) the command of the AI: a commander builds on its pad and gives its soldiers
+// roles. For the human's team (index 0) this also takes the control away: all its soldiers are driven by the AI.
+// A team with a spawn and nobody alive gets a first soldier.
+void game_set_team_ai(GameState *gs, i32 team, bool ai);
 // Advances the simulation by exactly one fixed tick (TICK_DT).
 void game_update(GameState *gs, const InputFrame *input);
 // Hash of the whole simulation state, to compare runs (determinism tests).

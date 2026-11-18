@@ -35,7 +35,7 @@
 | 1 | Combinaisons du pad | ✅ fournies (§ 6) |
 | 2 | Classes de soldats | ✅ quatre variantes de compagnon (§ 4) ; PV 100 / 150 / 200 confirmés, la 4ᵉ est provisoire |
 | 3 | Armes et véhicules | ✅ liste suffisante « pour l'instant » : pistolet, uzi, grenades, lance-roquettes, tank |
-| 4 | Ordres de l'escouade | ✅ suivre, garder la base, ramasser, attaquer |
+| 4 | Ordres de l'escouade | ✅ suivre, garder la base, ramasser, attaquer ; 🟡 + voler (ajouté en M5) |
 | 5 | Chutes de caisses | ✅ dépend de la carte (§ 5) |
 | 6 | Bases / victoire | ◐ base de 1000 PV, destructible par toute arme ; détruite = pad inutilisable, l'équipe continue ; conditions de victoire multijoueur encore ❓ |
 | 7 | Missions de campagne | ⏳ à voir mission par mission, plus tard |
@@ -104,18 +104,22 @@ les escouades adverses (ou selon l'objectif de la mission).
 - 🟡 Le joueur contrôle **un** soldat (flèche jaune au-dessus de la tête) ; **Tab** passe au suivant de l'équipe (cycle). Quand le menu du pad est
   ouvert, Tab sert au menu (changer l'entrée choisie) et ne change pas de soldat.
 - ✅ Si le soldat contrôlé meurt, le contrôle passe automatiquement au **plus proche** soldat vivant de l'équipe.
-- ✅ **Ordres** : la touche d'ordre (position de Q, étiquetée A en AZERTY) passe à l'ordre suivant : suivre → garder → ramasser → attaquer.
+- ✅ **Ordres** : la touche d'ordre (position de Q, étiquetée A en AZERTY) passe à l'ordre suivant : suivre → garder → ramasser → attaquer → voler.
   🟡 L'ordre vaut pour **tous les soldats de l'équipe que le joueur ne contrôle pas** (portée « tous » retenue) et s'affiche en haut à gauche
-  (quatre pastilles, l'ordre actif allumé ; en dessous, une pastille par soldat vivant).
+  (cinq pastilles, l'ordre actif allumé ; en dessous, une pastille par soldat vivant). Une équipe **menée par l'IA** n'a pas d'ordre d'équipe : son commandant donne un rôle à chaque soldat (§ 11).
   - **Suivre** : rester près du soldat contrôlé (à ± 40 px) et tirer sur les ennemis à portée.
   - **Garder la base** : rester près du pad de l'équipe et tirer sur les ennemis à portée.
-  - **Ramasser** : aller chercher les caisses **posées sur le même sol** (pas de navigation avant M5), les rapporter au pad et les poser en
-    colonnes de deux, en commençant par la colonne la plus éloignée du côté d'où l'on arrive ; s'arrêter quand le pad est plein ; renoncer à
-    une caisse qu'on n'atteint pas (ignorée 20 s).
+  - **Ramasser** : aller chercher les caisses **libres** (sur n'importe quel sol : le soldat **navigue**, § 11), les rapporter au pad et les poser en
+    colonnes de deux, en commençant par la colonne la plus éloignée du côté d'où l'on arrive ; s'arrêter quand le pad est plein. Une caisse
+    qu'on ne pourrait pas **rapporter en la portant** (une échelle à descendre, une chute haute à remonter…) ou qu'on n'atteint pas (haut d'une pile,
+    chemin bloqué) est ignorée 20 s. Les caisses d'un pad (le sien comme celui d'un autre) ne sont pas touchées.
   - **Attaquer** : aller vers le pad adverse le plus proche (la base, tant qu'elle n'a pas de PV propres) et tirer sur ce qui est en chemin.
+  - **Voler** : comme *ramasser*, mais en commençant par les caisses posées **sur le pad d'une autre équipe** (celles dont rien n'est posé dessus et
+    qu'on peut approcher) ; faute de proie, il ramasse les caisses libres.
 - 🟡 Comportements communs : un soldat voit les ennemis à 200 px et jusqu'à 90 px au-dessus / au-dessous, **sans obstacle** entre eux ;
-  il ne tire pas en portant une caisse (le tir la lancerait) ; à mains nues il ramasse une arme à moins de 140 px et fonce au corps à corps
-  sur un ennemi à moins de 120 px ; il n'utilise un explosif que si la cible est hors du rayon de l'explosion.
+  il ne tire pas en portant une caisse (le tir la lancerait) ; à mains nues il ramasse une arme à moins de 140 px (±60 px de hauteur) et fonce au corps à corps
+  sur un ennemi à moins de 120 px (40 px pour qui ramasse ou vole : il ne lâche pas son travail pour une bagarre) ; il n'utilise un explosif que si la cible est hors du rayon de l'explosion.
+- 🟡 **Fuite** : sous 30 % de ses PV, avec un ennemi à moins de 110 px et sans caisse sur le dos, un soldat IA retourne à sa base (en tirant en chemin).
 - 🟡 Les soldats IA n'ont accès qu'à ce qu'un joueur a : ils produisent une entrée (`InputFrame`) comme un clavier.
 
 ### Variantes de compagnon ✅ (stats 🟡)
@@ -246,12 +250,26 @@ Idées non confirmées, **non planifiées** : jeep, mini-hélico.
 2. **Campagne** : suite de missions avec objectifs **propres à chaque mission** ✅ (à définir mission par mission, plus tard).
 3. Variantes plus tard : « roi des caisses » (le plus de caisses en fin de chrono), capture de drapeau.
 
-## 11. IA 🟡
+## 11. IA ✅ (M5, valeurs 🟡)
 
-- Chaque soldat IA a un état (`idle`, `suivre`, `chercher caisse`, `rapporter`, `défendre`, `attaquer`, `fuir`).
-- Une équipe IA a un « commandant » qui répartit les rôles selon la situation (nombre de caisses libres, menace sur la base, effectifs).
-- L'IA sait viser des formes du pad (ex. aller chercher les caisses bleues de la zone centrale pour des recettes puissantes).
-- Plusieurs niveaux de difficulté : temps de réaction, précision, agressivité.
+- **Navigation** : le niveau est transformé en un graphe de places où se tenir (au sol, sur une échelle) reliées par des mouvements réels : marcher,
+  sauter (cinq hauteurs, trois directions), traverser une plateforme fine en descendant, chuter, monter / descendre une échelle. Il est calculé en
+  **rejouant la vraie physique** : un changement de vitesse ou de hauteur de saut change donc le graphe tout seul. Chaque mouvement existe pour un soldat
+  libre et/ou pour un soldat qui **porte une caisse** (plus lent, saut plus bas, pas d'échelle). Un soldat qui porte une caisse ne peut donc pas remonter une
+  échelle, mais peut sauter d'un rebord.
+- Chaque soldat IA a un **mode** (affiché par l'overlay `--debug-nav` : `idle`, `suivre`, `garder`, `chercher une caisse`, `rapporter`, `voler`, `attaquer`, `s'armer`, `fuir`).
+  Priorité : fuir (blessé) → s'armer (une arme au sol à proximité, à mains nues) → foncer sur un ennemi (à mains nues) → faire ce que dit son ordre / son rôle.
+- Une équipe IA a un **commandant** qui regarde la situation toutes les 0,5 s :
+  - **Construire** (même `pad_build` et mêmes recettes que le menu — aucune triche) : un effectif de moins de 3 soldats ne fabrique que des soldats ;
+    au-delà, il attend un produit de valeur (lourd, lance-roquettes…) et se contente de ce qu'il a si le pad n'a pas reçu de caisse depuis 15 s.
+    Valeurs : lourd blindé 40 > lourd 30 > lance-roquettes 24 > fort 14 > compagnon 10 > uzi / grenades fortes 8 > grenades 5 > pistolet 3 ; **jamais de véhicule** (M7).
+    Pas plus de 8 soldats par équipe.
+  - **Répartir les rôles** : *ramasser* (de 1 à 3 soldats, s'il y a des caisses libres et de la place sur le pad), *voler* (1 soldat, s'il y a des caisses sur un pad adverse),
+    *attaquer* (la moitié du reste dès 4 soldats ; les lourds attaquent toujours), *garder* le reste. Un ennemi à moins de 220 px de la base : tout le monde défend.
+    Qui porte une caisse finit son travail.
+- ⏳ Pas encore : viser une forme précise du pad pour une recette puissante (la livraison remplit les colonnes par deux, ce qui donne soldat puis lourd),
+  difficultés, véhicules, destruction de base (M6-M7).
+- Plusieurs niveaux de difficulté : temps de réaction, précision, agressivité. ❓ plus tard.
 
 ## 12. HUD 🟡
 

@@ -21,10 +21,17 @@ const SoldierDef *soldier_def(SoldierVariant variant) {
     return &VARIANTS[(variant >= 0 && variant < SOLDIER_VARIANT_COUNT) ? variant : SOLDIER_NORMAL];
 }
 
-static const char *const ORDER_NAMES[ORDER_COUNT] = {"follow", "guard", "collect", "attack"};
+static const char *const ORDER_NAMES[ORDER_COUNT] = {"follow", "guard", "collect", "attack", "steal"};
 
 const char *order_name(Order order) {
     return (order >= 0 && order < ORDER_COUNT) ? ORDER_NAMES[order] : "?";
+}
+
+static const char *const MODE_NAMES[AI_MODE_COUNT] = {"idle",    "follow", "guard",  "fetch", "deliver",
+                                                      "steal",   "attack", "arm",    "flee"};
+
+const char *ai_mode_name(AiMode mode) {
+    return (mode >= 0 && mode < AI_MODE_COUNT) ? MODE_NAMES[mode] : "?";
 }
 
 bool soldier_from_product(PadProduct product, SoldierVariant *out) {
@@ -110,7 +117,7 @@ static i32 spawn_soldier(GameState *gs, i32 team, SoldierVariant variant, Vec2 f
         s->ai.walker.target_x = body_center(&s->c.body).x;
         gs->teams[team].eliminated = false;
         events_push(&gs->events, EV_SOLDIER_SPAWNED, body_center(&s->c.body), (i32)variant, team);
-        if (gs->controlled < 0 && team == PLAYER_TEAM) {
+        if (gs->controlled < 0 && team == PLAYER_TEAM && !gs->teams[team].ai) {
             gs->controlled = i; // the human has nobody: the newcomer is theirs
             events_push(&gs->events, EV_CONTROL_CHANGED, body_center(&s->c.body), i, 0);
         }

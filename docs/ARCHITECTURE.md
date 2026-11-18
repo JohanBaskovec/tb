@@ -87,8 +87,9 @@ tb/
 │   │   ├── loot.h/.c       # Armes au sol et produits du pad : physique, ramassables
 │   │   ├── combat.h/.c     # Tir, projectiles, explosions, dégâts, mannequins, mort du soldat
 │   │   ├── vehicle.h/.c    # Véhicules
-│   │   ├── ai.h/.c         # IA de soldat : un comportement par ordre (M4) ; commandant d'équipe et navigation en M5
-│   │   ├── nav.h/.c        # Graphe de navigation plateformes + A*
+│   │   ├── ai.h/.c         # IA de soldat : modes (fuir, s'armer, foncer, ordre / rôle) ; se déplace par `go_to` (navigation)
+│   │   ├── nav.h/.c        # Graphe de navigation construit en simulant la physique, A*, suiveur de chemin (`NavAgent`)
+│   │   ├── commander.h/.c  # Commandant d'équipe IA : construit sur le pad, distribue les rôles
 │   │   ├── rules.h/.c      # Modes de jeu, conditions de victoire
 │   │   └── events.h        # File d'événements (son, particules, HUD)
 │   ├── ui/
@@ -189,7 +190,7 @@ typedef struct GameState {
     Entity   entities[MAX_ENTITIES];
     Team     teams[MAX_TEAMS];     // couleur, pad, contrôleur (humain n°X / IA), ordres
     Pad      pads[MAX_TEAMS];
-    NavGraph nav;
+    Nav      nav;                  // graphe du niveau pour l'IA (tableaux de taille fixe ; non haché)
     Rng      rng;
     u64      tick;
     EventQueue events;             // consommée par audio / render / ui
@@ -264,7 +265,7 @@ Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont l
 - **Touches** : `combat_player_update` reçoit `crate_busy` (vrai si une action de caisse a utilisé la touche ce tick) : portage, prise, pose et lancer
   sont prioritaires sur le tir, les coups et l'échange d'arme.
 - **Ramassage** (`loot.c`) : armes et produits non-armes tombent et reposent comme le produit du pad en M2 ; une caisse qui se pose dessus les remonte.
-- Ordre dans `game_update` : changer de soldat / d'ordre → tous les soldats (entrée → déplacement → caisses → combat) → projectiles / mannequins → caisses → caisses portées → objets au sol → mort / eau → `pool_flush`.
+- Ordre dans `game_update` : changer de soldat / d'ordre → commandants des équipes IA → tous les soldats (entrée → déplacement → caisses → combat) → projectiles / mannequins → caisses → caisses portées → objets au sol → mort / eau → `pool_flush`.
 
 ## Escouades
 
@@ -273,7 +274,7 @@ Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont l
   (la place libre la plus basse est réutilisée, donc déterministe). `GameState.controlled` est l'indice du soldat que le joueur contrôle, `-1` si
   son équipe n'en a plus ; `game_player()` renvoie alors un **fantôme** (`GameState.ghost`, PV 0, là où le dernier est tombé) : la caméra, le HUD
   et les tests ne reçoivent jamais `NULL`.
-- **`Team`** : `active` (a un point de départ dans le niveau), `eliminated`, `order`, `spawn`. Au départ, seule l'équipe 1 a un soldat ; les autres
+- **`Team`** : `active` (a un point de départ dans le niveau), `eliminated`, `ai` (menée par un commandant : `game_set_team_ai`), `order`, `spawn`. Au départ, seule l'équipe 1 a un soldat ; les autres
   équipes en reçoivent par leur pad (`pad_build` → `soldier_spawn`, refusé sans consommer de caisse s'il n'y a pas la place).
 - **Variantes** (`SoldierDef`, table dans `squad.c` ; PV dans `tuning.h`) : normal 100, fort 150, lourd 200 + lance-roquettes, lourd blindé 300 + lance-roquettes.
 - **Une mise à jour pour tous** (`squad_update`) : pour chaque soldat vivant (par indice), une `InputFrame` — celle du joueur pour le soldat contrôlé, celle de
@@ -282,18 +283,35 @@ Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont l
   l'équipe du soldat contrôlé). `Sim` retire `ACT_SWITCH` de l'entrée du jeu tant que le menu du pad est ouvert : Tab appartient alors au menu.
 - **Mort** (`squad_resolve`, fin de tick) : PV ≤ 0 → `soldier_kill` (arme lâchée avec ses munitions, caisse lâchée, contrôle au plus proche allié, équipe éliminée si c'était
   le dernier : `EV_TEAM_ELIMINATED` une seule fois). Eau → `soldier_respawn` (retour au point de départ de l'équipe, équipement de la variante, caisse et arme perdues).
-- **IA** (`ai.c`) : perception (ennemi le plus proche à 200 px, visible : `combat_line_clear`), un `Walker` pour marcher et sauter les petits obstacles, et un comportement
-  par ordre. *Ramasser* est une petite machine à états (`COLLECT_SEEK / FETCH / DELIVER`) avec délais d'abandon et liste d'exclusion ; la livraison utilise la règle de
-  placement des caisses (première colonne entièrement devant le corps) pour viser une colonne du pad. Aucun pathfinding : une cible sur un autre sol est ignorée (M5).
+- **IA** (`ai.c`) : perception (ennemi le plus proche à 200 px, visible : `combat_line_clear`), un `AiMode` décidé à chaque tick (fuir > s'armer > foncer > ordre / rôle) et
+  tous les déplacements par `go_to(but, bande)` : navigation sur le graphe (voir ci-dessous), ou — sans graphe utilisable — marche en ligne droite avec le `Walker`.
+  *Ramasser / voler* est une petite machine à états (`COLLECT_SEEK / FETCH / DELIVER`) avec délais d'abandon et une **liste d'exclusion** de 4 caisses (`AI_BAN_SLOTS`) ;
+  avant de choisir une caisse, l'IA vérifie qu'elle a une **place où se tenir** (`crate_stand`) et qu'un chemin **en la portant** mène au pad (`deliverable`). La livraison utilise la règle de
+  placement des caisses (première colonne entièrement devant le corps) pour viser une colonne du pad.
+- **Commandant** (`commander.c`, appelé par `game_update` avant les soldats) : pour chaque équipe `ai` vivante, tous les 30 ticks (décalés par équipe), `build` (meilleure option du pad selon
+  `commander_product_value`, règles de patience / effectif minimal / maximal, `pad_build`) puis `give_roles` (`SoldierAi.role`, un `Order`). Pour une équipe `ai`, l'IA lit `SoldierAi.role` au lieu de `Team.order`.
+- Une équipe `ai` de l'index 0 n'a plus de soldat contrôlé (`controlled = -1`) : c'est la partie IA contre IA (`--ai-team 1,2`) ; le menu du pad est alors masqué et la caméra suit le premier soldat vivant.
 - `Sim.restart` (F5) refait la partie sur le même niveau et la même graine.
 
 ## IA et navigation
 
-- **Graphe de navigation** pré-calculé au chargement du niveau : nœuds = segments de sol marchables,
-  arêtes = marcher, sauter (testé avec la trajectoire de saut réelle), tomber, échelle.
-- A* sur ce graphe ; les soldats suivent le chemin avec des commandes virtuelles
-  (l'IA produit une `InputFrame`, exactement comme un joueur → même code de déplacement).
-- FSM par soldat + commandant par équipe réévalué ~2 fois par seconde.
+- **Graphe de navigation** (`nav.c`) : `Nav` vit dans `GameState` (tableaux de taille fixe : 1024 nœuds, 10240 arêtes ; trop grand ⇒ `ok = false` et l'IA marche en ligne droite). Il est
+  construit à la demande (`nav_build`, au premier besoin d'un soldat IA ou à `game_set_team_ai` : ≈ 14 ms en Release sur le niveau de test), dépend **uniquement du terrain** (les caisses sont ignorées)
+  et n'est pas haché.
+  - **Nœuds** : `NAV_GROUND` (un corps de 2 tuiles de haut tient, les pieds dans la case, quelque chose le porte : sol, plateforme fine, haut d'échelle) et `NAV_LADDER` (chaque case d'échelle).
+    Triés par (rangée, colonne, type) : `nav_find` est une dichotomie.
+  - **Arêtes par simulation** : pour chaque nœud, une dizaine d'« entrées canned » (`NavEdge` : direction, haut/bas, durée d'appui sur saut ; marcher ×2, sauter 3 directions × 5 durées, traverser une plateforme
+    fine, monter / descendre) est rejouée avec `companion_update` ; le nœud où le soldat se pose est la cible de l'arête. Chaque mouvement est simulé **deux fois** (soldat libre et soldat portant une caisse) ;
+    pour chaque cible on garde l'arête la moins chère par cas (`who` : `NAV_FREE` / `NAV_CARRY`). Un saut doit aboutir au même nœud depuis ±5 px du centre (sinon l'arête est jugée trop fragile) ; un départ
+    qui ne tient pas (contre un mur) n'est pas reproché à l'arête.
+  - **A\*** (`nav_path`) : tas binaire avec décroissance de clé, heuristique `0,5 tick/px × distance horizontale` (jamais surestimée), départage par indice ⇒ déterministe ; ignore une arête exclue ;
+    renvoie au plus `NAV_PATH_MAX` (40) arêtes, le reste se fait en replanifiant à l'arrivée.
+- **Suiveur de chemin** (`nav_steer`, état `NavAgent` dans `SoldierAi`) : chaque tick, trouve le nœud du soldat (`nav_node_of`, tolérant : sur un tas de caisses il prend le sol dessous),
+  avance dans le chemin, et fabrique les touches : *marcher* = le `Walker` (qui saute les petits obstacles, donc les caisses) visé un peu **au-delà** de la case cible ;
+  les autres arêtes = **se caler** au centre du nœud (`nav_steer_x` freine à l'avance) puis rejouer la même entrée que la simulation (`nav_edge_mask`). Replanifie quand le but change, quand le soldat est sorti
+  du chemin (souffle…), ou quand une arête échoue (retombé au départ deux fois, ou plus de 2 s sans changer de nœud : arête exclue 20 s). Un but sans chemin n'est pas recherché de nouveau pendant 0,75 s.
+- Debug : `--debug-nav` dessine le graphe (bleu : marcher, orange : sauter, rose : traverser, jaune : échelle), le chemin de chaque soldat IA et, au-dessus de sa tête, un carré à la couleur de son mode.
+- FSM par soldat + commandant par équipe : voir « Escouades ».
 
 ## Rendu
 
@@ -351,18 +369,20 @@ RGBA 640×360 via le renderer logiciel de SDL. Aucun display n'est requis.
 | `--walk-to X` | Bot « marcheur » vers l'abscisse X (pixels) |
 | `--start X,Y` | Position de départ (pieds, pixels) à la place du spawn |
 | `--seed N` | Graine RNG |
-| `--level PATH` / `--assets DIR` | Niveau et dossier d'assets (défaut : `assets/levels/test_arena.lvl`) |
+| `--level PATH` / `--assets DIR` | Niveau et dossier d'assets (défaut : `assets/levels/test_arena.lvl` ; `ai_arena.lvl` est le niveau symétrique des parties IA : tout s'y traverse dans les deux sens) |
 | `--screenshot PATH` | PNG écrit après le dernier tick |
 | `--shot-every N` | Avec `--screenshot motif_%u.png` : un PNG tous les N ticks (films) |
 | `--shot-cam X,Y` | Coin haut-gauche de la caméra pour la capture (voir une autre partie du niveau) |
 | `--soldier ÉQUIPE,VARIANTE,X` | Ajoute un soldat (variante : `normal`, `strong`, `heavy`, `armored` ; X : pieds, pixels, à la hauteur du départ de l'équipe 1) ; répétable |
-| `--order ORDRE` | Ordre de l'équipe 1 : `follow`, `guard`, `collect`, `attack` |
+| `--order ORDRE` | Ordre de l'équipe 1 : `follow`, `guard`, `collect`, `attack`, `steal` |
+| `--ai-team LISTE` | Équipes menées par l'IA, ex. `1,2` (1 = plus aucun humain : partie IA contre IA) ou `none` ; par défaut : toutes les autres équipes qui ont un point de départ **et** un pad |
+| `--debug-nav` | Graphe de navigation, chemins des soldats IA et leur mode |
 | `--give ARME` | Équipe le soldat d'une arme neuve : `pistol`, `uzi`, `grenades`, `strong-grenades`, `rocket` |
 | `--fill-pad HAUT,BAS` | Pose des caisses dans le pad de l'équipe 1 (ex. `r...,rr.b` : r rouge, b bleue, `.` vide) |
 | `--debug-overlay` | Grille, hitboxes, vitesse, pastilles d'état, spawns et zones de largage |
 | `--trace N` | Affiche l'état du joueur tous les N ticks |
 
-La dernière ligne affichée (`ticks=… respawns=… products=… hp=… weapon=… ammo=… shots=… hits=… kills=… deaths=… hash=…`) sert aux tests de déterminisme.
+La dernière ligne affichée (`ticks=… respawns=… products=… soldiers=… order=… hp=… weapon=… ammo=… shots=… hits=… kills=… deaths=… squads=a/b/c/d picked=… placed=… hash=…`) sert aux tests de déterminisme.
 
 ### Boucle fenêtrée testée sans fenêtre
 
@@ -398,7 +418,13 @@ Les touches F1–F4 sont testées en injectant des événements (`SDL_PushEvent`
   vitesses bornées, `on_ground` ⇒ appui sous les pieds, caméra dans le niveau.
   Pour les caisses : grille et pool cohérents (une case solide par caisse au repos, alignement exact, appui sous chaque caisse),
   au plus une caisse portée et référencée par le joueur, plafond de chaque zone respecté.
-- À venir : A* (M5), partie IA vs IA simulée.
+- `nav` (graphe : plancher, marche, saut, trou large, échelle — fermée à qui porte une caisse —, plateforme fine, mur trop haut, chaîne d'arêtes jusqu'au but, déterminisme ; suiveur : marche / saute /
+  grimpe / redescend, porte une caisse, poussé hors de son chemin ; **150+ trajets aléatoires, libres et avec une caisse, sur les deux niveaux : tous arrivent**), `ai` (caisse sur un rebord rapportée,
+  caisse qu'on ne peut pas rapporter / pile trop haute ignorées, pile basse prise par le haut, vol, ramasser n'y touche pas, commandant : soldat pour un effectif mince, patience, lourd tout de suite, couleur, jamais de
+  véhicule, effectif maximal, rôles, défense sous la menace, équipe humaine sans commandant ; fuite ; suivre à l'étage ; attaquer à travers le niveau ; **partie IA contre IA de 7000 ticks** avec
+  invariants, déterminisme, affrontement de deux lourds ; adversaires par défaut).
+- Fumée : `smoke_ai_match` (deux équipes IA, graphe affiché), `smoke_ai_opponent_vs_bot`, `smoke_ai_on_the_test_arena`.
+- À venir : tests de l'écran de résultats, des règles d'escarmouche (M6).
 
 ## Cibles CMake
 

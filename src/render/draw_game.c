@@ -397,7 +397,7 @@ static void draw_hud(Render *r, const GameState *gs) {
         render_fill_rect(r, (Rect){4.0f, 22.0f, 64.0f * clampf(f, 0.0f, 1.0f), 4.0f}, WEAPON_COLORS[c->weapon]);
     }
     // The team's current order: four pips, the active one lit.
-    const Color order_colors[ORDER_COUNT] = {{80, 220, 230, 255}, {100, 210, 100, 255}, {240, 160, 50, 255}, {235, 70, 70, 255}};
+    const Color order_colors[ORDER_COUNT] = {{80, 220, 230, 255}, {100, 210, 100, 255}, {240, 160, 50, 255}, {235, 70, 70, 255}, {190, 110, 240, 255}};
     const i32 team = gs->controlled >= 0 ? gs->soldiers[gs->controlled].team : PLAYER_TEAM;
     for (i32 o = 0; o < ORDER_COUNT; o++) {
         const bool on = (i32)gs->teams[team].order == o;
@@ -415,7 +415,7 @@ static void draw_hud(Render *r, const GameState *gs) {
             n++;
         }
     }
-    if (gs->controlled < 0) { // the whole team is gone
+    if (gs->controlled < 0 && !gs->teams[PLAYER_TEAM].ai) { // the whole team is gone
         render_fill_rect(r, (Rect){0.0f, 0.0f, (f32)LOGICAL_W, (f32)LOGICAL_H}, (Color){10, 0, 0, 150});
     }
 }
@@ -510,6 +510,58 @@ static void draw_debug(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 oy
     draw_flag(r, 5, c->is_jumping, (Color){255, 150, 40, 255});
 }
 
+static const Color MODE_COLORS[AI_MODE_COUNT] = {
+    {120, 120, 130, 255}, // idle
+    {80, 220, 230, 255},  // follow
+    {100, 210, 100, 255}, // guard
+    {240, 160, 50, 255},  // fetch
+    {255, 230, 90, 255},  // deliver
+    {190, 110, 240, 255}, // steal
+    {235, 70, 70, 255},   // attack
+    {240, 240, 240, 255}, // arm
+    {255, 120, 170, 255}, // flee
+};
+
+// Navigation graph: a dot per standing place, a line per move (blue walk, orange jump, pink drop, yellow climb);
+// over it, the path of each AI soldier in white and a square above its head in the color of what it is doing.
+static void draw_nav(Render *r, const GameState *gs, i32 ox, i32 oy) {
+    const Nav *nav = &gs->nav;
+    if (nav->ok) {
+        static const Color KIND_COLORS[4] = {{70, 110, 190, 255}, {235, 150, 50, 255}, {235, 90, 200, 255}, {240, 220, 60, 255}};
+        for (u32 i = 0; i < nav->edge_count; i++) {
+            const NavEdge *e = &nav->edges[i];
+            const Vec2 a = nav_node_feet(nav, e->from), b = nav_node_feet(nav, e->to);
+            const f32 ax = a.x - (f32)ox, ay = a.y - 4.0f - (f32)oy, bx = b.x - (f32)ox, by = b.y - 4.0f - (f32)oy;
+            if ((ax < 0 && bx < 0) || (ax > LOGICAL_W && bx > LOGICAL_W) || (ay < 0 && by < 0) ||
+                (ay > LOGICAL_H && by > LOGICAL_H)) {
+                continue;
+            }
+            render_line(r, vec2(ax, ay), vec2(bx, by), KIND_COLORS[e->kind]);
+        }
+        for (u32 i = 0; i < nav->node_count; i++) {
+            const Vec2 p = nav_node_feet(nav, (i32)i);
+            render_fill_rect(r, (Rect){p.x - 1.0f - (f32)ox, p.y - 5.0f - (f32)oy, 3.0f, 3.0f},
+                             nav->nodes[i].kind == NAV_LADDER ? (Color){240, 220, 60, 255} : (Color){110, 240, 130, 255});
+        }
+    }
+    for (i32 i = 0; i < MAX_SOLDIERS; i++) {
+        const Soldier *s = &gs->soldiers[i];
+        if (!s->alive || (i == gs->controlled && !gs->teams[s->team].ai)) {
+            continue;
+        }
+        const Vec2 c = body_center(&s->c.body);
+        render_fill_rect(r, (Rect){c.x - 3.0f - (f32)ox, s->c.body.pos.y - 9.0f - (f32)oy, 6.0f, 5.0f}, MODE_COLORS[s->ai.mode]);
+        if (nav->ok) {
+            for (u32 k = s->ai.nav.path_pos; k < s->ai.nav.path_len; k++) {
+                const NavEdge *e = &nav->edges[s->ai.nav.path[k]];
+                const Vec2 a = nav_node_feet(nav, e->from), b = nav_node_feet(nav, e->to);
+                render_line(r, vec2(a.x - (f32)ox, a.y - 6.0f - (f32)oy), vec2(b.x - (f32)ox, b.y - 6.0f - (f32)oy),
+                            (Color){245, 245, 245, 255});
+            }
+        }
+    }
+}
+
 void draw_game(Render *r, const GameState *gs, const Camera *cam, const PadMenu *menu, const FxList *fx,
                const Vec2 *crosshair, f32 alpha, u32 flags) {
     const Vec2 cp = camera_interpolated(cam, alpha);
@@ -530,6 +582,9 @@ void draw_game(Render *r, const GameState *gs, const Camera *cam, const PadMenu 
     draw_pad_menu(r, menu, ox, oy);
     draw_hud(r, gs);
     draw_crosshair(r, crosshair);
+    if (flags & DRAW_NAV) {
+        draw_nav(r, gs, ox, oy);
+    }
     if (flags & DRAW_DEBUG) {
         draw_debug(r, gs, alpha, ox, oy);
     }

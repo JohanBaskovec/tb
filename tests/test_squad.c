@@ -364,7 +364,7 @@ static void test_the_order_key_cycles_the_team_order(void) {
     Env e;
     CHECK(env_init(&e, false));
     CHECK(gs_of(&e)->teams[0].order == ORDER_FOLLOW);
-    const Order expected[] = {ORDER_GUARD, ORDER_COLLECT, ORDER_ATTACK, ORDER_FOLLOW, ORDER_GUARD};
+    const Order expected[] = {ORDER_GUARD, ORDER_COLLECT, ORDER_ATTACK, ORDER_STEAL, ORDER_FOLLOW};
     for (int i = 0; i < 5; i++) {
         tick(&e, KEY(ACT_ORDER));
         CHECK(gs_of(&e)->teams[0].order == expected[i]);
@@ -374,7 +374,7 @@ static void test_the_order_key_cycles_the_team_order(void) {
     for (int i = 0; i < 10; i++) { // holding it changes once
         tick(&e, KEY(ACT_ORDER));
     }
-    CHECK(gs_of(&e)->teams[0].order == ORDER_COLLECT);
+    CHECK(gs_of(&e)->teams[0].order == ORDER_GUARD);
     CHECK(gs_of(&e)->teams[1].order == ORDER_GUARD); // only the controlled soldier's team
     CHECK(strcmp(order_name(ORDER_ATTACK), "attack") == 0 && strcmp(order_name(ORDER_COUNT), "?") == 0);
     sim_free(&e.sim);
@@ -580,17 +580,12 @@ static void test_collect_from_the_left_fills_the_far_column_first(void) {
     sim_free(&e.sim);
 }
 
-static void test_collect_ignores_crates_on_another_floor_and_stops_at_a_full_pad(void) {
+static void test_collect_stops_at_a_full_pad(void) {
     Env e;
     CHECK(env_init(&e, false));
     spawn(&e, 0, SOLDIER_NORMAL, 330.0f);
     move_soldier(&e, 0, 800.0f);
     gs_of(&e)->teams[0].order = ORDER_COLLECT;
-    // A crate on a ledge high above the floor.
-    TestMap unused;
-    (void)unused;
-    crate_spawn(gs_of(&e), CRATE_RED, vec2(40 * 16.0f, 4 * 16.0f), CRATE_FALLING, -1); // falls to the floor anyway
-    tick_n(&e, 200);
     // A full pad: eight crates already there, one more lies around: it stays where it is.
     CHECK(pad_debug_fill(gs_of(&e), 0, "rrrr", "rrrr"));
     tick_n(&e, 60);
@@ -770,7 +765,7 @@ int main(void) {
     RUN_TEST(test_an_unarmed_ai_soldier_picks_up_a_weapon_nearby);
     RUN_TEST(test_collect_brings_crates_to_the_pad_from_the_right);
     RUN_TEST(test_collect_from_the_left_fills_the_far_column_first);
-    RUN_TEST(test_collect_ignores_crates_on_another_floor_and_stops_at_a_full_pad);
+    RUN_TEST(test_collect_stops_at_a_full_pad);
     RUN_TEST(test_collect_gives_up_on_an_unreachable_crate);
     RUN_TEST(test_squads_under_a_bot_keep_their_invariants_and_are_deterministic);
     RUN_TEST(test_the_hash_sees_the_ai_soldiers);

@@ -209,6 +209,29 @@ Rect pad_rect(const GameState *gs, i32 team) {
                   (f32)(PAD_ROWS * TILE_SIZE)};
 }
 
+bool pad_holds_crate(const GameState *gs, i32 team, const Entity *crate) {
+    const PadSite *site = pad_site(gs, team);
+    if (!site || crate->type != ENT_CRATE || crate->as.crate.state != CRATE_RESTING) {
+        return false;
+    }
+    const i32 cx = crate->as.crate.cell_x, cy = crate->as.crate.cell_y;
+    return cx >= site->cell_x && cx < site->cell_x + PAD_COLS && cy > site->cell_y - PAD_ROWS && cy <= site->cell_y;
+}
+
+u32 pad_crate_count(const GameState *gs, i32 team) {
+    PadGrid grid;
+    if (!pad_read_grid(gs, team, &grid, NULL)) {
+        return 0;
+    }
+    u32 n = 0;
+    for (i32 r = 0; r < PAD_ROWS; r++) {
+        for (i32 c = 0; c < PAD_COLS; c++) {
+            n += grid.cells[r][c] != PAD_EMPTY ? 1u : 0u;
+        }
+    }
+    return n;
+}
+
 bool pad_usable(const GameState *gs, i32 team) {
     return pad_site(gs, team) != NULL; // M3: and the team's base is still standing
 }

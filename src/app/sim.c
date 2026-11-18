@@ -6,8 +6,24 @@
 #include <stdio.h>
 #include <string.h>
 
+// The camera follows the controlled soldier; with nobody to control (all-AI match) the first one alive.
 static Vec2 follow_target(const Sim *sim) {
+    if (sim->gs.controlled < 0) {
+        for (i32 i = 0; i < MAX_SOLDIERS; i++) {
+            if (sim->gs.soldiers[i].alive) {
+                return body_center(&sim->gs.soldiers[i].c.body);
+            }
+        }
+    }
     return body_center(&game_player_const(&sim->gs)->body);
+}
+
+static void apply_ai_teams(Sim *sim) {
+    for (i32 t = 0; t < MAX_TEAMS; t++) {
+        if ((sim->ai_teams & (1u << (u32)t)) != 0) {
+            game_set_team_ai(&sim->gs, t, true);
+        }
+    }
 }
 
 bool sim_init(Sim *sim, const SimConfig *cfg, char *err, usize err_len) {
@@ -31,6 +47,15 @@ bool sim_init(Sim *sim, const SimConfig *cfg, char *err, usize err_len) {
         arena_free(&sim->arena);
         return false;
     }
+    sim->ai_teams = cfg->ai_teams;
+    if (cfg->ai_opponents) {
+        for (i32 t = 1; t < MAX_TEAMS; t++) {
+            if (sim->level.has_spawn[t] && sim->level.pads[t].present) {
+                sim->ai_teams |= 1u << (u32)t;
+            }
+        }
+    }
+    apply_ai_teams(sim);
     if (cfg->script) {
         if (!script_parse(&sim->script, cfg->script, err, err_len)) {
             arena_free(&sim->arena);
@@ -55,6 +80,7 @@ bool sim_init(Sim *sim, const SimConfig *cfg, char *err, usize err_len) {
 void sim_restart(Sim *sim) {
     level_clear_dynamic(&sim->level);
     game_init(&sim->gs, sim->seed, &sim->level); // cannot fail: it worked once with this level
+    apply_ai_teams(sim);
     if (sim->has_start) {
         companion_init(game_player(&sim->gs), sim->start_feet);
     }

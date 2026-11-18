@@ -36,6 +36,8 @@ add_library(cs_game STATIC
     src/game/loot.c
     src/game/weapon.c
     src/game/combat.c
+    src/game/nav.c
+    src/game/commander.c
     src/game/squad.c
     src/game/ai.c
     src/game/level.c

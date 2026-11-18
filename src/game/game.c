@@ -2,6 +2,7 @@
 
 #include "core/log.h"
 #include "game/combat.h"
+#include "game/commander.h"
 #include "game/crate.h"
 #include "game/loot.h"
 #include "game/pad.h"
@@ -36,6 +37,24 @@ bool game_init(GameState *gs, u64 seed, Level *level) {
     return true;
 }
 
+void game_set_team_ai(GameState *gs, i32 team, bool ai) {
+    if (team < 0 || team >= MAX_TEAMS) {
+        return;
+    }
+    gs->teams[team].ai = ai;
+    if (ai && !gs->nav.built) {
+        nav_build(&gs->nav, gs->level); // now, not in the middle of a tick
+    }
+    if (ai && gs->controlled >= 0 && gs->soldiers[gs->controlled].team == team) {
+        gs->ghost = gs->soldiers[gs->controlled].c;
+        gs->ghost.hp = 0;
+        gs->controlled = -1; // nobody is behind this team any more
+    }
+    if (ai && gs->teams[team].active && team_soldier_count(gs, team) == 0) {
+        soldier_spawn_at_start(gs, team, SOLDIER_NORMAL, gs->teams[team].spawn);
+    }
+}
+
 void game_update(GameState *gs, const InputFrame *input) {
     events_clear(&gs->events);
     if (input_pressed(input, ACT_SWITCH)) {
@@ -44,6 +63,7 @@ void game_update(GameState *gs, const InputFrame *input) {
     if (input_pressed(input, ACT_ORDER)) {
         squad_cycle_order(gs);
     }
+    commander_update(gs);
     squad_update(gs, input);
     combat_update(gs);
     crates_update(gs);
@@ -84,6 +104,25 @@ static u64 hash_companion(u64 h, const Companion *c) {
     return h;
 }
 
+static u64 hash_nav_agent(u64 h, const NavAgent *a) {
+    h = fnv_mix(h, &a->walker.target_x, sizeof(a->walker.target_x));
+    h = fnv_mix(h, &a->walker.jump_hold, sizeof(a->walker.jump_hold));
+    h = fnv_mix(h, &a->walker.blocked_ticks, sizeof(a->walker.blocked_ticks));
+    h = fnv_mix(h, &a->goal1, sizeof(a->goal1));
+    h = fnv_mix(h, &a->last_node1, sizeof(a->last_node1));
+    h = fnv_mix(h, a->path, sizeof(a->path));
+    h = fnv_mix(h, &a->path_len, sizeof(a->path_len));
+    h = fnv_mix(h, &a->path_pos, sizeof(a->path_pos));
+    const u32 flags = (u32)a->in_macro | ((u32)a->airborne << 1) | ((u32)a->fails << 2);
+    h = fnv_mix(h, &flags, sizeof(flags));
+    h = fnv_mix(h, &a->macro_tick, sizeof(a->macro_tick));
+    h = fnv_mix(h, &a->progress, sizeof(a->progress));
+    h = fnv_mix(h, &a->banned1, sizeof(a->banned1));
+    h = fnv_mix(h, &a->banned_ticks, sizeof(a->banned_ticks));
+    h = fnv_mix(h, &a->fail_ticks, sizeof(a->fail_ticks));
+    return h;
+}
+
 u64 game_hash(const GameState *gs) {
     // Field by field: struct padding bytes are indeterminate.
     u64 h = 14695981039346656037ULL;
@@ -93,8 +132,10 @@ u64 game_hash(const GameState *gs) {
     h = fnv_mix(h, &gs->controlled, sizeof(gs->controlled));
     h = hash_companion(h, game_player_const(gs));
     for (i32 t = 0; t < MAX_TEAMS; t++) {
-        const u32 flags = (u32)gs->teams[t].eliminated | ((u32)gs->teams[t].order << 1);
+        const u32 flags = (u32)gs->teams[t].eliminated | ((u32)gs->teams[t].order << 1) | ((u32)gs->teams[t].ai << 5);
         h = fnv_mix(h, &flags, sizeof(flags));
+        h = fnv_mix(h, &gs->teams[t].stagnant_ticks, sizeof(u32));
+        h = fnv_mix(h, &gs->teams[t].pad_crates, sizeof(u32));
     }
     for (i32 i = 0; i < MAX_SOLDIERS; i++) {
         const Soldier *s = &gs->soldiers[i];
@@ -113,8 +154,11 @@ u64 game_hash(const GameState *gs) {
         h = fnv_mix(h, &s->ai.deliver_dir, sizeof(s->ai.deliver_dir));
         h = fnv_mix(h, &s->ai.crate, sizeof(s->ai.crate));
         h = fnv_mix(h, &s->ai.state_ticks, sizeof(s->ai.state_ticks));
-        h = fnv_mix(h, &s->ai.banned, sizeof(s->ai.banned));
-        h = fnv_mix(h, &s->ai.banned_ticks, sizeof(s->ai.banned_ticks));
+        h = fnv_mix(h, s->ai.banned, sizeof(s->ai.banned));
+        h = fnv_mix(h, s->ai.banned_ticks, sizeof(s->ai.banned_ticks));
+        h = fnv_mix(h, &s->ai.role, sizeof(s->ai.role));
+        h = fnv_mix(h, &s->ai.mode, sizeof(s->ai.mode));
+        h = hash_nav_agent(h, &s->ai.nav);
     }
     h = fnv_mix(h, gs->drop_timers, sizeof(gs->drop_timers));
     h = fnv_mix(h, &gs->products_built, sizeof(gs->products_built));

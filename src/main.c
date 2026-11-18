@@ -34,6 +34,9 @@ typedef struct Options {
     bool has_shot_cam;
     Vec2 shot_cam;
     bool debug_overlay;
+    bool debug_nav;
+    bool ai_set;     // --ai-team given
+    u32 ai_mask;     // teams (bit per index) run by the AI
     bool has_start;
     Vec2 start_feet;
     bool has_walk_to;
@@ -75,9 +78,12 @@ static void print_usage(const char *prog) {
             "  --fill-pad TOP,BOTTOM   put crates in the team-1 pad, e.g. rb..,rrr. (r red, b blue, . empty)\n"
             "  --soldier TEAM,VARIANT,X add a soldier (TEAM 1-4; VARIANT normal|strong|heavy|armored; feet x in pixels, at the\n"
             "                          height of the team-1 spawn); repeatable\n"
-            "  --order ORDER           order of team 1: follow, guard, collect or attack\n"
+            "  --order ORDER           order of team 1: follow, guard, collect, attack or steal\n"
             "  --give WEAPON           start with a full weapon: pistol, uzi, grenades, strong-grenades, rocket\n"
             "  --debug-overlay         draw hitboxes, grid and state flags\n"
+            "  --debug-nav             draw the navigation graph, the paths and what each AI soldier is doing\n"
+            "  --ai-team LIST          teams run by the AI, e.g. 1,2 (1 = no human at all) or none; default: every\n"
+            "                          other team that has a spawn and a pad\n"
             "  --trace N               print the player state every N ticks\n"
             "  --expect-video-driver D abort unless SDL picked video driver D (e.g. dummy)\n",
             prog);
@@ -97,6 +103,24 @@ static bool parse_args(int argc, char **argv, Options *o) {
             o->bot = true;
         } else if (strcmp(a, "--debug-overlay") == 0) {
             o->debug_overlay = true;
+        } else if (strcmp(a, "--debug-nav") == 0) {
+            o->debug_nav = true;
+        } else if (strcmp(a, "--ai-team") == 0 && has_val) {
+            const char *list = argv[++i];
+            o->ai_set = true;
+            o->ai_mask = 0;
+            if (strcmp(list, "none") != 0) {
+                for (const char *p = list; *p;) {
+                    char *end;
+                    const long team = strtol(p, &end, 10);
+                    if (end == p || team < 1 || team > MAX_TEAMS || (*end != ',' && *end != '\0')) {
+                        LOG_ERROR("--ai-team expects team numbers 1-%d separated by commas, or none", MAX_TEAMS);
+                        return false;
+                    }
+                    o->ai_mask |= 1u << (u32)(team - 1);
+                    p = *end == ',' ? end + 1 : end;
+                }
+            }
         } else if (strcmp(a, "--frames") == 0 && has_val) {
             o->frames = (u32)strtoul(argv[++i], NULL, 10);
             o->frames_set = true;
@@ -185,7 +209,7 @@ static bool parse_args(int argc, char **argv, Options *o) {
                 }
             }
             if (found == ORDER_COUNT) {
-                LOG_ERROR("--order expects follow, guard, collect or attack");
+                LOG_ERROR("--order expects follow, guard, collect, attack or steal");
                 return false;
             }
             o->order = found;
@@ -238,10 +262,12 @@ static void print_trace(const Sim *sim) {
 static void print_summary(const Sim *sim) {
     const Companion *c = game_player_const(&sim->gs);
     printf("ticks=%" PRIu64 " pos=(%.2f, %.2f) respawns=%u products=%u soldiers=%u/%u order=%s hp=%d weapon=%s ammo=%d shots=%u hits=%u "
-           "kills=%u deaths=%u hash=%016" PRIx64 "\n",
+           "kills=%u deaths=%u squads=%u/%u/%u/%u picked=%u placed=%u hash=%016" PRIx64 "\n",
            sim->gs.tick, (f64)c->body.pos.x, (f64)c->body.pos.y, sim->gs.respawns, sim->gs.products_built,
            team_soldier_count(&sim->gs, 0), team_soldier_count(&sim->gs, 1), order_name(sim->gs.teams[0].order), c->hp, weapon_name(c->weapon), c->ammo, sim->gs.combat_stats.shots, sim->gs.combat_stats.hits,
-           sim->gs.combat_stats.kills, sim->gs.combat_stats.deaths, game_hash(&sim->gs));
+           sim->gs.combat_stats.kills, sim->gs.combat_stats.deaths, team_soldier_count(&sim->gs, 0),
+           team_soldier_count(&sim->gs, 1), team_soldier_count(&sim->gs, 2), team_soldier_count(&sim->gs, 3),
+           sim->gs.crate_stats.picked_up, sim->gs.crate_stats.placed, game_hash(&sim->gs));
 }
 
 static bool write_shot(Render *render, const Sim *sim, u32 flags, const char *path) {
@@ -254,7 +280,7 @@ static int run_headless(const Options *o, Sim *sim) {
     if (!render) {
         return 1;
     }
-    const u32 flags = o->debug_overlay ? DRAW_DEBUG : 0u;
+    const u32 flags = (o->debug_overlay ? DRAW_DEBUG : 0u) | (o->debug_nav ? DRAW_NAV : 0u);
     u32 frames = o->frames;
     if (sim->use_script && !o->frames_set) {
         frames = script_total_ticks(&sim->script);
@@ -300,7 +326,7 @@ static int run_windowed(const Options *o, Sim *sim) {
     if (!render) {
         return 1;
     }
-    u32 flags = o->debug_overlay ? DRAW_DEBUG : 0u;
+    u32 flags = (o->debug_overlay ? DRAW_DEBUG : 0u) | (o->debug_nav ? DRAW_NAV : 0u);
     bool paused = false, slow = false;
     InputFrame human = {0};
     char title[96];
@@ -423,7 +449,9 @@ int main(int argc, char **argv) {
                      .use_bot = o.bot,
                      .script = o.script,
                      .has_start = o.has_start,
-                     .start_feet = o.start_feet};
+                     .start_feet = o.start_feet,
+                     .ai_teams = o.ai_mask,
+                     .ai_opponents = !o.ai_set};
     Sim sim;
     char err[256] = "";
     if (!sim_init(&sim, &cfg, err, sizeof(err))) {
@@ -432,6 +460,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    if (o.debug_nav) {
+        nav_build(&sim.gs.nav, &sim.level); // normally built when an AI soldier first needs it
+    }
     for (u32 i = 0; i < o.crate_count; i++) {
         crate_spawn(&sim.gs, o.crate_kind[i], o.crate_pos[i], CRATE_FALLING, -1);
     }

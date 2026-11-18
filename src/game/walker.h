@@ -1,5 +1,6 @@
 // Goal-driven test bot: walks toward a target x and hops over obstacles that block the way.
-// Not a pathfinder (that comes with the AI milestone): it only reacts to what is directly ahead.
+// Not a pathfinder (see nav.h): it only reacts to what is directly ahead. The navigation follower uses it for walking
+// moves, and the AI falls back on it when a level has no usable navigation graph.
 #pragma once
 
 #include "core/input_frame.h"

@@ -66,14 +66,14 @@ Pas encore de police de caractères : l'overlay de debug utilise des pastilles d
 **Fin :** on gère une petite escouade qui grossit grâce au pad. ✅
 
 ## M5 — IA et navigation
-- [ ] Graphe de navigation (marcher, sauter, tomber, échelle) + affichage debug
-- [ ] A* + suivi de chemin via `InputFrame` virtuelle
-- [ ] FSM soldat IA (chercher caisse, rapporter, combattre, fuir)
-- [ ] Commandant d'équipe IA
-- [ ] Vol de caisses sur les pads adverses
-- [ ] Test : partie IA vs IA simulée sans SDL pendant N ticks
+- [x] Graphe de navigation (marcher, sauter, tomber, échelle) + affichage debug — construit en **simulant la vraie physique** (`game/nav.c`, D045) ; `--debug-nav`
+- [x] A* + suivi de chemin via `InputFrame` virtuelle — arêtes « libre » / « avec une caisse » (pas d'échelle, saut plus bas), recalage et replanification
+- [x] FSM soldat IA (chercher caisse, rapporter, combattre, fuir) — modes `AiMode` (aussi : s'armer, voler, attaquer, garder, suivre)
+- [x] Commandant d'équipe IA — construit sur le pad (mêmes `pad_build` et recettes que le menu) et distribue des rôles (`game/commander.c`, D047)
+- [x] Vol de caisses sur les pads adverses — ordre `steal` (nouvel ordre, aussi pour le joueur)
+- [x] Test : partie IA vs IA simulée sans SDL pendant N ticks — `test_ai` (7000 ticks, invariants, déterminisme, affrontement de lourds) + fumée `smoke_ai_match`
 
-**Fin :** une équipe IA joue une partie cohérente seule.
+**Fin :** une équipe IA joue une partie cohérente seule. ✅ (`cratesquad --headless --level assets/levels/ai_arena.lvl --ai-team 1,2 …`)
 
 ## M6 — Tranche verticale : escarmouche 1 vs IA
 - [ ] Règles d'escarmouche, élimination, écran de résultats

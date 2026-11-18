@@ -8,6 +8,8 @@
 
 #define BAN_TICKS SECONDS_TO_TICKS(TUNING_AI_BAN_S)
 #define GIVE_UP_TICKS SECONDS_TO_TICKS(TUNING_AI_GIVE_UP_S)
+#define ARRIVE_TOL 3.0f
+#define SAME_FLOOR (1.5f * TILE_SIZE) // feet this close in height: the same floor
 
 // ---- Perception --------------------------------------------------------------------------------
 
@@ -17,11 +19,13 @@ static Vec2 shoulder_of(const Companion *c) {
 
 typedef struct Enemy {
     bool found;
+    bool soldier; // a soldier (not a dummy)
     Vec2 pos;    // center of the target
+    f32 feet_y;
     f32 dist;
 } Enemy;
 
-static void consider(const GameState *gs, const Companion *c, Rect rect, Enemy *best) {
+static void consider(const GameState *gs, const Companion *c, Rect rect, bool soldier, Enemy *best) {
     const Vec2 sh = shoulder_of(c);
     const Vec2 t = vec2(rect.x + rect.w * 0.5f, rect.y + rect.h * 0.5f);
     const f32 dx = t.x - sh.x, dy = t.y - sh.y;
@@ -32,22 +36,22 @@ static void consider(const GameState *gs, const Companion *c, Rect rect, Enemy *
     if (!combat_line_clear(gs->level, sh, t)) {
         return;
     }
-    *best = (Enemy){true, t, dist};
+    *best = (Enemy){true, soldier, t, rect.y + rect.h, dist};
 }
 
 // The closest enemy in range and in sight: soldiers of other teams, and dummies.
 static Enemy find_enemy(const GameState *gs, const Soldier *me) {
-    Enemy best = {false, vec2(0, 0), 0.0f};
+    Enemy best = {false, false, vec2(0, 0), 0.0f, 0.0f};
     for (i32 i = 0; i < MAX_SOLDIERS; i++) {
         const Soldier *s = &gs->soldiers[i];
         if (s->alive && s->team != me->team && s->c.hp > 0) {
-            consider(gs, &me->c, body_rect(&s->c.body), &best);
+            consider(gs, &me->c, body_rect(&s->c.body), true, &best);
         }
     }
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
         const Entity *e = &gs->entities.slots[i];
         if (e->type == ENT_DUMMY && !e->pending_destroy && e->as.dummy.hp > 0) {
-            consider(gs, &me->c, body_rect(&e->body), &best);
+            consider(gs, &me->c, body_rect(&e->body), false, &best);
         }
     }
     return best;
@@ -61,24 +65,28 @@ static f32 feet_y(const Companion *c) {
     return c->body.pos.y + c->body.size.y;
 }
 
-// Where the team's pad is (center of its cells), or the spawn when it has none.
-static f32 home_x(const GameState *gs, i32 team) {
+// Where the team's pad is (center of its cells, at floor level), or the spawn when it has none.
+static Vec2 home_feet(const GameState *gs, i32 team) {
     if (gs->level->pads[team].present) {
         const Rect r = pad_rect(gs, team);
-        return r.x + r.w * 0.5f;
+        return vec2(r.x + r.w * 0.5f, r.y + r.h);
     }
-    return gs->teams[team].spawn.x;
+    return gs->teams[team].spawn;
+}
+
+static EntityId slot_id(const GameState *gs, u16 slot) {
+    return (EntityId){slot, gs->entities.slots[slot].generation};
 }
 
 // ---- Movement ----------------------------------------------------------------------------------
 
-typedef struct Plan {
-    f32 target_x;
-    f32 band;      // stop when closer than this
-    bool carrying_ok; // true: may shoot / punch (never while carrying: fire would throw the crate)
-    u32 extra;     // keys to add (grab...)
-} Plan;
+typedef struct Trip {
+    u32 mask;      // keys for this tick
+    bool arrived;  // close enough (within `band`, or standing still on the spot when band is 0)
+    bool no_path;  // the goal cannot be reached
+} Trip;
 
+// Straight at an x, hopping small obstacles: what the soldiers do on a level without navigation graph.
 static u32 walk(Soldier *s, const Level *lv, f32 target_x, f32 band) {
     Walker *w = &s->ai.walker;
     const f32 here = center_x(&s->c);
@@ -88,58 +96,186 @@ static u32 walk(Soldier *s, const Level *lv, f32 target_x, f32 band) {
     return tmp.down;
 }
 
+// Travels to a spot (where the feet should be). With a `band`, being that close on the same floor is enough.
+static Trip go_to(GameState *gs, Soldier *s, Vec2 goal, f32 band) {
+    Trip t = {0, false, false};
+    const Companion *c = &s->c;
+    const f32 dx = goal.x - center_x(c);
+    if (band > 0.0f && fabsf(goal.y - feet_y(c)) <= SAME_FLOOR && fabsf(dx) <= band) {
+        t.arrived = true;
+        return t;
+    }
+    if (!gs->nav.built) {
+        nav_build(&gs->nav, gs->level);
+    }
+    if (!gs->nav.ok) {
+        t.mask = walk(s, gs->level, goal.x, band);
+        t.arrived = fabsf(dx) <= (band > 0.0f ? band : ARRIVE_TOL);
+        return t;
+    }
+    u32 mask = 0;
+    switch (nav_steer(&gs->nav, &s->ai.nav, gs->level, c, goal, &mask)) {
+    case NAV_MOVING:
+        t.mask = mask;
+        break;
+    case NAV_ARRIVED: // on the right node: the last few pixels
+        t.arrived = band > 0.0f ? fabsf(dx) <= band : nav_settled_at(c, goal.x, ARRIVE_TOL);
+        t.mask = t.arrived ? 0u : nav_steer_x(c, goal.x);
+        break;
+    case NAV_NO_PATH:
+        t.no_path = true;
+        break;
+    }
+    return t;
+}
+
 // ---- Collecting crates -------------------------------------------------------------------------
 
-static bool in_pad(const GameState *gs, i32 team, const Entity *crate) {
-    const PadSite *site = &gs->level->pads[team];
-    if (!site->present) {
-        return false;
-    }
-    const i32 cx = crate->as.crate.cell_x, cy = crate->as.crate.cell_y;
-    return cx >= site->cell_x && cx < site->cell_x + PAD_COLS && cy > site->cell_y - PAD_ROWS && cy <= site->cell_y;
-}
+typedef enum CrateSource {
+    SOURCE_FREE,      // lying around, in no pad
+    SOURCE_ENEMY_PAD, // on the pad of another team
+} CrateSource;
 
-static u32 pad_crate_count(const GameState *gs, i32 team) {
-    PadGrid grid;
-    pad_read_grid(gs, team, &grid, NULL);
-    u32 n = 0;
-    for (i32 r = 0; r < PAD_ROWS; r++) {
-        for (i32 c = 0; c < PAD_COLS; c++) {
-            n += grid.cells[r][c] != PAD_EMPTY ? 1u : 0u;
+static bool in_enemy_pad(const GameState *gs, i32 team, const Entity *crate) {
+    for (i32 t = 0; t < MAX_TEAMS; t++) {
+        if (t != team && pad_holds_crate(gs, t, crate)) {
+            return true;
         }
     }
-    return n;
+    return false;
 }
 
-static EntityId slot_id(const GameState *gs, u16 slot) {
-    return (EntityId){slot, gs->entities.slots[slot].generation};
+// The top of a stack: only that one can be taken.
+static bool takeable(const GameState *gs, const Entity *e) {
+    return e->type == ENT_CRATE && !e->pending_destroy && e->as.crate.state == CRATE_RESTING &&
+           !level_dyn_solid(gs->level, e->as.crate.cell_x, e->as.crate.cell_y - 1);
 }
 
-// The nearest crate on the soldier's floor that is free to take (top of its stack, not already on the pad).
-static EntityId pick_crate(const GameState *gs, const Soldier *s) {
+static bool is_banned(const SoldierAi *ai, EntityId crate) {
+    for (u32 k = 0; k < AI_BAN_SLOTS; k++) {
+        if (ai->banned_ticks[k] > 0 && entity_id_eq(ai->banned[k], crate)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Forgets about a crate for a while (in the slot that would be free first).
+static void ban_crate(SoldierAi *ai, EntityId crate) {
+    u32 slot = 0;
+    for (u32 k = 0; k < AI_BAN_SLOTS; k++) {
+        if (entity_id_eq(ai->banned[k], crate)) {
+            slot = k;
+            break;
+        }
+        if (ai->banned_ticks[k] < ai->banned_ticks[slot]) {
+            slot = k;
+        }
+    }
+    ai->banned[slot] = crate;
+    ai->banned_ticks[slot] = BAN_TICKS;
+}
+
+static void tick_bans(SoldierAi *ai) {
+    for (u32 k = 0; k < AI_BAN_SLOTS; k++) {
+        if (ai->banned_ticks[k] > 0) {
+            ai->banned_ticks[k]--;
+        }
+    }
+}
+
+static bool fetched_by_a_mate(const GameState *gs, const Soldier *me, EntityId crate) {
+    for (i32 i = 0; i < MAX_SOLDIERS; i++) {
+        const Soldier *o = &gs->soldiers[i];
+        if (o != me && o->alive && o->team == me->team && o->ai.collect == COLLECT_FETCH &&
+            entity_id_eq(o->ai.crate, crate)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// The nearest crate of a kind that this soldier could take (not banned, not already someone's).
+static EntityId nearest_crate(const GameState *gs, const Soldier *s, CrateSource source) {
     EntityId best = ENTITY_NONE;
-    f32 best_d = 0.0f;
+    f32 best_score = 0.0f;
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
         const Entity *e = &gs->entities.slots[i];
-        if (e->type != ENT_CRATE || e->pending_destroy || e->as.crate.state != CRATE_RESTING) {
+        if (!takeable(gs, e) || pad_holds_crate(gs, s->team, e)) {
             continue;
         }
-        if (entity_id_eq(slot_id(gs, i), s->ai.banned) && s->ai.banned_ticks > 0) {
+        const EntityId id = slot_id(gs, i);
+        if (is_banned(&s->ai, id) || fetched_by_a_mate(gs, s, id)) {
             continue;
         }
-        if (in_pad(gs, s->team, e) || level_dyn_solid(gs->level, e->as.crate.cell_x, e->as.crate.cell_y - 1)) {
+        const bool enemy_pad = in_enemy_pad(gs, s->team, e);
+        if (enemy_pad != (source == SOURCE_ENEMY_PAD)) {
             continue;
         }
-        if (fabsf(e->body.pos.y + e->body.size.y - feet_y(&s->c)) > (f32)(2 * TILE_SIZE)) {
-            continue; // another floor: no pathfinding yet
-        }
-        const f32 d = fabsf(e->body.pos.x + e->body.size.x * 0.5f - center_x(&s->c));
-        if (!entity_id_valid(best) || d < best_d) {
-            best = slot_id(gs, i);
-            best_d = d;
+        const f32 score = fabsf(e->body.pos.x + e->body.size.x * 0.5f - center_x(&s->c)) +
+                          3.0f * fabsf(e->body.pos.y + e->body.size.y - feet_y(&s->c));
+        if (!entity_id_valid(best) || score < best_score) {
+            best = id;
+            best_score = score;
         }
     }
     return best;
+}
+
+// Where to stand to take a crate (feet position) and which way to face: on the side it is easier to reach,
+// on a floor that exists, with the crate within the reach of the body (its own row, or the row above the feet).
+// False when there is no such place (the top of a high stack).
+static bool crate_stand(const GameState *gs, const Entity *e, f32 from_x, Vec2 *spot, i32 *dir) {
+    const f32 left_x = e->body.pos.x - 10.0f; // stands on its left, faces right
+    const f32 right_x = e->body.pos.x + TUNING_CRATE_SIZE + 10.0f;
+    const bool left_first = fabsf(left_x - from_x) <= fabsf(right_x - from_x);
+    for (i32 k = 0; k < 2; k++) {
+        const bool left = (k == 0) == left_first;
+        const f32 x = left ? left_x : right_x;
+        // Its own row, or the one under it (the top of a stack of two is taken from the floor).
+        for (i32 row = e->as.crate.cell_y; row <= e->as.crate.cell_y + 1; row++) {
+            const i32 tx = level_px_to_tile(x);
+            if (nav_find(&gs->nav, tx, row, NAV_GROUND) >= 0 && !level_dyn_solid(gs->level, tx, row) &&
+                !level_dyn_solid(gs->level, tx, row - 1)) { // and nothing (another crate) where the body would be
+                *dir = left ? 1 : -1;
+                *spot = vec2(x, (f32)((row + 1) * TILE_SIZE));
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// Could the soldier fetch that crate and bring it home? It carries it all the way, so no ladders and no high jumps.
+static bool deliverable(GameState *gs, const Soldier *s, const Entity *crate) {
+    if (!gs->nav.ok) {
+        return true;
+    }
+    i32 dir;
+    Vec2 spot;
+    if (!crate_stand(gs, crate, center_x(&s->c), &spot, &dir)) {
+        return false;
+    }
+    const i32 from = nav_nearest(&gs->nav, spot);
+    const i32 to = nav_nearest(&gs->nav, home_feet(gs, s->team));
+    u16 path[NAV_PATH_MAX];
+    return nav_path(&gs->nav, from, to, true, -1, path, NAV_PATH_MAX) >= 0;
+}
+
+// The nearest crate of a kind that this soldier can fetch and bring home. The ones that cannot be brought home
+// are forgotten for a while.
+static EntityId pick_crate(GameState *gs, Soldier *s, CrateSource source) {
+    for (u32 attempt = 0; attempt < AI_BAN_SLOTS; attempt++) {
+        const EntityId id = nearest_crate(gs, s, source);
+        if (!entity_id_valid(id)) {
+            break;
+        }
+        if (deliverable(gs, s, pool_get_const(&gs->entities, id))) {
+            return id;
+        }
+        ban_crate(&s->ai, id);
+    }
+    return ENTITY_NONE;
 }
 
 // Which column of the pad to fill next: the far one first (seen from where the soldier comes in), so that
@@ -164,17 +300,18 @@ static i32 pick_column(const GameState *gs, i32 team, i32 dir) {
 }
 
 static void ban(Soldier *s, EntityId crate) {
-    s->ai.banned = crate;
-    s->ai.banned_ticks = BAN_TICKS;
+    ban_crate(&s->ai, crate);
     s->ai.crate = ENTITY_NONE;
     s->ai.collect = COLLECT_SEEK;
     s->ai.state_ticks = 0;
 }
 
-// Walks to `x` and, once there, faces `dir` and presses grab every other tick. Returns the keys.
-static u32 act_at(Soldier *s, const Level *lv, f32 x, i32 dir) {
-    u32 mask = walk(s, lv, x, 0.0f);
-    if (walker_arrived(&s->ai.walker, &s->c)) {
+// Goes to `spot` and, once there, faces `dir` and presses grab every other tick.
+static u32 act_at(GameState *gs, Soldier *s, Vec2 spot, i32 dir, bool *no_path) {
+    const Trip t = go_to(gs, s, spot, 0.0f);
+    *no_path = t.no_path;
+    u32 mask = t.mask;
+    if (t.arrived) {
         if (s->c.facing != dir) {
             mask |= action_bit(dir > 0 ? ACT_RIGHT : ACT_LEFT); // a tick of turning
         } else if ((s->ai.clock & 1u) == 0) {
@@ -184,31 +321,41 @@ static u32 act_at(Soldier *s, const Level *lv, f32 x, i32 dir) {
     return mask;
 }
 
-static u32 collect_think(GameState *gs, Soldier *s) {
+// Fetch crates and bring them to the pad. `steal`: take them from the enemy pads first.
+static u32 collect_think(GameState *gs, Soldier *s, bool steal, AiMode *mode) {
     SoldierAi *ai = &s->ai;
     Companion *c = &s->c;
     const bool carrying = entity_id_valid(c->carrying);
-    if (ai->banned_ticks > 0) {
-        ai->banned_ticks--;
-    }
+    const Vec2 home = home_feet(gs, s->team);
+    tick_bans(ai);
     ai->state_ticks++;
     if (carrying && ai->collect != COLLECT_DELIVER) {
         ai->collect = COLLECT_DELIVER;
         ai->state_ticks = 0;
-        ai->deliver_dir = center_x(c) < home_x(gs, s->team) ? 1 : -1;
+        ai->deliver_dir = center_x(c) < home.x ? 1 : -1;
     } else if (!carrying && ai->collect == COLLECT_DELIVER) {
         ai->collect = COLLECT_SEEK;
         ai->state_ticks = 0;
     }
-    const bool has_pad = gs->level->pads[s->team].present;
-    if (!has_pad) {
-        return walk(s, gs->level, home_x(gs, s->team), TUNING_AI_GUARD_BAND);
+    *mode = AI_GUARD;
+    if (!gs->level->pads[s->team].present) {
+        return go_to(gs, s, home, TUNING_AI_GUARD_BAND).mask;
+    }
+    if (!gs->nav.built) {
+        nav_build(&gs->nav, gs->level);
     }
 
+    bool no_path = false;
     switch (ai->collect) {
-    case COLLECT_SEEK:
-        if (pad_crate_count(gs, s->team) < PAD_ROWS * PAD_COLS) {
-            const EntityId id = pick_crate(gs, s);
+    case COLLECT_SEEK: {
+        if (pad_crate_count(gs, s->team) < PAD_CELLS) {
+            EntityId id = ENTITY_NONE;
+            if (steal) {
+                id = pick_crate(gs, s, SOURCE_ENEMY_PAD);
+            }
+            if (!entity_id_valid(id)) {
+                id = pick_crate(gs, s, SOURCE_FREE);
+            }
             if (entity_id_valid(id)) {
                 ai->crate = id;
                 ai->collect = COLLECT_FETCH;
@@ -216,30 +363,46 @@ static u32 collect_think(GameState *gs, Soldier *s) {
                 return 0;
             }
         }
-        return walk(s, gs->level, home_x(gs, s->team), TUNING_AI_GUARD_BAND); // nothing to do: wait at the pad
+        return go_to(gs, s, home, TUNING_AI_GUARD_BAND).mask; // nothing to do: wait at the pad
+    }
     case COLLECT_FETCH: {
-        const Entity *e = pool_get(&gs->entities, ai->crate);
-        if (!e || e->pending_destroy || e->as.crate.state != CRATE_RESTING || ai->state_ticks > GIVE_UP_TICKS ||
-            walker_stuck(&ai->walker)) {
+        const Entity *e = pool_get_const(&gs->entities, ai->crate);
+        if (!e || !takeable(gs, e) || ai->state_ticks > GIVE_UP_TICKS) {
             ban(s, ai->crate);
             return 0;
         }
-        const bool right = e->body.pos.x + e->body.size.x * 0.5f > center_x(c);
-        // Stand so that the crate is in the pickup zone in front of the body.
-        const f32 x = right ? e->body.pos.x - 10.0f : e->body.pos.x + TUNING_CRATE_SIZE + 10.0f;
-        return act_at(s, gs->level, x, right ? 1 : -1);
+        *mode = in_enemy_pad(gs, s->team, e) ? AI_STEAL : AI_FETCH;
+        i32 dir;
+        Vec2 spot;
+        if (!crate_stand(gs, e, center_x(c), &spot, &dir)) {
+            ban(s, ai->crate); // a stack too high to reach
+            return 0;
+        }
+        const u32 mask = act_at(gs, s, spot, dir, &no_path);
+        if (no_path) {
+            ban(s, ai->crate);
+            return 0;
+        }
+        return mask;
     }
     case COLLECT_DELIVER: {
+        *mode = AI_DELIVER;
         const i32 dir = ai->deliver_dir != 0 ? ai->deliver_dir : 1;
         const i32 col = pick_column(gs, s->team, dir);
-        if (col < 0 || ai->state_ticks > GIVE_UP_TICKS) {
-            // Nowhere sensible to put it: let it go here (the grab key puts a carried crate down).
+        u32 mask = 0;
+        if (col >= 0 && ai->state_ticks <= GIVE_UP_TICKS) {
+            // The body's front edge just before the column: the crate lands in it.
+            const i32 abs_col = gs->level->pads[s->team].cell_x + col;
+            const f32 x = dir > 0 ? (f32)(abs_col * TILE_SIZE) - 8.0f : (f32)((abs_col + 1) * TILE_SIZE) + 8.0f;
+            mask = act_at(gs, s, vec2(x, home.y), dir, &no_path);
+        }
+        if (col < 0 || ai->state_ticks > GIVE_UP_TICKS || no_path) {
+            // Nowhere sensible to put it, or no way there: let it go here (grab puts a carried crate down)
+            // and do not pick it up again right away.
+            ban_crate(ai, c->carrying);
             return (ai->clock & 1u) == 0 ? action_bit(ACT_GRAB) : 0u;
         }
-        // The body's front edge just before the column: the crate lands in it.
-        const i32 abs_col = gs->level->pads[s->team].cell_x + col;
-        const f32 x = dir > 0 ? (f32)(abs_col * TILE_SIZE) - 8.0f : (f32)((abs_col + 1) * TILE_SIZE) + 8.0f;
-        return act_at(s, gs->level, x, dir);
+        return mask;
     }
     }
     return 0;
@@ -255,7 +418,8 @@ static const Soldier *leader_of(const GameState *gs, i32 team) {
     return (gs->controlled >= 0 && gs->soldiers[gs->controlled].team == team) ? &gs->soldiers[gs->controlled] : NULL;
 }
 
-static bool want_weapon(const GameState *gs, const Soldier *s, f32 *x) {
+// A weapon lying close by that an unarmed soldier should go and get.
+static bool want_weapon(const GameState *gs, const Soldier *s, Vec2 *feet) {
     if (s->c.weapon != WEAPON_FISTS || entity_id_valid(s->c.carrying)) {
         return false;
     }
@@ -267,61 +431,101 @@ static bool want_weapon(const GameState *gs, const Soldier *s, f32 *x) {
             continue;
         }
         const f32 d = fabsf(e->body.pos.x + e->body.size.x * 0.5f - center_x(&s->c));
-        if (d < best && fabsf(e->body.pos.y + e->body.size.y - feet_y(&s->c)) <= (f32)TILE_SIZE) {
+        if (d < best && fabsf(e->body.pos.y + e->body.size.y - feet_y(&s->c)) <= TUNING_AI_ARM_RANGE_Y) {
             best = d;
-            *x = e->body.pos.x + e->body.size.x * 0.5f;
+            *feet = vec2(e->body.pos.x + e->body.size.x * 0.5f, e->body.pos.y + e->body.size.y);
             found = true;
         }
     }
     return found;
 }
 
+// The nearest base of another team still in the game.
+static bool enemy_base(const GameState *gs, const Soldier *s, Vec2 *feet) {
+    bool found = false;
+    f32 best = 0.0f;
+    for (i32 t = 0; t < MAX_TEAMS; t++) {
+        if (t == s->team || !gs->teams[t].active || gs->teams[t].eliminated) {
+            continue;
+        }
+        const Vec2 h = home_feet(gs, t);
+        const f32 score = fabsf(h.x - center_x(&s->c)) + 3.0f * fabsf(h.y - feet_y(&s->c));
+        if (!found || score < best) {
+            best = score;
+            *feet = h;
+            found = true;
+        }
+    }
+    return found;
+}
+
+static AiMode order_think(GameState *gs, Soldier *s, Order order, u32 *mask) {
+    const Vec2 home = home_feet(gs, s->team);
+    switch (order) {
+    case ORDER_FOLLOW: {
+        const Soldier *leader = leader_of(gs, s->team);
+        if (leader) {
+            *mask = go_to(gs, s, vec2(center_x(&leader->c), feet_y(&leader->c)), TUNING_AI_FOLLOW_BAND).mask;
+            return AI_FOLLOW;
+        }
+        *mask = go_to(gs, s, home, TUNING_AI_GUARD_BAND).mask;
+        return AI_GUARD;
+    }
+    case ORDER_COLLECT:
+    case ORDER_STEAL: {
+        AiMode mode;
+        *mask = collect_think(gs, s, order == ORDER_STEAL, &mode);
+        return mode;
+    }
+    case ORDER_ATTACK: {
+        Vec2 target;
+        if (enemy_base(gs, s, &target)) {
+            *mask = go_to(gs, s, target, TUNING_AI_GUARD_BAND).mask;
+            return AI_ATTACK;
+        }
+        *mask = go_to(gs, s, home, TUNING_AI_GUARD_BAND).mask;
+        return AI_GUARD;
+    }
+    case ORDER_GUARD:
+    default:
+        *mask = go_to(gs, s, home, TUNING_AI_GUARD_BAND).mask;
+        return AI_GUARD;
+    }
+}
+
 void ai_think(GameState *gs, i32 index, InputFrame *out) {
     Soldier *s = &gs->soldiers[index];
     const Companion *c = &s->c;
-    const Order order = gs->teams[s->team].order;
+    const Team *team = &gs->teams[s->team];
+    const Order order = team->ai ? s->ai.role : team->order;
     const bool carrying = entity_id_valid(c->carrying);
     const Enemy enemy = find_enemy(gs, s);
+    const Vec2 home = home_feet(gs, s->team);
 
+    AiMode mode = AI_IDLE;
     u32 mask = 0;
-    f32 wx;
-    if (want_weapon(gs, s, &wx)) {
-        mask = walk(s, gs->level, wx, 0.0f);
-    } else if (!carrying && c->weapon == WEAPON_FISTS && enemy.found && enemy.dist < TUNING_AI_CHASE_RANGE) {
-        mask = walk(s, gs->level, enemy.pos.x, 8.0f); // nothing but fists: get close
+    Vec2 spot;
+    const bool hurt = c->hp * 100 < c->max_hp * TUNING_AI_FLEE_HP_PERCENT;
+    const bool at_home = fabsf(home.y - feet_y(c)) <= SAME_FLOOR && fabsf(home.x - center_x(c)) <= TUNING_AI_GUARD_BAND;
+    // Workers (collecting, stealing) mind their business unless the enemy is on top of them.
+    const bool worker = order == ORDER_COLLECT || order == ORDER_STEAL;
+    const f32 chase_range = worker ? TUNING_AI_WORKER_CHASE_RANGE : TUNING_AI_CHASE_RANGE;
+    Trip trip = {0, false, false};
+    if (hurt && !carrying && enemy.found && enemy.dist < TUNING_AI_FLEE_RANGE && !at_home &&
+        !(trip = go_to(gs, s, home, TUNING_AI_GUARD_BAND)).no_path) {
+        mode = AI_FLEE; // hurt with an enemy close: back to the base (and keep shooting on the way)
+        mask = trip.mask;
+    } else if (want_weapon(gs, s, &spot) && !(trip = go_to(gs, s, spot, 0.0f)).no_path) {
+        mode = AI_ARM;
+        mask = trip.mask;
+    } else if (!carrying && c->weapon == WEAPON_FISTS && enemy.found && (enemy.soldier || !worker) && enemy.dist < chase_range &&
+               !(trip = go_to(gs, s, vec2(enemy.pos.x, enemy.feet_y), 8.0f)).no_path) {
+        mode = AI_ATTACK; // nothing but fists: get close
+        mask = trip.mask;
     } else {
-        switch (order) {
-        case ORDER_FOLLOW: {
-            const Soldier *leader = leader_of(gs, s->team);
-            mask = walk(s, gs->level, leader ? center_x(&leader->c) : home_x(gs, s->team),
-                        leader ? TUNING_AI_FOLLOW_BAND : TUNING_AI_GUARD_BAND);
-            break;
-        }
-        case ORDER_GUARD:
-            mask = walk(s, gs->level, home_x(gs, s->team), TUNING_AI_GUARD_BAND);
-            break;
-        case ORDER_COLLECT:
-            mask = collect_think(gs, s);
-            break;
-        case ORDER_ATTACK: {
-            f32 tx = center_x(c);
-            f32 best = 1e9f;
-            for (i32 t = 0; t < MAX_TEAMS; t++) {
-                if (t != s->team && gs->level->pads[t].present) {
-                    const f32 x = home_x(gs, t);
-                    if (fabsf(x - center_x(c)) < best) {
-                        best = fabsf(x - center_x(c));
-                        tx = x;
-                    }
-                }
-            }
-            mask = walk(s, gs->level, tx, TUNING_AI_GUARD_BAND);
-            break;
-        }
-        default:
-            break;
-        }
+        mode = order_think(gs, s, order, &mask);
     }
+    s->ai.mode = mode;
 
     // Shooting: at the closest enemy in sight; never while carrying (fire would throw the crate).
     bool aim = false;
