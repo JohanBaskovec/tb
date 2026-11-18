@@ -40,7 +40,7 @@ La police de caractères est arrivée avec le HUD (M6) ; l'overlay de debug gard
 - [x] Pool d'entités avec `EntityId` générationnels (seules les caisses y vivent pour l'instant ; le joueur y entre en M4)
 - [x] Caisses rouges et bleues ; largage sur les zones `D` configurables par niveau (`drop.N=couleur,intervalle,plafond[,%bleu]`) : descente lente, puis physique
 - [x] Empilement des caisses libres (alignées sur la grille, solides pour tout le monde, piles qui se tassent)
-- [x] Prendre / porter / poser / lancer une caisse (C prend/pose, X lance ; vitesse et saut réduits en portant)
+- [x] Prendre / porter / poser / lancer une caisse (E prend/pose — C avant la révision après M6 —, X lance ; vitesse et saut réduits en portant)
 - [x] Pad d'empilement 4×2 (marqueur `P` dans le niveau, une zone de 4×2 cases où les caisses se calent en colonne) ; `pad_options()` pur (1×1, 2×1 H/V, L, 2×2, 4×2 × rouge/bleu ; caisses du haut consommées d'abord), testé exhaustivement sur les 3⁸ grilles
 - [x] Menu de construction à l'approche du pad (liste à côté du pad ; clic, ou Tab + Entrée) ; `pad_build()` consomme les caisses et produit un objet placeholder (l'IA appellera la même fonction)
 - [x] File d'événements jeu → présentation (`GameState.events`, vidée à chaque tick ; aucun lecteur côté simulation)
@@ -93,6 +93,11 @@ Après le point d'étape (demandé par l'utilisateur) :
 - [x] Porteur de caisse plus rapide (×0,9 au lieu de ×0,75)
 - [x] Sprites pixel art des soldats (4 variantes × 10 poses, assemblés à partir de parties), bras qui visent, armes, roquettes, caisses, parachute (`render/sprites.c`, D063)
 - [x] Particules, animations (course, saut, chute, échelle, portage, coup de poing, écrasement à l'atterrissage), tremblement d'écran (`app/fx.c`, D064)
+- [x] Tir et coups **maintenus** pour toutes les armes, délais raccourcis (D066)
+- [x] Écrasement des caisses à l'atterrissage et à la pose (`fx_crate_squash`)
+- [x] Cadres blancs : caisse qui serait prise / détruite, case où la caisse portée serait posée (D066)
+- [x] Prendre / poser sur **E** (au lieu de C)
+- [x] Détruire une caisse au **clic droit** : cœurs ou munitions au hasard (D066)
 - [x] Tileset (herbe, terre en profondeur, planches, échelles, décor de touffes, fleurs et cailloux), eau animée, base en 3 états + ruine, drapeau, mannequin, tanks en maquette,
   mallette d'arme, pad en acier, icônes du HUD et du menu du pad, camps sur l'écran titre (D065)
 - [x] Sons manquants — grosse explosion, ricochet, saut et atterrissage (du soldat suivi seulement, D060), caisse qui se pose, mannequin brisé, arme lâchée, changement de soldat, équipe éliminée,

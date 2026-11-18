@@ -531,6 +531,25 @@ static const char *const ROCK[] = {
     "aaaaaaa",
 };
 
+static const char *const HEART[] = {
+    ".oo.oo.",
+    "oRWRRRo",
+    "oRRRRRo",
+    ".oRRRo.",
+    "..oRo..",
+    "...o...",
+};
+
+static const char *const AMMO[] = { // a bullet, brass case and silver tip
+    "..oo..",
+    ".oMMo.",
+    ".oMmo.",
+    ".oYYo.",
+    ".oYYo.",
+    ".oYYo.",
+    "..oo..",
+};
+
 // The base, in three states of damage, and what is left of it. Team colors on the walls.
 static const char *const BASE[] = {
     ".....oooooooooooooooooooooooooooooo.....",
@@ -725,6 +744,8 @@ static const Part PARTS[] = {
     PART(tuft, 7, TUFT),
     PART(flower, 3, FLOWER),
     PART(rock, 7, ROCK),
+    PART(heart, 7, HEART),
+    PART(ammo, 6, AMMO),
     PART(base, 40, BASE),
     PART(base_damaged, 40, BASE_DAMAGED),
     PART(base_wrecked, 40, BASE_WRECKED),
@@ -772,6 +793,8 @@ enum {
     P_TUFT,
     P_FLOWER,
     P_ROCK,
+    P_HEART,
+    P_AMMO,
     P_BASE,
     P_BASE_DAMAGED,
     P_BASE_WRECKED,
@@ -834,6 +857,8 @@ static const SpriteRecipe RECIPES[SPR_COUNT - SPR_ARM] = {
     [SPR_DECO_FLOWER - SPR_ARM] = {P_FLOWER, -1, NULL},
     [SPR_DECO_DAISY - SPR_ARM] = {P_FLOWER, -1, "FW"},
     [SPR_DECO_ROCK - SPR_ARM] = {P_ROCK, -1, NULL},
+    [SPR_HEART - SPR_ARM] = {P_HEART, -1, NULL},
+    [SPR_AMMO - SPR_ARM] = {P_AMMO, -1, NULL},
     [SPR_BASE - SPR_ARM] = {P_BASE, -1, NULL},
     [SPR_BASE_DAMAGED - SPR_ARM] = {P_BASE_DAMAGED, -1, NULL},
     [SPR_BASE_WRECKED - SPR_ARM] = {P_BASE_WRECKED, -1, NULL},
@@ -881,6 +906,8 @@ SpriteInfo sprite_info(SpriteId id) {
     case SPR_TILE_LADDER:
         pivot = vec2(0.0f, 0.0f); // top left, on the tile grid
         break;
+    case SPR_CRATE_RED:
+    case SPR_CRATE_BLUE:
     case SPR_DUMMY:
     case SPR_TANK:
     case SPR_HEAVY_TANK:

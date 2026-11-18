@@ -163,6 +163,65 @@ static void test_poses_follow_what_the_soldier_does(void) {
     sim_free(&g_sim);
 }
 
+static u32 count_icons(const FxList *fx, SpriteId sprite) {
+    u32 n = 0;
+    for (u32 i = 0; i < fx->part_count; i++) {
+        n += fx->parts[i].kind == PART_ICON && fx->parts[i].variant == (u8)sprite ? 1u : 0u;
+    }
+    return n;
+}
+
+static void test_a_broken_crate_throws_splinters_and_what_it_gave(void) {
+    fx_init(&g_fx);
+    consume_one(&g_fx, EV_CRATE_SALVAGED, vec2(50.0f, 50.0f), SALVAGE_HEARTS, 30, NULL);
+    CHECK(count_icons(&g_fx, SPR_HEART) == 4 && count_icons(&g_fx, SPR_AMMO) == 0); // one per 10 hit points, and one
+    CHECK(count_kind(&g_fx, PART_CHUNK) >= 6);
+    fx_init(&g_fx);
+    consume_one(&g_fx, EV_CRATE_SALVAGED, vec2(50.0f, 50.0f), SALVAGE_AMMO, 8, NULL);
+    CHECK(count_icons(&g_fx, SPR_AMMO) == 3 && count_icons(&g_fx, SPR_HEART) == 0);
+    fx_init(&g_fx);
+    consume_one(&g_fx, EV_CRATE_SALVAGED, vec2(50.0f, 50.0f), SALVAGE_NOTHING, 0, NULL);
+    CHECK(count_kind(&g_fx, PART_ICON) == 0 && count_kind(&g_fx, PART_CHUNK) >= 6); // only the wood
+    // The icons float up, then fade away.
+    fx_init(&g_fx);
+    consume_one(&g_fx, EV_CRATE_SALVAGED, vec2(50.0f, 50.0f), SALVAGE_HEARTS, 10, NULL);
+    f32 start_y = 0.0f;
+    for (u32 i = 0; i < g_fx.part_count; i++) {
+        start_y = g_fx.parts[i].kind == PART_ICON ? g_fx.parts[i].pos.y : start_y;
+    }
+    for (int t = 0; t < 20; t++) {
+        fx_step(&g_fx, NULL);
+    }
+    for (u32 i = 0; i < g_fx.part_count; i++) {
+        CHECK(g_fx.parts[i].kind != PART_ICON || g_fx.parts[i].pos.y < start_y - 4.0f);
+    }
+    for (int t = 0; t < 200; t++) {
+        fx_step(&g_fx, NULL);
+    }
+    CHECK(g_fx.part_count == 0);
+}
+
+static void test_a_crate_squashes_when_it_lands_but_not_when_it_just_rests(void) {
+    CHECK(sim_on_test_map());
+    fx_init(&g_fx); // a list of its own: the sim feeds the one it owns, not this one
+    const EntityId resting = crate_spawn(&g_sim.gs, CRATE_RED, vec2(10.0f * 16.0f, 9.0f * 16.0f), CRATE_RESTING, -1);
+    const EntityId falling = crate_spawn(&g_sim.gs, CRATE_BLUE, vec2(4.0f * 16.0f, 3.0f * 16.0f), CRATE_FALLING, -1);
+    f32 peak_resting = 0.0f, peak_falling = 0.0f;
+    InputFrame in = {0};
+    for (int t = 0; t < 90; t++) {
+        input_frame_update(&in, 0);
+        game_update(&g_sim.gs, &in);
+        fx_observe(&g_fx, &g_sim.gs);
+        peak_resting = MAX(peak_resting, fx_crate_squash(&g_fx, resting.index));
+        peak_falling = MAX(peak_falling, fx_crate_squash(&g_fx, falling.index));
+    }
+    CHECK(peak_resting == 0.0f);
+    CHECK(peak_falling > 0.9f); // a full squash after a fall
+    CHECK(fx_crate_squash(&g_fx, falling.index) == 0.0f); // brief
+    CHECK(fx_crate_squash(&g_fx, MAX_ENTITIES + 5) == 0.0f); // out of range: no squash, no crash
+    sim_free(&g_sim);
+}
+
 static void test_the_particle_pool_never_overflows(void) {
     fx_init(&g_fx);
     for (int k = 0; k < 100; k++) {
@@ -181,6 +240,8 @@ int main(void) {
     RUN_TEST(test_a_crate_lost_in_water_splashes_and_one_broken_on_land_splinters);
     RUN_TEST(test_shots_eject_casings_and_rockets_leave_smoke);
     RUN_TEST(test_poses_follow_what_the_soldier_does);
+    RUN_TEST(test_a_broken_crate_throws_splinters_and_what_it_gave);
+    RUN_TEST(test_a_crate_squashes_when_it_lands_but_not_when_it_just_rests);
     RUN_TEST(test_the_particle_pool_never_overflows);
     TEST_MAIN_END();
 }

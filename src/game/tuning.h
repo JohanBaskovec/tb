@@ -39,6 +39,10 @@
 #define TUNING_THROW_VY 250.0f           // lob: initial upward speed
 #define TUNING_PICKUP_REACH 16.0f        // how far in front of the body a crate can be grabbed
 #define TUNING_PLACE_MAX_RAISE 2         // a crate can be placed up to this many tiles above the feet
+#define TUNING_THROW_RECOVERY_S 0.3f     // after throwing a crate, no shot for this long (the fire key may still be held)
+#define TUNING_SALVAGE_HEART_PERCENT 50  // breaking a crate: this chance of hearts, otherwise ammunition
+#define TUNING_SALVAGE_HEAL 30           // hit points given by the hearts
+#define TUNING_SALVAGE_AMMO_PERCENT 35   // ammunition given, as a share of a full weapon (at least 1 shot)
 
 // Carrying a crate: slower, and a lower jump. No ladders, no shooting.
 #define TUNING_CARRY_SPEED_MULT 0.9f

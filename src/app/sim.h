@@ -46,7 +46,7 @@ typedef struct Sim {
     // Mouse (window loop only): once it has moved, the soldier aims at it and the left button fires.
     bool mouse_active;
     Vec2 mouse_logical; // logical (640x360) pixels
-    bool mouse_left;
+    bool mouse_left, mouse_right;
     bool mouse_fire_blocked; // a click built a pad entry: the button does not fire until released
     bool mouse_click_pending; // a click outside the menu: fires on the next tick even if the button is up again
 } Sim;
@@ -59,10 +59,10 @@ void sim_restart(Sim *sim);
 void sim_tick(Sim *sim, const InputFrame *human);
 // True while a script is configured and not yet finished.
 bool sim_script_running(const Sim *sim);
-// Tells the sim where the mouse is (logical pixels) and whether its left button is held. From the first
-// call on, human input is completed with the aim and, while the button is held, ACT_FIRE (unless the
-// pointer is over a pad menu entry, or the button went down on one).
-void sim_set_mouse(Sim *sim, Vec2 logical, bool left_down);
+// Tells the sim where the mouse is (logical pixels) and which buttons are held. From the first call on, human input
+// is completed with the aim, ACT_FIRE while the left button is held (unless the pointer is over a pad menu entry, or
+// the button went down on one) and ACT_DESTROY while the right one is.
+void sim_set_mouse(Sim *sim, Vec2 logical, bool left_down, bool right_down);
 // Mouse click at a position in logical (640x360) pixels: builds the pad menu entry under it, if any.
 // Returns true if something was built. Applied between ticks, like the AI's builds.
 bool sim_click(Sim *sim, Vec2 logical);

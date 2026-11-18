@@ -87,9 +87,10 @@ cmake --build build -j && ctest --test-dir build --output-on-failure
 | Monter / descendre (échelles) | ↑ ↓ ou **ZQSD** (Z / S) | Stick G / croix |
 | Sauter              | Espace        | A / Croix        |
 | Viser | Souris (dès qu'elle bouge) | — |
-| Tirer / frapper     | X, ou **bouton gauche** (maintenu pour l'uzi) | X / Carré |
-| Prendre / poser une caisse ; échanger d'arme | C | B / Rond |
+| Tirer / frapper     | X, ou **bouton gauche** (maintenu : tir répété) | X / Carré |
+| Prendre / poser une caisse ; échanger d'arme | E | B / Rond |
 | Lancer la caisse portée | X       | X / Carré        |
+| Détruire une caisse (cœurs ou munitions au hasard) | **bouton droit** | — |
 | Changer de soldat (sans menu de pad ouvert) | Tab | RB / R1 |
 | Menu du pad : entrée suivante / valider | Tab / Entrée (ou clic gauche sur l'entrée) | — |
 | Ordre de l'équipe suivant (suivre → garder → ramasser → attaquer → voler) | touche à la position de Q (étiquetée A en AZERTY) | LB / L1 |

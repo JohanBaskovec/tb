@@ -16,13 +16,26 @@ void crate_destroy(GameState *gs, EntityId id);
 // Same, for a crate used up by a pad construction (counted and announced differently).
 void crate_consume(GameState *gs, EntityId id);
 
+// What breaking a crate gives (EV_CRATE_SALVAGED, a).
+typedef enum SalvageReward {
+    SALVAGE_HEARTS, // hit points
+    SALVAGE_AMMO,   // shots for the weapon in hand
+    SALVAGE_NOTHING // full health and nothing to reload
+} SalvageReward;
+
 // Puts the crates each zone starts with (level `start.N`) on the ground under the zone, side by side.
 // Call once, from game_init.
 void crates_place_start(GameState *gs);
 // One tick of drop zones and crate physics. Call after the companions have moved.
 void crates_update(GameState *gs);
-// Handles the grab key (pick up / put down) and the fire key (throw) of one soldier.
+// Handles the grab key (pick up / put down), the fire key (throw) and the destroy key (break it for hearts or
+// ammunition) of one soldier.
 void crate_carry_update(GameState *gs, Companion *soldier, const InputFrame *input);
+// The crate the soldier would pick up or break right now: the closest free-topped resting crate in front of it
+// (ENTITY_NONE if there is none, or while climbing a ladder or carrying one).
+EntityId crate_pickup_target(const GameState *gs, const Companion *soldier);
+// The tile where the carried crate would be set down. False if there is no room (or nothing is carried).
+bool crate_place_target(const GameState *gs, const Companion *soldier, i32 *col, i32 *row);
 // Puts every carried crate back above its carrier's head. Call after the soldiers have moved.
 void crate_carried_follow(GameState *gs);
 

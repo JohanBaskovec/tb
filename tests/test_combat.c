@@ -116,7 +116,7 @@ static void test_weapon_table_is_sane(void) {
     }
     CHECK(weapon_def(WEAPON_STRONG_GRENADES)->radius > weapon_def(WEAPON_GRENADES)->radius);
     CHECK(weapon_def(WEAPON_STRONG_GRENADES)->damage > weapon_def(WEAPON_GRENADES)->damage);
-    CHECK(weapon_def(WEAPON_UZI)->automatic && !weapon_def(WEAPON_PISTOL)->automatic);
+    CHECK(weapon_def(WEAPON_UZI)->cooldown_ticks < weapon_def(WEAPON_PISTOL)->cooldown_ticks);
     CHECK(weapon_def(WEAPON_UZI)->max_ammo > weapon_def(WEAPON_PISTOL)->max_ammo);
     CHECK(weapon_def((WeaponKind)99) == weapon_def(WEAPON_FISTS)); // out of range: the fallback
 }
@@ -134,7 +134,7 @@ static void test_pad_products_map_to_weapons(void) {
 
 // ---- Bullets -------------------------------------------------------------------------------------
 
-static void test_pistol_shoots_one_bullet_per_press(void) {
+static void test_pistol_repeats_while_the_key_is_held(void) {
     Env e;
     CHECK(env_init(&e, false, false));
     place_player(&e, 40.0f);
@@ -147,15 +147,15 @@ static void test_pistol_shoots_one_bullet_per_press(void) {
     CHECK_EQ_U64(events_count_of(&gs_of(&e)->events, EV_SHOT), 1);
     CHECK_EQ_U64(projectile_count(gs_of(&e)), 1);
 
-    // Holding the key does nothing more (semi-automatic); releasing and pressing within the
-    // cooldown does nothing either; after the cooldown a new press fires again.
-    for (int i = 0; i < 30; i++) {
-        tick(&e, KEY(ACT_FIRE));
-    }
-    CHECK_EQ_U64(gs_of(&e)->combat_stats.shots, 1);
+    // A press within the cooldown does nothing; holding the key repeats the shot, once per cooldown.
+    const u32 cooldown = weapon_def(WEAPON_PISTOL)->cooldown_ticks;
     tick(&e, 0);
     tick(&e, KEY(ACT_FIRE));
-    CHECK_EQ_U64(gs_of(&e)->combat_stats.shots, 2);
+    CHECK_EQ_U64(gs_of(&e)->combat_stats.shots, 1);
+    for (u32 i = 0; i < 3 * cooldown; i++) {
+        tick(&e, KEY(ACT_FIRE));
+    }
+    CHECK_EQ_U64(gs_of(&e)->combat_stats.shots, 4);
     sim_free(&e.sim);
 }
 
@@ -218,7 +218,7 @@ static void test_shooting_left(void) {
     sim_free(&e.sim);
 }
 
-static void test_uzi_is_automatic_and_spreads(void) {
+static void test_uzi_fires_fast_and_spreads(void) {
     Env e;
     CHECK(env_init(&e, false, false));
     place_player(&e, 40.0f);
@@ -924,17 +924,17 @@ static void test_mouse_aims_and_fires_through_the_sim(void) {
     tick(&e, 0);
     CHECK(!e.sim.mouse_active);
     // Mouse to the left of the soldier, button up: it turns to face it, nothing is fired.
-    sim_set_mouse(&e.sim, to_logical(&e, vec2(20.0f, 100.0f)), false);
+    sim_set_mouse(&e.sim, to_logical(&e, vec2(20.0f, 100.0f)), false, false);
     tick(&e, 0);
     CHECK(player(&e)->facing == -1);
     CHECK_EQ_U64(gs_of(&e)->combat_stats.shots, 0);
-    // Button down: fires (one shot per press for a pistol), toward the cursor.
-    sim_set_mouse(&e.sim, to_logical(&e, vec2(20.0f, 100.0f)), true);
+    // Button down: fires toward the cursor, and keeps firing once per cooldown while it is held.
+    sim_set_mouse(&e.sim, to_logical(&e, vec2(20.0f, 100.0f)), true, false);
     tick(&e, 0);
     CHECK_EQ_U64(gs_of(&e)->combat_stats.shots, 1);
     CHECK(first_projectile(&e)->body.vel.x < 0.0f && first_projectile(&e)->body.vel.y < 0.0f);
     tick_n(&e, 40);
-    CHECK_EQ_U64(gs_of(&e)->combat_stats.shots, 1); // still held: no autofire for the pistol
+    CHECK_EQ_U64(gs_of(&e)->combat_stats.shots, 1 + 40 / weapon_def(WEAPON_PISTOL)->cooldown_ticks);
     sim_free(&e.sim);
 }
 
@@ -944,7 +944,7 @@ static void test_a_short_click_still_fires(void) {
     place_player(&e, 100.0f);
     combat_give_weapon(gs_of(&e), WEAPON_PISTOL);
     tick(&e, 0);
-    sim_set_mouse(&e.sim, to_logical(&e, vec2(200.0f, 140.0f)), false);
+    sim_set_mouse(&e.sim, to_logical(&e, vec2(200.0f, 140.0f)), false, false);
     tick(&e, 0);
     // Pressed and released between two ticks: only the click event is seen.
     CHECK(!sim_click(&e.sim, to_logical(&e, vec2(200.0f, 140.0f))));
@@ -967,23 +967,23 @@ static void test_clicking_the_pad_menu_does_not_fire(void) {
     const Rect r = m->rects[0];
     const Vec2 over = to_logical(&e, vec2(r.x + r.w * 0.5f, r.y + r.h * 0.5f));
     // Hovering with the button held: no fire.
-    sim_set_mouse(&e.sim, over, true);
+    sim_set_mouse(&e.sim, over, true, false);
     tick_n(&e, 5);
     CHECK_EQ_U64(gs_of(&e)->combat_stats.shots, 0);
-    sim_set_mouse(&e.sim, over, false);
+    sim_set_mouse(&e.sim, over, false, false);
     tick(&e, 0);
     // The click builds the entry; the button still held afterwards must not shoot...
     CHECK(sim_click(&e.sim, over));
-    sim_set_mouse(&e.sim, over, true);
+    sim_set_mouse(&e.sim, over, true, false);
     tick_n(&e, 5);
     CHECK_EQ_U64(gs_of(&e)->combat_stats.shots, 0);
     // ...even if the menu is gone and the pointer is now over the world. Release, then fire.
-    sim_set_mouse(&e.sim, to_logical(&e, vec2(500.0f, 100.0f)), true);
+    sim_set_mouse(&e.sim, to_logical(&e, vec2(500.0f, 100.0f)), true, false);
     tick_n(&e, 5);
     CHECK_EQ_U64(gs_of(&e)->combat_stats.shots, 0);
-    sim_set_mouse(&e.sim, to_logical(&e, vec2(500.0f, 100.0f)), false);
+    sim_set_mouse(&e.sim, to_logical(&e, vec2(500.0f, 100.0f)), false, false);
     tick(&e, 0);
-    sim_set_mouse(&e.sim, to_logical(&e, vec2(500.0f, 100.0f)), true);
+    sim_set_mouse(&e.sim, to_logical(&e, vec2(500.0f, 100.0f)), true, false);
     tick_n(&e, 5);
     CHECK(gs_of(&e)->combat_stats.shots > 0);
     sim_free(&e.sim);
@@ -1071,12 +1071,12 @@ static void test_bot_fights_keep_the_invariants_and_are_deterministic(void) {
 int main(void) {
     RUN_TEST(test_weapon_table_is_sane);
     RUN_TEST(test_pad_products_map_to_weapons);
-    RUN_TEST(test_pistol_shoots_one_bullet_per_press);
+    RUN_TEST(test_pistol_repeats_while_the_key_is_held);
     RUN_TEST(test_bullet_hits_a_dummy_and_pushes_nothing_else);
     RUN_TEST(test_bullet_stops_at_a_wall);
     RUN_TEST(test_bullet_range_ends);
     RUN_TEST(test_shooting_left);
-    RUN_TEST(test_uzi_is_automatic_and_spreads);
+    RUN_TEST(test_uzi_fires_fast_and_spreads);
     RUN_TEST(test_running_out_of_ammo_goes_back_to_fists);
     RUN_TEST(test_empty_event_is_sent_with_the_last_shot);
     RUN_TEST(test_fists_hit_within_reach_only);

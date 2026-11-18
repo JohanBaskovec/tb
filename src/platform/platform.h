@@ -26,8 +26,8 @@ const char *platform_video_driver(void);
 void platform_pump_events(PlatformEvents *out);
 // Reads the keyboard into this tick's InputFrame (player 0).
 void platform_read_input(InputFrame *frame);
-// Current mouse position in window pixels and whether the left button is held.
-void platform_read_mouse(f32 *x, f32 *y, bool *left_down);
+// Current mouse position in window pixels and whether the left and right buttons are held.
+void platform_read_mouse(f32 *x, f32 *y, bool *left_down, bool *right_down);
 // Keyboard layout. `keys` is indexed by SDL_Scancode with `count` entries. Pure, so it can be tested.
 u32 platform_map_keyboard(const bool *keys, int count);
 // Monotonic time in seconds.

@@ -398,3 +398,18 @@ fichier image : un seul format, validé par les tests, aucune dépendance de cha
 drapeau prennent celles de l'équipe. Les sprites de plus de 32 px (la base, 40 × 40) occupent 2 × 2 cases, rangées après les autres. Une tuile peut en superposer une autre
 (herbe sur terre) et changer des couleurs (pâquerette = fleur en blanc). La profondeur assombrit la terre par `SpriteDraw.darken` (modulation de couleur de la texture) plus un demi-pas
 sur la moitié basse, pour des dégradés sans bandes nettes ; arêtes, débord de l'herbe, eau et écume restent tracés au dessin car ils dépendent des voisins.
+
+### D066 — Tir maintenu, touche E, cadres blancs, détruire une caisse
+**Statut :** Acceptée
+- **Tir maintenu** : `combat_soldier_update` lit `input_down(ACT_FIRE)` pour toutes les armes ; le champ `WeaponDef.automatic` disparaît (il n'y a plus d'arme « un tir par appui ») et l'IA
+  tient la touche au lieu d'alterner. Les délais passent à poings 0,25 s, pistolet 0,2 s, grenades 0,5 s, roquettes 0,55 s. Lancer une caisse impose `TUNING_THROW_RECOVERY_S` (0,3 s)
+  sans tir, sinon la touche encore tenue tirerait aussitôt. Conséquence : les IA, qui utilisent la même table, tirent plus vite elles aussi.
+- **Touche d'action sur E** (clavier physique, identique en QWERTY et en AZERTY) ; C ne fait plus rien. Remplace la touche de D025.
+- **Cadres blancs** : `crate_pickup_target` et `crate_place_target` (dans `game/crate.c`, qui partage `find_pickup` / `find_place` avec les vraies actions) disent ce qu'un appui ferait ;
+  `draw_game` les dessine pour le joueur humain seulement. Le rendu ne refait donc aucun calcul de portée.
+- **Détruire** : action `ACT_DESTROY` (bouton droit de la souris, lue par `sim_set_mouse(…, right_down)` ; lettre `B` des scripts), traitée avec les autres actions de caisse
+  dans `crate_carry_update`. `crate_remove` distingue maintenant détruite / consommée / récupérée ; la récupération émet `EV_CRATE_SALVAGED` (`a` = `SalvageReward`, `b` = quantité) et
+  tire dans le RNG du jeu, donc reste déterministe et rejouable. Pas de touche clavier : à la manette (M8) un bouton lui sera donné.
+- **Écrasement des caisses** : `fx_observe` repère les passages d'un état en vol (ou porté) à posé, par case du pool, sans nouvel événement du jeu ; le pivot du sprite de caisse passe
+  en bas pour que l'écrasement reste au sol.
+

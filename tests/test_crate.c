@@ -3,6 +3,7 @@
 #include "test.h"
 
 #include "app/sim.h"
+#include "game/combat.h"
 #include "game/crate.h"
 #include "game/tuning.h"
 #include "game/walker.h"
@@ -601,6 +602,178 @@ static void test_falling_in_water_loses_the_carried_crate(void) {
     sim_free(&e.sim);
 }
 
+// ---- Breaking crates for hearts or ammunition --------------------------------------------------
+
+static const GameEvent *salvage_event(Env *e) {
+    const EventQueue *q = &gs_of(e)->events;
+    for (u32 i = 0; i < q->count; i++) {
+        if (q->items[i].type == EV_CRATE_SALVAGED) {
+            return &q->items[i];
+        }
+    }
+    return NULL;
+}
+
+// A press of the destroy key; returns what it gave (a copy of the event), NULL if it broke nothing.
+static const GameEvent *break_crate(Env *e) {
+    static GameEvent seen;
+    tick(e, KEY(ACT_DESTROY));
+    const GameEvent *ev = salvage_event(e);
+    const bool broke = ev != NULL;
+    if (broke) {
+        seen = *ev;
+    }
+    tick(e, 0);
+    return broke ? &seen : NULL;
+}
+
+// The player stands left of a crate at column 6 with a pistol holding `ammo` shots and `hp` hit points.
+static void prepare_salvage(Env *e, WeaponKind weapon, i32 ammo, i32 hp) {
+    Companion *p = game_player(gs_of(e));
+    combat_give_weapon(gs_of(e), weapon);
+    p->ammo = weapon == WEAPON_FISTS ? 0 : ammo;
+    p->hp = hp;
+}
+
+static void test_destroy_breaks_the_crate_in_front_for_a_reward(void) {
+    TestMap m = base_map();
+    Env e;
+    CHECK(env_init(&e, &m, NULL));
+    spawn_resting(&e, CRATE_RED, 6, 9);
+    teleport(&e, 88, 160);
+    prepare_salvage(&e, WEAPON_PISTOL, 5, 50);
+    tick(&e, KEY(ACT_DESTROY));
+    const GameEvent *ev = salvage_event(&e);
+    CHECK(ev != NULL);
+    CHECK(!is_resting_at(&e, 6, 9) && !level_dyn_solid(&e.sim.level, 6, 9));
+    CHECK_EQ_U64(gs_of(&e)->crate_stats.salvaged, 1);
+    CHECK_EQ_U64(gs_of(&e)->crate_stats.destroyed, 0); // it is not a loss
+    if (ev && ev->a == SALVAGE_HEARTS) {
+        CHECK_EQ_U64(ev->b, TUNING_SALVAGE_HEAL);
+        CHECK_EQ_U64(game_player(gs_of(&e))->hp, 50 + TUNING_SALVAGE_HEAL);
+        CHECK_EQ_U64(game_player(gs_of(&e))->ammo, 5);
+    } else if (ev) {
+        CHECK_EQ_U64(ev->a, SALVAGE_AMMO);
+        CHECK_EQ_U64(ev->b, weapon_def(WEAPON_PISTOL)->max_ammo * TUNING_SALVAGE_AMMO_PERCENT / 100);
+        CHECK_EQ_U64(game_player(gs_of(&e))->ammo, 5 + ev->b);
+        CHECK_EQ_U64(game_player(gs_of(&e))->hp, 50);
+    }
+    // Held down, the key breaks one crate per press, not one per tick.
+    spawn_resting(&e, CRATE_RED, 6, 9);
+    spawn_resting(&e, CRATE_RED, 6, 8);
+    ticks(&e, KEY(ACT_DESTROY), 10);
+    CHECK_EQ_U64(gs_of(&e)->crate_stats.salvaged, 1);
+    sim_free(&e.sim);
+}
+
+static void test_destroy_gives_hearts_and_ammunition_at_random(void) {
+    TestMap m = base_map();
+    Env e;
+    CHECK(env_init(&e, &m, NULL));
+    teleport(&e, 88, 160);
+    u32 hearts = 0, ammo = 0;
+    for (int i = 0; i < 40; i++) {
+        spawn_resting(&e, CRATE_RED, 6, 9);
+        ticks(&e, 0, 2);
+        prepare_salvage(&e, WEAPON_PISTOL, 5, 50);
+        const GameEvent *ev = break_crate(&e);
+        hearts += ev && ev->a == SALVAGE_HEARTS ? 1u : 0u;
+        ammo += ev && ev->a == SALVAGE_AMMO ? 1u : 0u;
+    }
+    CHECK(hearts + ammo == 40 && hearts >= 8 && ammo >= 8);
+    sim_free(&e.sim);
+}
+
+static void test_destroy_never_wastes_a_reward_when_the_other_helps(void) {
+    TestMap m = base_map();
+    Env e;
+    CHECK(env_init(&e, &m, NULL));
+    teleport(&e, 88, 160);
+    const i32 full = game_player(gs_of(&e))->max_hp;
+    for (int i = 0; i < 20; i++) { // full health: only ammunition is useful
+        spawn_resting(&e, CRATE_RED, 6, 9);
+        ticks(&e, 0, 2);
+        prepare_salvage(&e, WEAPON_PISTOL, 5, full);
+        const GameEvent *ev = break_crate(&e);
+        CHECK(ev && ev->a == SALVAGE_AMMO);
+    }
+    for (int i = 0; i < 20; i++) { // fists (no ammunition to give): only hearts, no more than what is missing
+        spawn_resting(&e, CRATE_RED, 6, 9);
+        ticks(&e, 0, 2);
+        prepare_salvage(&e, WEAPON_FISTS, 0, full - 10);
+        const GameEvent *ev = break_crate(&e);
+        CHECK(ev && ev->a == SALVAGE_HEARTS && ev->b == 10);
+        CHECK_EQ_U64(game_player(gs_of(&e))->hp, full);
+    }
+    // Nothing to give: the crate is broken all the same, for nothing.
+    spawn_resting(&e, CRATE_RED, 6, 9);
+    ticks(&e, 0, 2);
+    prepare_salvage(&e, WEAPON_FISTS, 0, full);
+    const GameEvent *nothing = break_crate(&e);
+    CHECK(nothing && nothing->a == SALVAGE_NOTHING && nothing->b == 0);
+    CHECK(!is_resting_at(&e, 6, 9));
+    sim_free(&e.sim);
+}
+
+static void test_destroy_takes_the_top_of_a_stack_and_the_carried_crate(void) {
+    TestMap m = base_map();
+    Env e;
+    CHECK(env_init(&e, &m, NULL));
+    spawn_resting(&e, CRATE_RED, 6, 9);
+    spawn_resting(&e, CRATE_BLUE, 6, 8);
+    teleport(&e, 88, 160);
+    prepare_salvage(&e, WEAPON_PISTOL, 5, 50);
+    press(&e, KEY(ACT_DESTROY));
+    CHECK(is_resting_at(&e, 6, 9) && !is_resting_at(&e, 6, 8)); // the upper one
+    // Right after, pick the lower one up and break it from the hands.
+    press(&e, KEY(ACT_GRAB));
+    CHECK(entity_id_valid(game_player(gs_of(&e))->carrying));
+    press(&e, KEY(ACT_DESTROY));
+    CHECK(!entity_id_valid(game_player(gs_of(&e))->carrying));
+    CHECK_EQ_U64(crate_count(gs_of(&e)), 0);
+    CHECK_EQ_U64(gs_of(&e)->crate_stats.salvaged, 2);
+    // Nothing in reach: nothing happens.
+    CHECK(break_crate(&e) == NULL && gs_of(&e)->crate_stats.salvaged == 2);
+    sim_free(&e.sim);
+}
+
+// ---- What the player is about to take or put down ---------------------------------------------
+
+static void test_the_targets_say_what_a_press_would_do(void) {
+    TestMap m = base_map();
+    Env e;
+    CHECK(env_init(&e, &m, NULL));
+    EntityId id = spawn_resting(&e, CRATE_RED, 6, 9);
+    teleport(&e, 40, 160);
+    const Companion *p = game_player(gs_of(&e));
+    CHECK(!entity_id_valid(crate_pickup_target(gs_of(&e), p))); // too far
+    teleport(&e, 88, 160);
+    CHECK(entity_id_eq(crate_pickup_target(gs_of(&e), p), id));
+    i32 col, row;
+    CHECK(!crate_place_target(gs_of(&e), p, &col, &row)); // nothing to put down
+    press(&e, KEY(ACT_GRAB));
+    CHECK(!entity_id_valid(crate_pickup_target(gs_of(&e), p))); // hands full
+    CHECK(crate_place_target(gs_of(&e), p, &col, &row) && col == 6 && row == 9); // where a press would put it
+    press(&e, KEY(ACT_GRAB));
+    CHECK(is_resting_at(&e, 6, 9));
+    sim_free(&e.sim);
+}
+
+static void test_a_thrown_crate_leaves_no_instant_shot_when_fire_stays_held(void) {
+    TestMap m = base_map();
+    Env e;
+    CHECK(env_init(&e, &m, NULL));
+    teleport(&e, 40, 160);
+    combat_give_weapon(gs_of(&e), WEAPON_PISTOL);
+    game_player(gs_of(&e))->carrying = spawn_free(&e, CRATE_RED, 0, 0, CRATE_CARRIED);
+    ticks(&e, KEY(ACT_FIRE), 12); // the first tick throws the crate, the others keep the key down
+    CHECK_EQ_U64(gs_of(&e)->crate_stats.thrown, 1);
+    CHECK_EQ_U64(gs_of(&e)->combat_stats.shots, 0);
+    ticks(&e, KEY(ACT_FIRE), 30);
+    CHECK(gs_of(&e)->combat_stats.shots >= 1); // then the pistol fires again
+    sim_free(&e.sim);
+}
+
 // ---- Drop zones ------------------------------------------------------------------------------
 
 static void test_drop_zone_cadence_and_cap(void) {
@@ -733,6 +906,12 @@ int main(void) {
     RUN_TEST(test_thrown_crate_stops_at_a_wall);
     RUN_TEST(test_throw_is_blocked_by_a_low_ceiling);
     RUN_TEST(test_falling_in_water_loses_the_carried_crate);
+    RUN_TEST(test_destroy_breaks_the_crate_in_front_for_a_reward);
+    RUN_TEST(test_destroy_gives_hearts_and_ammunition_at_random);
+    RUN_TEST(test_destroy_never_wastes_a_reward_when_the_other_helps);
+    RUN_TEST(test_destroy_takes_the_top_of_a_stack_and_the_carried_crate);
+    RUN_TEST(test_the_targets_say_what_a_press_would_do);
+    RUN_TEST(test_a_thrown_crate_leaves_no_instant_shot_when_fire_stays_held);
     RUN_TEST(test_drop_zone_cadence_and_cap);
     RUN_TEST(test_drop_zone_colors);
     RUN_TEST(test_mixed_zone_default_blue_share_is_a_minority);

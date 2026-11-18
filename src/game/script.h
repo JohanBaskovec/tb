@@ -1,7 +1,7 @@
 // Scripted input sequences, for reproducible headless runs and tests.
 //
 // Syntax: steps separated by spaces or commas, each `KEYS:TICKS`.
-//   KEYS: any of L R U D J F G S O P C (left right up down jump fire grab switch order pause confirm),
+//   KEYS: any of L R U D J F G S O P C B (left right up down jump fire grab switch order pause confirm break),
 //         or a single '.' for "no keys".
 //   Example: "R:60 RJ:12 .:30 U:90"  = run right 1s, run+jump 0.2s, idle 0.5s, up 1.5s.
 // A step may aim at a world point (pixels), like the mouse does: `KEYS@X/Y:TICKS`, e.g. "F@300/120:1"

@@ -17,7 +17,7 @@ static void test_keyboard_mapping(void) {
 
     memset(keys, 0, sizeof(keys));
     keys[SDL_SCANCODE_RIGHT] = keys[SDL_SCANCODE_UP] = keys[SDL_SCANCODE_DOWN] = true;
-    keys[SDL_SCANCODE_X] = keys[SDL_SCANCODE_C] = keys[SDL_SCANCODE_TAB] = true;
+    keys[SDL_SCANCODE_X] = keys[SDL_SCANCODE_E] = keys[SDL_SCANCODE_TAB] = true;
     keys[SDL_SCANCODE_Q] = keys[SDL_SCANCODE_ESCAPE] = true;
     keys[SDL_SCANCODE_RETURN] = true;
     m = platform_map_keyboard(keys, SDL_SCANCODE_COUNT);
@@ -25,11 +25,11 @@ static void test_keyboard_mapping(void) {
     for (int a = 0; a < ACT_COUNT; a++) {
         expected |= action_bit((Action)a);
     }
-    expected &= ~action_bit(ACT_LEFT) & ~action_bit(ACT_JUMP);
+    expected &= ~action_bit(ACT_LEFT) & ~action_bit(ACT_JUMP) & ~action_bit(ACT_DESTROY); // destroy: right mouse button only
     CHECK_EQ_U64(m, expected);
 
     // A short key array must not be read out of bounds: only scancodes below `count` are read.
-    // keys currently holds RIGHT(79) UP(82) DOWN(81) X C TAB Q ESC; with count = 80 (= LEFT's
+    // keys currently holds RIGHT(79) UP(82) DOWN(81) X E TAB Q ESC; with count = 80 (= LEFT's
     // scancode) UP and DOWN are out of range, everything else is still read.
     CHECK_EQ_U64(platform_map_keyboard(keys, 0), 0);
     u32 short_mask = platform_map_keyboard(keys, SDL_SCANCODE_LEFT);
@@ -71,12 +71,18 @@ static void test_wasd_position_keys(void) {
                  action_bit(ACT_LEFT) | action_bit(ACT_UP));
 
     // The other letters did not change meaning: Q (AZERTY "A") is still the order menu, not left;
-    // X, C and Tab are untouched; the keys next to the movement ones do nothing.
+    // X, E (grab) and Tab are untouched; the keys next to the movement ones do nothing.
     memset(keys, 0, sizeof(keys));
     keys[SDL_SCANCODE_Q] = true;
     CHECK_EQ_U64(platform_map_keyboard(keys, SDL_SCANCODE_COUNT), action_bit(ACT_ORDER));
     memset(keys, 0, sizeof(keys));
-    keys[SDL_SCANCODE_E] = keys[SDL_SCANCODE_R] = keys[SDL_SCANCODE_F] = keys[SDL_SCANCODE_Z] = true;
+    keys[SDL_SCANCODE_R] = keys[SDL_SCANCODE_F] = keys[SDL_SCANCODE_Z] = true;
+    CHECK_EQ_U64(platform_map_keyboard(keys, SDL_SCANCODE_COUNT), 0);
+    memset(keys, 0, sizeof(keys));
+    keys[SDL_SCANCODE_E] = true; // grab / put down a crate (it used to be C)
+    CHECK_EQ_U64(platform_map_keyboard(keys, SDL_SCANCODE_COUNT), action_bit(ACT_GRAB));
+    memset(keys, 0, sizeof(keys));
+    keys[SDL_SCANCODE_C] = true;
     CHECK_EQ_U64(platform_map_keyboard(keys, SDL_SCANCODE_COUNT), 0);
 }
 

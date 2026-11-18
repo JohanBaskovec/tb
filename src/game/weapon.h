@@ -27,8 +27,7 @@ typedef struct WeaponDef {
     const char *name;
     ShotKind shot;
     i32 max_ammo;       // shots in a fresh weapon, 0 = infinite
-    u32 cooldown_ticks; // minimum delay between two shots
-    bool automatic;     // keeps firing while the key is held (otherwise one shot per press)
+    u32 cooldown_ticks; // minimum delay between two shots (holding the key repeats them)
     f32 speed;          // projectile speed (grenade: horizontal speed), px/s
     f32 lift;           // grenade: initial upward speed, px/s
     f32 spread;         // bullets: random vertical speed, as a fraction of `speed` (0 = perfectly straight)

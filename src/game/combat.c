@@ -460,8 +460,7 @@ void combat_soldier_update(GameState *gs, Soldier *s, const InputFrame *in, bool
     pickup_update(gs, p, input_pressed(in, ACT_GRAB));
 
     const WeaponDef *def = weapon_def(p->weapon);
-    const bool trigger = def->automatic ? input_down(in, ACT_FIRE) : input_pressed(in, ACT_FIRE);
-    if (!trigger || p->fire_cooldown > 0) {
+    if (!input_down(in, ACT_FIRE) || p->fire_cooldown > 0) { // holding the key repeats the shot
         return;
     }
     if (def->shot == SHOT_MELEE) {

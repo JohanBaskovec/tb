@@ -34,12 +34,13 @@ typedef enum ParticleKind {
     PART_STAR,   // the sparkle sprite
     PART_RING,   // a shock wave: a circle that grows
     PART_CORPSE, // a soldier sprite tumbling away
+    PART_ICON,   // a sprite (`variant` is its SpriteId) floating up and fading: hearts, ammunition
 } ParticleKind;
 
 typedef struct Particle {
     u8 kind;
     u8 r, g, b;
-    u8 team, variant; // PART_CORPSE
+    u8 team, variant; // PART_CORPSE; variant: PART_ICON sprite
     i8 facing;
     bool collide; // stops and bounces on the terrain
     Vec2 pos, vel;
@@ -63,6 +64,8 @@ typedef struct FxList {
     Particle parts[MAX_PARTICLES];
     u32 part_count;
     SoldierAnim anim[MAX_SOLDIERS];
+    u8 crate_prev[MAX_ENTITIES + 1]; // state a crate had last tick, plus one (0: not a crate), by pool slot
+    u8 crate_land[MAX_ENTITIES + 1]; // ticks left of the squash after a crate landed
     f32 shake; // px of screen shake, decays every tick
     Vec2 focus; // world point the player looks at (camera center): far blasts shake less
     u64 tick;
@@ -82,6 +85,8 @@ void fx_step(FxList *fx, const Level *lv);
 BodyPose fx_pose(const FxList *fx, const GameState *gs, i32 soldier);
 // 0 normally, up to 1 just after a landing (the body is drawn wider and shorter).
 f32 fx_squash(const FxList *fx, i32 soldier);
+// 0 normally, up to 1 just after the crate in pool slot `slot` landed or was put down (drawn wider and shorter).
+f32 fx_crate_squash(const FxList *fx, u16 slot);
 // Screen offset of the shake for this tick, in pixels.
 Vec2 fx_shake_offset(const FxList *fx);
 

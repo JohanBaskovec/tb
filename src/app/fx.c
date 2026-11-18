@@ -1,5 +1,6 @@
 #include "app/fx.h"
 
+#include "game/crate.h"
 #include "game/weapon.h"
 
 #include <math.h>
@@ -8,6 +9,8 @@
 #define DT (1.0f / (f32)TICK_HZ)
 #define MAX_SHAKE 7.0f
 #define LAND_SQUASH_TICKS 6
+#define CRATE_SQUASH_TICKS 8 // a crate lands harder than it looks: slightly longer than a soldier
+_Static_assert(SPR_COUNT < 256, "Particle.variant holds a sprite id");
 
 void fx_init(FxList *fx) {
     memset(fx, 0, sizeof(*fx));
@@ -117,6 +120,18 @@ static void stars(FxList *fx, Vec2 pos, u32 n, f32 rise) {
         if (p) {
             p->drag = 0.3f;
             p->spin = rnd(fx, -200.0f, 200.0f);
+        }
+    }
+}
+
+// Hearts or bullets popping out of a broken crate and floating up.
+static void icons(FxList *fx, Vec2 pos, SpriteId sprite, u32 n) {
+    for (u32 i = 0; i < n; i++) {
+        Particle *p = spawn(fx, PART_ICON, vec2(pos.x + rnd(fx, -7.0f, 7.0f), pos.y + rnd(fx, -3.0f, 3.0f)),
+                            vec2(rnd(fx, -22.0f, 22.0f), -rnd(fx, 55.0f, 95.0f)), STAR_TINT, (u32)rnd(fx, 38.0f, 54.0f));
+        if (p) {
+            p->variant = (u8)sprite;
+            p->drag = 0.25f;
         }
     }
 }
@@ -258,6 +273,19 @@ void fx_consume(FxList *fx, const EventQueue *events, const GameState *gs) {
         case EV_CRATE_CONSUMED:
             debris(fx, vec2(e->pos.x + 8.0f, e->pos.y + 8.0f), 4, 120.0f, WOOD, 2);
             break;
+        case EV_CRATE_SALVAGED: { // a = SalvageReward, b = amount
+            const Vec2 c = vec2(e->pos.x + 8.0f, e->pos.y + 8.0f);
+            debris(fx, c, 9, 190.0f, WOOD, 2);
+            dust(fx, vec2(c.x, c.y + 8.0f), 4, 40.0f);
+            if (e->a == SALVAGE_HEARTS) {
+                icons(fx, c, SPR_HEART, (u32)MIN(1 + e->b / 10, 5));
+                stars(fx, c, 3, 60.0f);
+            } else if (e->a == SALVAGE_AMMO) {
+                icons(fx, c, SPR_AMMO, (u32)MIN(1 + e->b / 3, 5));
+                stars(fx, c, 3, 60.0f);
+            }
+            break;
+        }
         case EV_CRATE_SETTLED:
             dust(fx, vec2(e->pos.x + 8.0f, e->pos.y + 16.0f), 4, 30.0f);
             break;
@@ -306,6 +334,23 @@ static void observe_soldiers(FxList *fx, const GameState *gs) {
     }
 }
 
+// A crate that lands, or is set down, squashes for a moment (a crate coming down on its parachute, or put down by a
+// soldier, only half as much as one that falls or is thrown).
+static void observe_crates(FxList *fx, const GameState *gs) {
+    for (u16 i = 1; i <= MAX_ENTITIES; i++) {
+        const Entity *e = &gs->entities.slots[i];
+        const bool crate = e->type == ENT_CRATE && !e->pending_destroy;
+        const u8 prev = fx->crate_prev[i];
+        if (fx->crate_land[i] > 0) {
+            fx->crate_land[i]--;
+        }
+        if (crate && e->as.crate.state == CRATE_RESTING && prev != 0 && prev != CRATE_RESTING + 1) {
+            fx->crate_land[i] = (u8)(prev == CRATE_FALLING + 1 ? CRATE_SQUASH_TICKS : CRATE_SQUASH_TICKS / 2);
+        }
+        fx->crate_prev[i] = crate ? (u8)(e->as.crate.state + 1) : 0;
+    }
+}
+
 static void rocket_trails(FxList *fx, const GameState *gs) {
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
         const Entity *e = &gs->entities.slots[i];
@@ -332,6 +377,7 @@ static void rocket_trails(FxList *fx, const GameState *gs) {
 void fx_observe(FxList *fx, const GameState *gs) {
     fx->tick = gs->tick;
     observe_soldiers(fx, gs);
+    observe_crates(fx, gs);
     rocket_trails(fx, gs);
 }
 
@@ -404,6 +450,10 @@ BodyPose fx_pose(const FxList *fx, const GameState *gs, i32 soldier) {
 
 f32 fx_squash(const FxList *fx, i32 soldier) {
     return (f32)fx->anim[soldier].land_ticks / (f32)LAND_SQUASH_TICKS;
+}
+
+f32 fx_crate_squash(const FxList *fx, u16 slot) {
+    return slot <= MAX_ENTITIES ? (f32)fx->crate_land[slot] / (f32)CRATE_SQUASH_TICKS : 0.0f;
 }
 
 Vec2 fx_shake_offset(const FxList *fx) {

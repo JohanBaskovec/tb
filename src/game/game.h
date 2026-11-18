@@ -12,7 +12,7 @@
 
 // Counters of what happened to crates since the start (tests, future HUD and stats screen).
 typedef struct CrateStats {
-    u32 spawned, settled, picked_up, placed, thrown, destroyed, consumed;
+    u32 spawned, settled, picked_up, placed, thrown, destroyed, consumed, salvaged;
 } CrateStats;
 
 // Counters of what happened in fights since the start (tests, future HUD and stats screen).

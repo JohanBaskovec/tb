@@ -80,7 +80,7 @@ u32 platform_map_keyboard(const bool *keys, int count) {
     map_key(keys, count, SDL_SCANCODE_S, ACT_DOWN, &mask);  // S on AZERTY
     map_key(keys, count, SDL_SCANCODE_SPACE, ACT_JUMP, &mask);
     map_key(keys, count, SDL_SCANCODE_X, ACT_FIRE, &mask);
-    map_key(keys, count, SDL_SCANCODE_C, ACT_GRAB, &mask);
+    map_key(keys, count, SDL_SCANCODE_E, ACT_GRAB, &mask);
     map_key(keys, count, SDL_SCANCODE_TAB, ACT_SWITCH, &mask);
     map_key(keys, count, SDL_SCANCODE_Q, ACT_ORDER, &mask);
     map_key(keys, count, SDL_SCANCODE_ESCAPE, ACT_PAUSE, &mask);
@@ -95,9 +95,10 @@ void platform_read_input(InputFrame *frame) {
     input_frame_update(frame, platform_map_keyboard(keys, count));
 }
 
-void platform_read_mouse(f32 *x, f32 *y, bool *left_down) {
+void platform_read_mouse(f32 *x, f32 *y, bool *left_down, bool *right_down) {
     const SDL_MouseButtonFlags buttons = SDL_GetMouseState(x, y);
     *left_down = (buttons & SDL_BUTTON_LMASK) != 0;
+    *right_down = (buttons & SDL_BUTTON_RMASK) != 0;
 }
 
 f64 platform_time_s(void) {

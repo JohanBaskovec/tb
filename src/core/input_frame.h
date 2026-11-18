@@ -17,6 +17,7 @@ typedef enum Action {
     ACT_ORDER,
     ACT_PAUSE,
     ACT_CONFIRM, // validates the selected entry of a menu (pad construction menu)
+    ACT_DESTROY, // breaks the crate in front (or the carried one) for hearts or ammunition (right mouse button)
     ACT_COUNT
 } Action;
 

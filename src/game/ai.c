@@ -554,7 +554,7 @@ void ai_think(GameState *gs, i32 index, InputFrame *out) {
         const WeaponDef *def = weapon_def(c->weapon);
         aim = true;
         const bool melee_ok = def->shot != SHOT_MELEE || enemy.dist <= def->reach + 8.0f;
-        if (melee_ok && !explosive_too_close(def, enemy.dist) && (def->automatic || (s->ai.clock & 1u) == 0)) {
+        if (melee_ok && !explosive_too_close(def, enemy.dist)) {
             mask |= action_bit(ACT_FIRE);
         }
     }

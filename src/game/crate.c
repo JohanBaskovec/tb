@@ -3,6 +3,7 @@
 #include "core/log.h"
 #include "game/pad.h"
 #include "game/tuning.h"
+#include "game/weapon.h"
 
 #include <math.h>
 
@@ -70,7 +71,10 @@ EntityId crate_spawn(GameState *gs, CrateKind kind, Vec2 pos, CrateState state, 
     return id;
 }
 
-static void crate_remove(GameState *gs, EntityId id, bool consumed) {
+typedef enum Removal { REMOVAL_DESTROYED, REMOVAL_CONSUMED, REMOVAL_SALVAGED } Removal;
+
+// `REMOVAL_SALVAGED` announces itself (crate_salvage knows the reward).
+static void crate_remove(GameState *gs, EntityId id, Removal how) {
     Entity *e = pool_get(&gs->entities, id);
     if (!e || e->pending_destroy || e->type != ENT_CRATE) {
         return;
@@ -87,21 +91,25 @@ static void crate_remove(GameState *gs, EntityId id, bool consumed) {
         }
     }
     pool_mark_destroy(&gs->entities, id);
-    if (consumed) {
+    if (how == REMOVAL_SALVAGED) {
+        gs->crate_stats.salvaged++;
+        return;
+    }
+    if (how == REMOVAL_CONSUMED) {
         gs->crate_stats.consumed++;
     } else {
         gs->crate_stats.destroyed++;
     }
-    events_push(&gs->events, consumed ? EV_CRATE_CONSUMED : EV_CRATE_DESTROYED, e->body.pos,
+    events_push(&gs->events, how == REMOVAL_CONSUMED ? EV_CRATE_CONSUMED : EV_CRATE_DESTROYED, e->body.pos,
                 (i32)c->kind, 0);
 }
 
 void crate_destroy(GameState *gs, EntityId id) {
-    crate_remove(gs, id, false);
+    crate_remove(gs, id, REMOVAL_DESTROYED);
 }
 
 void crate_consume(GameState *gs, EntityId id) {
-    crate_remove(gs, id, true);
+    crate_remove(gs, id, REMOVAL_CONSUMED);
 }
 
 // ---- Crates present at the start ---------------------------------------------------------------
@@ -402,6 +410,10 @@ static EntityId find_pickup(const GameState *gs, const Companion *p) {
     return best;
 }
 
+EntityId crate_pickup_target(const GameState *gs, const Companion *p) {
+    return entity_id_valid(p->carrying) || p->on_ladder ? ENTITY_NONE : find_pickup(gs, p);
+}
+
 static void try_pick_up(GameState *gs, Companion *p) {
     EntityId id = find_pickup(gs, p);
     if (!entity_id_valid(id)) {
@@ -418,29 +430,42 @@ static void try_pick_up(GameState *gs, Companion *p) {
     events_push(&gs->events, EV_CRATE_PICKED_UP, e->body.pos, (i32)c->kind, 0);
 }
 
-// Puts the crate in the first column entirely in front of the body, on the feet row, or up to
-// TUNING_PLACE_MAX_RAISE rows higher when that cell is taken (to build stacks).
-static bool try_place(GameState *gs, Companion *p) {
+// The tile in the first column entirely in front of the body, on the feet row, or up to TUNING_PLACE_MAX_RAISE
+// rows higher when that cell is taken (to build stacks).
+static bool find_place(const GameState *gs, const Companion *p, i32 *out_col, i32 *out_row) {
     const Body *b = &p->body;
     const i32 col = p->facing > 0 ? (i32)ceilf((b->pos.x + b->size.x) / (f32)TILE_SIZE)
                                   : level_px_to_tile(b->pos.x) - 1;
     const i32 row0 = level_px_to_tile(b->pos.y + b->size.y - 0.5f);
     for (i32 raise = 0; raise <= TUNING_PLACE_MAX_RAISE; raise++) {
         const i32 row = row0 - raise;
-        if (level_is_solid(gs->level, col, row)) {
-            continue;
+        if (!level_is_solid(gs->level, col, row)) {
+            *out_col = col;
+            *out_row = row;
+            return true;
         }
-        Entity *e = pool_get(&gs->entities, p->carrying);
-        e->body.pos = vec2((f32)(col * TILE_SIZE), (f32)(row * TILE_SIZE));
-        e->prev_pos = e->body.pos;
-        e->body.vel = vec2(0.0f, 0.0f);
-        e->as.crate.state = CRATE_FALLING;
-        p->carrying = ENTITY_NONE;
-        gs->crate_stats.placed++;
-        events_push(&gs->events, EV_CRATE_PLACED, e->body.pos, (i32)e->as.crate.kind, 0);
-        return true;
     }
     return false;
+}
+
+bool crate_place_target(const GameState *gs, const Companion *p, i32 *col, i32 *row) {
+    return entity_id_valid(p->carrying) && find_place(gs, p, col, row);
+}
+
+static bool try_place(GameState *gs, Companion *p) {
+    i32 col, row;
+    if (!find_place(gs, p, &col, &row)) {
+        return false;
+    }
+    Entity *e = pool_get(&gs->entities, p->carrying);
+    e->body.pos = vec2((f32)(col * TILE_SIZE), (f32)(row * TILE_SIZE));
+    e->prev_pos = e->body.pos;
+    e->body.vel = vec2(0.0f, 0.0f);
+    e->as.crate.state = CRATE_FALLING;
+    p->carrying = ENTITY_NONE;
+    gs->crate_stats.placed++;
+    events_push(&gs->events, EV_CRATE_PLACED, e->body.pos, (i32)e->as.crate.kind, 0);
+    return true;
 }
 
 // Lobs the crate in the facing direction from above the head. Blocked by a low ceiling.
@@ -457,14 +482,48 @@ static bool try_throw(GameState *gs, Companion *p) {
     e->body.vel = vec2((f32)p->facing * TUNING_THROW_VX, -TUNING_THROW_VY);
     e->as.crate.state = CRATE_FALLING;
     p->carrying = ENTITY_NONE;
+    p->fire_cooldown = MAX(p->fire_cooldown, SECONDS_TO_TICKS(TUNING_THROW_RECOVERY_S)); // the key may still be held
     gs->crate_stats.thrown++;
     events_push(&gs->events, EV_CRATE_THROWN, e->body.pos, (i32)e->as.crate.kind, 0);
     return true;
 }
 
+// Breaks a crate and gives the soldier hearts or ammunition, at random. Whatever would be wasted (hearts at full health,
+// ammunition for fists or a full weapon) is swapped for the other reward when that one is useful.
+static void salvage(GameState *gs, Companion *p, EntityId id) {
+    const Entity *e = pool_get_const(&gs->entities, id);
+    if (!e) {
+        return;
+    }
+    const WeaponDef *def = weapon_def(p->weapon);
+    const bool can_heal = p->hp > 0 && p->hp < p->max_hp;
+    const bool can_reload = def->max_ammo > 0 && p->ammo < def->max_ammo;
+    bool hearts = (i32)rng_below(&gs->rng, 100) < TUNING_SALVAGE_HEART_PERCENT;
+    if (hearts && !can_heal && can_reload) {
+        hearts = false;
+    } else if (!hearts && !can_reload && can_heal) {
+        hearts = true;
+    }
+    SalvageReward reward = SALVAGE_NOTHING;
+    i32 amount = 0;
+    if (hearts && can_heal) {
+        reward = SALVAGE_HEARTS;
+        amount = MIN(TUNING_SALVAGE_HEAL, p->max_hp - p->hp);
+        p->hp += amount;
+    } else if (!hearts && can_reload) {
+        reward = SALVAGE_AMMO;
+        amount = MIN(MAX(1, def->max_ammo * TUNING_SALVAGE_AMMO_PERCENT / 100), def->max_ammo - p->ammo);
+        p->ammo += amount;
+    }
+    const Vec2 pos = e->body.pos;
+    crate_remove(gs, id, REMOVAL_SALVAGED);
+    events_push(&gs->events, EV_CRATE_SALVAGED, pos, (i32)reward, amount);
+}
+
 void crate_carry_update(GameState *gs, Companion *p, const InputFrame *in) {
     const bool grab = input_pressed(in, ACT_GRAB);
     const bool fire = input_pressed(in, ACT_FIRE);
+    const bool destroy = input_pressed(in, ACT_DESTROY);
 
     if (entity_id_valid(p->carrying)) {
         const Entity *held = pool_get_const(&gs->entities, p->carrying);
@@ -472,13 +531,17 @@ void crate_carry_update(GameState *gs, Companion *p, const InputFrame *in) {
             p->carrying = ENTITY_NONE;
             return;
         }
-        if (fire) {
+        if (destroy) {
+            salvage(gs, p, p->carrying);
+        } else if (fire) {
             try_throw(gs, p);
         } else if (grab) {
             try_place(gs, p);
         }
     } else if (grab && !p->on_ladder) {
         try_pick_up(gs, p);
+    } else if (destroy && !p->on_ladder) {
+        salvage(gs, p, find_pickup(gs, p));
     }
 }
 

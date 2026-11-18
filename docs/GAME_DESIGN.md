@@ -85,11 +85,17 @@ les escouades adverses (ou selon l'objectif de la mission).
   tomber à travers les plateformes fines (bas + saut), grimper aux échelles.
 - **Porter une caisse** ✅ : la caisse est tenue au-dessus de la tête ; vitesse réduite (×0,9, demandé plus rapide après M6 ; ×0,75 avant), saut réduit (×0,8),
   impossible de tirer, 🟡 impossible de grimper aux échelles. On peut la **poser** devant soi ou la **lancer** en cloche.
-  - 🟡 **Touche d'action** (C / B) : à mains libres, prend la caisse la plus proche **devant soi** (portée 16 px) ;
+  - 🟡 **Touche d'action** (E / B ; elle était sur C avant le tour de touches demandé après M6) : à mains libres, prend la caisse la plus proche **devant soi** (portée 16 px) ;
     en portant, la **pose** dans la première colonne entièrement devant le corps (ou jusqu'à 2 tuiles plus haut si
     la case est prise, pour construire des piles). Si rien n'est possible (mur devant), on garde la caisse.
   - 🟡 **Touche de tir** (X) en portant : **lance** la caisse en cloche (≈ 5 tuiles). Refusé sous un plafond trop bas.
   - 🟡 On ne peut prendre que la caisse du **dessus** d'une pile, et jamais celle sur laquelle on se tient.
+  - 🟡 **Cadres blancs** (après M6) : un cadre blanc entoure la caisse que la touche d'action prendrait (ou que le clic droit détruirait) ; en portant une caisse,
+    un cadre à peine rempli montre la case où elle serait posée. Rien n'est dessiné pour un spectateur.
+  - 🟡 **Détruire une caisse** (après M6, bouton droit de la souris ; lettre `B` des scripts) : brise la caisse que le cadre blanc désigne, ou celle qu'on porte,
+    et donne **au hasard** (50 / 50) des **cœurs** (+30 PV, sans dépasser le maximum) ou des **munitions** (35 % d'une arme pleine, au moins 1 tir, sans dépasser le maximum).
+    Si la récompense tirée serait perdue (PV pleins, ou poings / arme pleine) et que l'autre sert, c'est l'autre qui est donnée ; si rien ne sert, la caisse
+    est brisée pour rien. Une pression par caisse (maintenir ne casse pas tout). Les IA ne détruisent pas de caisses. Valeurs dans `tuning.h` (`TUNING_SALVAGE_*`).
 - Prendre un coup en portant une caisse la fait tomber (✅ M3).
 - Tomber à l'eau avec une caisse : la caisse est perdue. 🟡
 
@@ -215,21 +221,25 @@ Les formes peuvent se situer n'importe où sur les 4 colonnes 🟡.
 
 | Arme | Obtenue avec | Tir | Munitions 🟡 | Dégâts 🟡 | Notes |
 |------|--------------|-----|:------------:|:---------:|-------|
-| Poings | — | Coup à courte portée (14 px), 0,4 s entre deux coups | infinies | 8 | Arme de repli ; impossible en portant une caisse |
-| Pistolet | 1×1 rouge | Balle droite, un tir par appui, 0,3 s entre deux tirs | 24 | 12 | Portée ≈ 320 px |
-| Uzi | 1×1 bleue, L rouge | Rafale tant que la touche est tenue (12 tirs/s), légère dispersion verticale (« gerbe ») | 60 | 6 | |
-| Grenades | 2×1 horizontal rouge | Lancer en cloche, rebondit, explose au bout de 1,5 s **ou au contact d'un ennemi** | 6 | 60 au centre | Rayon 40 px |
+| Poings | — | Coup à courte portée (14 px), 0,25 s entre deux coups | infinies | 8 | Arme de repli ; impossible en portant une caisse |
+| Pistolet | 1×1 rouge | Balle droite, 0,2 s entre deux tirs | 24 | 12 | Portée ≈ 320 px |
+| Uzi | 1×1 bleue, L rouge | Rafale (12 tirs/s), légère dispersion verticale (« gerbe ») | 60 | 6 | |
+| Grenades | 2×1 horizontal rouge | Lancer en cloche (0,5 s entre deux), rebondit, explose au bout de 1,5 s **ou au contact d'un ennemi** | 6 | 60 au centre | Rayon 40 px |
 | Grenades puissantes | 2×1 horizontal avec bleue | Idem | 4 | 100 au centre | Rayon 64 px |
-| Lance-roquettes | L avec bleue ; équipement des compagnons lourds | Roquette droite, explose à l'impact (ou à 2 s) | 5 | 90 au centre | Rayon 48 px |
+| Lance-roquettes | L avec bleue ; équipement des compagnons lourds | Roquette droite (0,55 s entre deux), explose à l'impact (ou à 2 s) | 5 | 90 au centre | Rayon 48 px |
 
+- 🟡 **Tir maintenu** (après M6) : garder la touche (ou le bouton gauche) enfoncée **répète** le tir ou le coup, une fois par délai de l'arme, pour toutes
+  les armes (il n'y a plus d'arme « un tir par appui »). Les délais ont été raccourcis : poings 0,4 → 0,25 s, pistolet 0,3 → 0,2 s, grenades 0,7 → 0,5 s,
+  roquettes 0,8 → 0,55 s (l'uzi garde ses 5 ticks). Après avoir lancé une caisse, on ne tire pas pendant 0,3 s, pour que la touche encore tenue
+  ne parte pas aussitôt en tir.
 - 🟡 **Explosions** : dégâts maximaux au centre, décroissants jusqu'à 40 % au bord du rayon ; elles **repoussent** (et soulèvent) ce qu'elles touchent,
   ne traversent **pas** les murs, et blessent **tout le monde, tireur compris**. Elles ne détruisent pas les caisses.
 - 🟡 **Balles et coups** ne blessent que les équipes adverses (pas de tir ami) ; une balle s'arrête sur le terrain et sur les caisses empilées.
-- 🟡 **Ramassage** : un soldat à mains nues ramasse automatiquement l'arme sur laquelle il marche ; armé, il l'**échange** avec la touche d'action
+- 🟡 **Ramassage** : un soldat à mains nues ramasse automatiquement l'arme sur laquelle il marche ; armé, il l'**échange** avec la touche d'action (E)
   (l'ancienne arme est lâchée avec ses munitions). Une action sur une caisse (prendre, poser, lancer) est prioritaire : la même touche ne tire pas
   et n'échange pas.
 - 🟡 **Visée à la souris** : dès que la souris bouge, le soldat se tourne vers le curseur et son arme le pointe (à 360°) ; **le bouton gauche tire**
-  (maintenu : rafale pour l'uzi). Une grenade est lancée pour retomber sur le curseur. Un clic sur une entrée du menu du pad construit, il ne tire pas.
+  (maintenu : tir répété). Le **bouton droit** détruit une caisse (voir § 3). Une grenade est lancée pour retomber sur le curseur. Un clic sur une entrée du menu du pad construit, il ne tire pas.
   Sans souris (clavier seul, manette), on tire horizontalement dans la direction où le soldat regarde ; la visée à la manette (second stick) n'est pas planifiée.
 - 🟡 **Mannequins** (marqueur `T` du niveau) : cibles immobiles de 100 PV, équipe ennemie, qui ne ripostent pas et ne réapparaissent pas.
   Ils servent aux tests ; les vrais ennemis sont les soldats adverses (M4/M5).
@@ -314,7 +324,7 @@ Idées non confirmées, **non planifiées** : jeep, mini-hélico.
   de l'équipe qui tombe sur les yeux, veste et pantalon de l'équipe, ceinture à boucle dorée, bottes sombres ; le soldat fort a une bande blanche sur le casque et des chevrons, le lourd
   des épaulettes et des sangles, le lourd blindé un casque et une armure d'acier. Pas encore de nom d'espèce. Animations : respiration, course en 4 temps, saut, chute, échelle ;
   le bras avant vise réellement (arme tournée vers le curseur), les deux bras se lèvent pour porter une caisse, le poing part en avant ; écrasement bref à l'atterrissage, silhouette
-  blanche quand on est touché. Armes dessinées (pistolet, uzi, grenade, lance-roquettes porté à l'épaule), roquette, caisses en bois à panneau rouge / bleu, parachute.
+  blanche quand on est touché ; les caisses s'écrasent aussi un instant en touchant le sol, à demi quand elles descendent au parachute ou qu'on les pose. Armes dessinées (pistolet, uzi, grenade, lance-roquettes porté à l'épaule), roquette, caisses en bois à panneau rouge / bleu, parachute.
 - 🟡 Effets (après M6) : débris, fumée, étincelles et onde de choc aux explosions (et léger tremblement d'écran près de la caméra), traînée de fumée des roquettes, douilles éjectées,
   poussière aux sauts, atterrissages et caisses qui se posent, éclats de bois, gerbes d'eau, étoiles aux constructions, apparitions et ramassages ; un soldat éliminé est projeté en
   tournoyant avant de disparaître.

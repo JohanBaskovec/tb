@@ -216,7 +216,7 @@ typedef struct GameState {
 
 La simulation ne joue pas de son et ne crée pas de particules. Elle pousse des
 événements dans `GameState.events` (`game/events.h` : `EV_CRATE_SPAWNED`, `EV_CRATE_SETTLED`, `EV_CRATE_PICKED_UP`,
-`EV_CRATE_PLACED`, `EV_CRATE_THROWN`, `EV_CRATE_DESTROYED`, `EV_CRATE_CONSUMED`, `EV_PAD_BUILT`, `EV_PLAYER_RESPAWNED` (un soldat est tombé à l'eau) ; escouade : `EV_SOLDIER_SPAWNED`, `EV_SOLDIER_DIED`, `EV_CONTROL_CHANGED`, `EV_ORDER_CHANGED`, `EV_TEAM_ELIMINATED` ; combat : `EV_SHOT`, `EV_PUNCH`, `EV_PROJECTILE_HIT`, `EV_EXPLOSION`, `EV_DAMAGE`, `EV_DUMMY_DESTROYED`,
+`EV_CRATE_PLACED`, `EV_CRATE_THROWN`, `EV_CRATE_DESTROYED`, `EV_CRATE_CONSUMED`, `EV_CRATE_SALVAGED` (brisée pour des cœurs ou des munitions), `EV_PAD_BUILT`, `EV_PLAYER_RESPAWNED` (un soldat est tombé à l'eau) ; escouade : `EV_SOLDIER_SPAWNED`, `EV_SOLDIER_DIED`, `EV_CONTROL_CHANGED`, `EV_ORDER_CHANGED`, `EV_TEAM_ELIMINATED` ; combat : `EV_SHOT`, `EV_PUNCH`, `EV_PROJECTILE_HIT`, `EV_EXPLOSION`, `EV_DAMAGE`, `EV_DUMMY_DESTROYED`,
 `EV_WEAPON_PICKED_UP`, `EV_WEAPON_DROPPED`, `EV_WEAPON_EMPTY` ; M6 : `EV_BASE_DESTROYED`, `EV_MATCH_OVER`, puis `EV_BASE_ATTACKED` (une fois par alerte), `EV_JUMP`, `EV_LANDED` (pour le son)), que `audio/`, `render/` (effets) et `ui/` lisent après l'update.
 Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont le sens dépend du type.
 
@@ -383,8 +383,8 @@ Chaque événement porte un type, une position et deux entiers (`a`, `b`) dont l
 - Jusqu'à 4 joueurs locaux ; attribution des manettes dans l'écran de configuration ; hotplug géré.
 - Souris : clic pour choisir une construction du pad ; au clavier / à la manette, sélection + validation.
 - **Visée à la souris** : `InputFrame` porte `aim_active` et `aim` (point visé, en pixels monde). La fenêtre lit la position et le bouton gauche
-  (`platform_read_mouse`) et les donne à `sim_set_mouse` ; `sim_tick` complète alors l'entrée humaine avec la visée et `ACT_FIRE` tant que le
-  bouton est tenu. Un clic plus court qu'une image tire quand même (`mouse_click_pending`). Un clic sur une entrée du menu du pad ne tire
+  (`platform_read_mouse`, gauche et droit) et les donne à `sim_set_mouse` ; `sim_tick` complète alors l'entrée humaine avec la visée, `ACT_FIRE` tant que le
+  bouton gauche est tenu et `ACT_DESTROY` tant que le droit l'est (D066). Un clic plus court qu'une image tire quand même (`mouse_click_pending`). Un clic sur une entrée du menu du pad ne tire
   pas, et le bouton ne tire plus tant qu'il n'a pas été relâché. La visée n'existe qu'après le premier mouvement de souris : au clavier seul,
   le soldat tire dans la direction où il regarde. Les scripts visent avec `KEYS@X/Y:TICKS` ; le jeu ne connaît pas la souris, seulement `aim`.
 
@@ -462,7 +462,7 @@ Les touches F1–F4 sont testées en injectant des événements (`SDL_PushEvent`
   (accélération, saut variable, coyote, buffer, plateformes, échelles), `script`, `camera`,
   `game` (invariants sous bots sur 24 graines × 8000 ticks, déterminisme, eau/respawn),
   `scenarios` (traversée du vrai niveau : sauts plateforme à plateforme, échelle, fosse ; bot marcheur),
-  `platform` (mapping clavier, événements dont le clic gauche), `pad` (recettes : toutes les formes, rouge/bleu, orientations du L,
+  `platform` (mapping clavier — E prend / pose, C ne fait plus rien —, événements dont le clic gauche), `pad` (recettes : toutes les formes, rouge/bleu, orientations du L,
   ordre de consommation, pad vide, « non vide ⇒ au moins un 1×1 », **toutes les 3⁸ grilles** comparées à un calcul indépendant ;
   monde : lecture des caisses, construction, produits, menu périmé, pool plein), `pad_menu` (visibilité, disposition, clavier, souris,
   bot qui martèle Tab/Entrée), `events` (file, débordement, événements émis par les caisses, hash inchangé, effets visuels),
@@ -495,8 +495,9 @@ Les touches F1–F4 sont testées en injectant des événements (`SDL_PushEvent`
 - Visuels et caisses : `sprites` (données valides, chaque sprite a des pixels et tient dans sa case, deux sprites ne se chevauchent jamais dans l'atlas, tuiles de terrain
   pleines et identiques dans chaque atlas alors que la base prend la couleur d'équipe, soldats posés sur leurs pieds, seule la couleur d'équipe change d'un atlas à
   l'autre, silhouette blanche), `fx` (explosion → débris, fumée, étincelles, onde, tremblement seulement près de la caméra ; débris qui retombent sur le sol sans le traverser puis
-  disparaissent ; soldat éliminé projeté dans ses couleurs ; gerbe d'eau ou éclats de bois ; douilles et fumée de roquette ; poses de course, saut, chute et écrasement ; pool plein
-  sans débordement), `crate` (une caisse s'étale à côté plutôt que sur une autre), `front` (effectif choisi dans le menu).
+  disparaissent ; soldat éliminé projeté dans ses couleurs ; gerbe d'eau ou éclats de bois ; douilles et fumée de roquette ; poses de course, saut, chute et écrasement ; icônes de cœurs et de balles qui montent ; caisse écrasée à l'atterrissage mais pas au repos ; pool plein
+  sans débordement), `crate` (une caisse s'étale à côté plutôt que sur une autre ; clic droit : cœurs ou munitions au hasard, jamais une récompense perdue si l'autre sert, plafonnée au manque,
+  le dessus d'une pile ou la caisse portée, une pression par caisse ; cibles de prise et de pose ; pas de tir juste après avoir lancé une caisse), `combat` (tir maintenu, délais), `front` (effectif choisi dans le menu).
 
 ## Cibles CMake
 

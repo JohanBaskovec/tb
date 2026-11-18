@@ -41,6 +41,9 @@ static bool key_bit(char c, u32 *bit) {
     case 'C':
         *bit = action_bit(ACT_CONFIRM);
         return true;
+    case 'B':
+        *bit = action_bit(ACT_DESTROY);
+        return true;
     default:
         return false;
     }

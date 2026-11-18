@@ -16,6 +16,7 @@ typedef enum EventType {
     EV_CRATE_THROWN,    // pos, a = CrateKind
     EV_CRATE_DESTROYED, // pos, a = CrateKind (lost in the water, crushed...)
     EV_CRATE_CONSUMED,  // pos, a = CrateKind (used by a pad construction)
+    EV_CRATE_SALVAGED,  // pos, a = reward (SalvageReward: 0 hearts, 1 ammunition, 2 nothing), b = amount (hit points / shots)
     EV_PAD_BUILT,       // pos = pad center, a = PadProduct, b = team
     EV_PLAYER_RESPAWNED, // a soldier fell in the water and is back at its spawn: a = index, b = team
     EV_SOLDIER_SPAWNED,  // pos, a = SoldierVariant, b = team

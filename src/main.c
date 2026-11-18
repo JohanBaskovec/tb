@@ -505,9 +505,9 @@ static int run_windowed(const Options *o, Sim *sim, const char *level_path) {
         }
         if (ev.mouse_moved || sim->mouse_active) { // once the mouse was used it keeps aiming and firing
             f32 mx, my;
-            bool left;
-            platform_read_mouse(&mx, &my, &left);
-            sim_set_mouse(sim, render_window_to_logical(render, mx, my), left);
+            bool left, right;
+            platform_read_mouse(&mx, &my, &left, &right);
+            sim_set_mouse(sim, render_window_to_logical(render, mx, my), left, right);
         }
 
         const f64 now = platform_time_s();
@@ -653,14 +653,14 @@ static int run_front_windowed(const Options *o, Front *f, Script *script, bool u
             sim_restart(sim);
         }
         f32 mx, my;
-        bool left;
-        platform_read_mouse(&mx, &my, &left);
+        bool left, right;
+        platform_read_mouse(&mx, &my, &left, &right);
         const Vec2 mouse = render_window_to_logical(render, mx, my);
         if (ev.click) {
             front_click(f, render_window_to_logical(render, ev.click_x, ev.click_y));
         }
         if (sim && (ev.mouse_moved || sim->mouse_active)) {
-            sim_set_mouse(sim, mouse, left);
+            sim_set_mouse(sim, mouse, left, right);
         } else if (!sim && ev.mouse_moved) {
             front_point(f, mouse);
         }

@@ -1,5 +1,7 @@
 #include "app/sfx.h"
 
+#include "game/crate.h"
+
 #include "core/rng.h"
 #include "game/weapon.h"
 
@@ -255,6 +257,8 @@ static SfxId event_sound(const SfxState *state, const EventQueue *events, const 
         return SFX_DEATH;
     case EV_WEAPON_PICKED_UP:
         return SFX_WEAPON_PICKUP;
+    case EV_CRATE_SALVAGED: // the pickup chime when it gave something, the sound of wood breaking when it did not
+        return e->a == SALVAGE_NOTHING ? SFX_DUMMY_BREAK : SFX_WEAPON_PICKUP;
     case EV_WEAPON_EMPTY:
         return SFX_EMPTY;
     case EV_WEAPON_DROPPED:

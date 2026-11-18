@@ -223,7 +223,7 @@ void soldier_respawn(GameState *gs, i32 index) {
 // ---- One tick ----------------------------------------------------------------------------------
 
 static u32 crate_actions(const GameState *gs) {
-    return gs->crate_stats.picked_up + gs->crate_stats.placed + gs->crate_stats.thrown;
+    return gs->crate_stats.picked_up + gs->crate_stats.placed + gs->crate_stats.thrown + gs->crate_stats.salvaged;
 }
 
 // Below this fall speed a landing is a step, not worth an event (px/s; a hop lands at about 200).

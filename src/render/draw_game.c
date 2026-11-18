@@ -3,6 +3,7 @@
 #include "core/config.h"
 #include "game/base.h"
 #include "game/combat.h"
+#include "game/crate.h"
 #include "game/loot.h"
 #include "game/squad.h"
 #include "game/tuning.h"
@@ -394,7 +395,7 @@ static void draw_soldiers(Render *r, const GameState *gs, const FxList *fx, f32 
     }
 }
 
-static void draw_crates(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 oy, u32 flags) {
+static void draw_crates(Render *r, const GameState *gs, const FxList *fx, f32 alpha, i32 ox, i32 oy, u32 flags) {
     for (u16 i = 1; i <= MAX_ENTITIES; i++) {
         const Entity *e = &gs->entities.slots[i];
         if (e->type != ENT_CRATE) {
@@ -410,8 +411,12 @@ static void draw_crates(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 o
             const f32 sway = sinf((f32)gs->tick * 0.07f + (f32)i) * 5.0f;
             sprite_at(r, SPR_PARACHUTE, 0, vec2(x + 8.0f, y - 5.0f), sway, false, false);
         }
-        sprite_at(r, e->as.crate.kind == CRATE_BLUE ? SPR_CRATE_BLUE : SPR_CRATE_RED, 0, vec2(x + 8.0f, y + 8.0f), 0.0f,
-                  false, false);
+        const f32 squash = fx ? fx_crate_squash(fx, i) : 0.0f; // wider and shorter for a moment after landing
+        const SpriteDraw crate = {.id = e->as.crate.kind == CRATE_BLUE ? SPR_CRATE_BLUE : SPR_CRATE_RED,
+                                  .pos = vec2(x + 8.0f, y + (f32)TUNING_CRATE_SIZE),
+                                  .scale_x = 1.0f + 0.14f * squash,
+                                  .scale_y = 1.0f - 0.22f * squash};
+        render_sprite(r, &crate);
         if (flags & DRAW_DEBUG) { // outline by state: descending cyan, falling orange, carried magenta
             const Color outline = st == CRATE_DESCENDING ? (Color){80, 230, 255, 255}
                                   : st == CRATE_FALLING  ? (Color){255, 150, 40, 255}
@@ -419,6 +424,36 @@ static void draw_crates(Render *r, const GameState *gs, f32 alpha, i32 ox, i32 o
                                                          : (Color){60, 60, 80, 255};
             render_outline_rect(r, (Rect){x, y, TUNING_CRATE_SIZE, TUNING_CRATE_SIZE}, outline);
         }
+    }
+}
+
+// A white frame around the crate the human player would take (or break) with a press, or, while carrying one, a frame on
+// the tile where it would be set down (lightly filled: an empty slot). A dark line outside keeps it readable on any
+// background.
+static void draw_crate_frame(Render *r, Rect box, u8 fill) {
+    const Color dark = {10, 8, 20, 190}, white = {255, 255, 255, 255};
+    render_outline_rect(r, (Rect){box.x - 2.0f, box.y - 2.0f, box.w + 4.0f, box.h + 4.0f}, dark);
+    if (fill > 0) {
+        render_fill_rect(r, box, (Color){255, 255, 255, fill});
+    }
+    render_outline_rect(r, (Rect){box.x - 1.0f, box.y - 1.0f, box.w + 2.0f, box.h + 2.0f}, white);
+}
+
+static void draw_crate_cues(Render *r, const GameState *gs, i32 ox, i32 oy) {
+    if (gs->controlled < 0 || gs->teams[gs->soldiers[gs->controlled].team].ai) {
+        return; // spectating: nobody to guide
+    }
+    const Companion *p = game_player_const(gs);
+    if (entity_id_valid(p->carrying)) {
+        i32 col, row;
+        if (crate_place_target(gs, p, &col, &row)) {
+            draw_crate_frame(r, rect_at(ox, oy, (f32)(col * TILE_SIZE), (f32)(row * TILE_SIZE), (f32)TILE_SIZE, (f32)TILE_SIZE), 56);
+        }
+        return;
+    }
+    const Entity *e = pool_get_const(&gs->entities, crate_pickup_target(gs, p));
+    if (e) {
+        draw_crate_frame(r, rect_at(ox, oy, e->body.pos.x, e->body.pos.y, TUNING_CRATE_SIZE, TUNING_CRATE_SIZE), 0);
     }
 }
 
@@ -617,6 +652,14 @@ static void draw_particle(Render *r, const Particle *p, i32 ox, i32 oy) {
     case PART_RING:
         draw_ring(r, at, p->size, with_alpha(p->r, p->g, p->b, 1.0f - t));
         break;
+    case PART_ICON: {
+        const SpriteDraw d = {.id = (SpriteId)p->variant,
+                              .pos = at,
+                              .pivot_center = true,
+                              .alpha = (u8)MAX(1.0f, 255.0f * (t < 0.6f ? 1.0f : (1.0f - t) / 0.4f))};
+        render_sprite(r, &d);
+        break;
+    }
     case PART_CORPSE: {
         const SpriteDraw d = {.id = sprite_body(p->variant, POSE_FALL),
                               .palette = p->team,
@@ -1071,7 +1114,8 @@ void draw_game(Render *r, const GameState *gs, const Camera *cam, const PadMenu 
     draw_tiles(r, gs->level, ox, oy, gs->tick);
     draw_bases(r, gs, ox, oy);
     draw_pads(r, gs, ox, oy);
-    draw_crates(r, gs, alpha, ox, oy, flags);
+    draw_crates(r, gs, fx, alpha, ox, oy, flags);
+    draw_crate_cues(r, gs, ox, oy);
     draw_products(r, gs, alpha, ox, oy);
     draw_loot_weapons(r, gs, alpha, ox, oy);
     draw_dummies(r, gs, alpha, ox, oy);

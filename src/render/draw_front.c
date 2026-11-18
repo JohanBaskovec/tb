@@ -38,7 +38,7 @@ static void falling_crates(Render *r, u32 ticks) {
         }
         const SpriteDraw chute = {.id = SPR_PARACHUTE, .pos = vec2(x + 8.0f, y - 5.0f),
                                   .angle = sinf((f32)ticks * 0.05f + (f32)i) * 5.0f};
-        const SpriteDraw crate = {.id = i % 3 == 1 ? SPR_CRATE_BLUE : SPR_CRATE_RED, .pos = vec2(x + 8.0f, y + 8.0f)};
+        const SpriteDraw crate = {.id = i % 3 == 1 ? SPR_CRATE_BLUE : SPR_CRATE_RED, .pos = vec2(x + 8.0f, y + 16.0f)};
         render_sprite(r, &chute);
         render_sprite(r, &crate);
     }
@@ -101,10 +101,12 @@ static void menu_entry(Render *r, const Front *f, i32 index, const char *label) 
 }
 
 static void controls(Render *r, f32 y) {
-    ui_text_shadow(r, (f32)LOGICAL_W * 0.5f, y, "BOUGER : ZQSD OU FLÈCHES   SAUTER : ESPACE   TIRER : X OU CLIC", COL_TEXT_DIM, 1,
+    render_fill_rect(r, (Rect){0.0f, y - 4.0f, (f32)LOGICAL_W, 26.0f}, (Color){8, 8, 16, 150}); // readable over the ground
+    ui_text_shadow(r, (f32)LOGICAL_W * 0.5f, y,
+                   "BOUGER : ZQSD   SAUTER : ESPACE   TIRER : X / CLIC GAUCHE   CAISSE : E   DÉTRUIRE : CLIC DROIT", COL_TEXT_DIM, 1,
                    ALIGN_CENTER);
-    ui_text_shadow(r, (f32)LOGICAL_W * 0.5f, y + 13.0f, "CAISSE : C   CONSTRUIRE : TAB + ENTRÉE   SOLDAT : TAB   ORDRE : A   PAUSE : ÉCHAP",
-                   COL_TEXT_DIM, 1, ALIGN_CENTER);
+    ui_text_shadow(r, (f32)LOGICAL_W * 0.5f, y + 13.0f, "CONSTRUIRE : TAB + ENTRÉE   SOLDAT : TAB   ORDRE : A   PAUSE : ÉCHAP", COL_TEXT_DIM,
+                   1, ALIGN_CENTER);
 }
 
 // ---- Screens -----------------------------------------------------------------------------------

@@ -64,6 +64,8 @@ typedef enum SpriteId {
     SPR_DECO_FLOWER,
     SPR_DECO_DAISY,
     SPR_DECO_ROCK,
+    SPR_HEART, // what breaking a crate can give
+    SPR_AMMO,
     // Big sprites take 2x2 cells.
     SPR_BIG_FIRST,
     SPR_BASE = SPR_BIG_FIRST, // 40x40, team colors

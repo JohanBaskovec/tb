@@ -118,10 +118,11 @@ bool sim_script_running(const Sim *sim) {
     return sim->use_script && !script_finished(&sim->script);
 }
 
-void sim_set_mouse(Sim *sim, Vec2 logical, bool left_down) {
+void sim_set_mouse(Sim *sim, Vec2 logical, bool left_down, bool right_down) {
     sim->mouse_active = true;
     sim->mouse_logical = logical;
     sim->mouse_left = left_down;
+    sim->mouse_right = right_down;
     if (!left_down) {
         sim->mouse_fire_blocked = false;
     }
@@ -139,6 +140,9 @@ static void sim_apply_human(Sim *sim, const InputFrame *human) {
         sim->input.aim = world;
         if ((sim->mouse_left || sim->mouse_click_pending) && !sim->mouse_fire_blocked && !on_menu) {
             down |= action_bit(ACT_FIRE);
+        }
+        if (sim->mouse_right && !on_menu) {
+            down |= action_bit(ACT_DESTROY);
         }
     }
     sim->mouse_click_pending = false;
